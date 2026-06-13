@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { Check, X } from "lucide-react-native";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useApp } from "@/providers/AppProvider";
 import { palette, spacing, type } from "@/constants/theme";
 
@@ -26,9 +26,16 @@ export default function PaywallSheet() {
     setPaywallOpen(false);
   };
 
+  if (!paywallOpen) {
+    return null;
+  }
+
+  const Backdrop = Platform.OS === "web" ? View : BlurView;
+  const backdropProps = Platform.OS === "web" ? {} : { intensity: 40, tint: "light" as const };
+
   return (
-    <Modal visible={paywallOpen} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
-      <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+    <Modal visible animationType="slide" transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
+      <Backdrop {...backdropProps} style={[StyleSheet.absoluteFill, styles.backdrop]} />
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.headerRow}>
@@ -66,6 +73,7 @@ export default function PaywallSheet() {
 }
 
 const styles = StyleSheet.create({
+  backdrop: { backgroundColor: "rgba(250,249,246,0.72)" },
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(26,28,26,0.35)" },
   sheet: {
     backgroundColor: palette.wall,

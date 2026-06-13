@@ -62,7 +62,7 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {!submitted && (
+      {submitted.length === 0 ? (
         <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
           <Text style={type.caption}>Try</Text>
           <View style={{ marginTop: spacing.md }}>
@@ -79,9 +79,9 @@ export default function SearchScreen() {
             ))}
           </View>
         </View>
-      )}
+      ) : null}
 
-      {submitted && (
+      {submitted.length > 0 ? (
         <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
           {searchQuery.isLoading ? (
             <Text style={[type.bodySoft, { paddingVertical: spacing.lg }]}>Searching…</Text>
@@ -96,7 +96,7 @@ export default function SearchScreen() {
             </>
           )}
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }
