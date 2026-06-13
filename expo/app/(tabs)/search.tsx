@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Search as SearchIcon, X } from "lucide-react-native";
+import { router } from "expo-router";
+import { Clock, Link2, Search as SearchIcon, X } from "lucide-react-native";
 import { useState } from "react";
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,13 +9,13 @@ import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
-import { searchVideos } from "@/services/youtube";
+import { extractYouTubeId, searchVideos } from "@/services/youtube";
 
 const SUGGESTIONS = ["Slow design", "Tarkovsky", "Architecture talks", "Bookbinding", "Long-form documentary"];
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
-  const { prefs } = useApp();
+  const { prefs, recentSearches, addRecentSearch, clearRecentSearches } = useApp();
   const [query, setQuery] = useState<string>("");
   const [submitted, setSubmitted] = useState<string>("");
 
@@ -24,10 +25,22 @@ export default function SearchScreen() {
     enabled: submitted.length > 0,
   });
 
-  const onSubmit = () => {
-    setSubmitted(query.trim());
+  const runSearch = (term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    const videoId = extractYouTubeId(trimmed);
+    if (videoId) {
+      Keyboard.dismiss();
+      router.push({ pathname: "/watch/[id]", params: { id: videoId } });
+      return;
+    }
+    setQuery(trimmed);
+    setSubmitted(trimmed);
+    addRecentSearch(trimmed);
     Keyboard.dismiss();
   };
+
+  const pastedLink = extractYouTubeId(query) !== null;
 
   return (
     <ScrollView
@@ -46,11 +59,12 @@ export default function SearchScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            onSubmitEditing={onSubmit}
-            placeholder="Search YouTube"
+            onSubmitEditing={() => runSearch(query)}
+            placeholder="Search or paste a YouTube link"
             placeholderTextColor={palette.inkMuted}
             returnKeyType="search"
             autoCorrect={false}
+            autoCapitalize="none"
             style={styles.input}
             testID="search-input"
           />
@@ -60,16 +74,42 @@ export default function SearchScreen() {
             </Pressable>
           )}
         </View>
+        {pastedLink && (
+          <Pressable onPress={() => runSearch(query)} style={styles.linkBanner} testID="open-link">
+            <Link2 size={16} color={palette.accent} strokeWidth={1.6} />
+            <Text style={[type.label, { color: palette.accent, flex: 1 }]}>Open this video in Frame</Text>
+            <Text style={[type.caption, { color: palette.accent }]}>Play →</Text>
+          </Pressable>
+        )}
       </View>
 
       {submitted.length === 0 ? (
         <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
+          {recentSearches.length > 0 && (
+            <View style={{ marginBottom: spacing.xl }}>
+              <View style={styles.sectionRow}>
+                <Text style={type.caption}>Recent</Text>
+                <Pressable onPress={clearRecentSearches} hitSlop={8} testID="clear-recent">
+                  <Text style={[type.caption, { color: palette.inkMuted }]}>Clear</Text>
+                </Pressable>
+              </View>
+              <View style={{ marginTop: spacing.md }}>
+                {recentSearches.map((s) => (
+                  <Pressable key={s} onPress={() => runSearch(s)} style={styles.recentRow} testID={`recent-${s}`}>
+                    <Clock size={15} color={palette.inkMuted} strokeWidth={1.6} />
+                    <Text style={styles.recentText} numberOfLines={1}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
           <Text style={type.caption}>Try</Text>
           <View style={{ marginTop: spacing.md }}>
             {SUGGESTIONS.map((s) => (
               <Pressable
                 key={s}
-                onPress={() => { setQuery(s); setSubmitted(s); }}
+                onPress={() => runSearch(s)}
                 style={styles.suggestionRow}
                 testID={`suggestion-${s}`}
               >
@@ -111,6 +151,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   input: { flex: 1, ...type.body, padding: 0, fontSize: 16 },
+  linkBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: palette.surfaceDeep,
+  },
+  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  recentRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
+  recentText: { ...type.body, flex: 1 },
   suggestionRow: {
     flexDirection: "row",
     alignItems: "center",

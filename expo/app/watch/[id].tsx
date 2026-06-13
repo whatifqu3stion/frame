@@ -1,8 +1,8 @@
 import { BlurView } from "expo-blur";
 import { router, useLocalSearchParams } from "expo-router";
-import { Bookmark, ChevronLeft, ListPlus, RotateCcw } from "lucide-react-native";
+import { Bookmark, Clock, ChevronLeft, ChevronRight, ListPlus, RotateCcw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { SAMPLE_VIDEOS } from "@/constants/sampleData";
@@ -45,12 +45,35 @@ const PLAYER_HTML = (videoId: string, startSeconds: number) => `<!DOCTYPE html>
 
 export default function WatchScreen() {
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { savedVideos, saveVideo, unsaveVideo, requirePurchase, prefs } = useApp();
+  const { id, session, i } = useLocalSearchParams<{ id: string; session?: string; i?: string }>();
+  const { savedVideos, watchLater, saveVideo, unsaveVideo, addToWatchLater, removeFromWatchLater, isInWatchLater, requirePurchase, prefs } = useApp();
+
+  const sessionIds = useMemo<string[]>(() => (session ? session.split(",").filter(Boolean) : []), [session]);
+  const sessionIndex = useMemo<number>(() => {
+    const n = Number(i ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }, [i]);
+  const nextSessionId = sessionIds.length > 0 ? sessionIds[sessionIndex + 1] : undefined;
 
   const video: Video | undefined = useMemo(() => {
-    return savedVideos.find((v) => v.id === id) ?? SAMPLE_VIDEOS.find((v) => v.id === id);
-  }, [id, savedVideos]);
+    const found = savedVideos.find((v) => v.id === id)
+      ?? watchLater.find((v) => v.id === id)
+      ?? SAMPLE_VIDEOS.find((v) => v.id === id);
+    if (found) return found;
+    // Resilient fallback so any valid YouTube id (e.g. pasted link) still plays.
+    if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
+      return {
+        id,
+        title: "YouTube video",
+        channelId: "",
+        channelTitle: "",
+        thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        publishedAt: "",
+        durationSeconds: 0,
+      };
+    }
+    return undefined;
+  }, [id, savedVideos, watchLater]);
 
   const [startAt, setStartAt] = useState<number>(0);
   const [resumeReady, setResumeReady] = useState<boolean>(false);
@@ -101,6 +124,7 @@ export default function WatchScreen() {
   };
 
   const isSaved = video ? savedVideos.some((v) => v.id === video.id) : false;
+  const inWatchLater = video ? isInWatchLater(video.id) : false;
 
   const toggleSave = async () => {
     if (!video) return;
@@ -110,6 +134,24 @@ export default function WatchScreen() {
     } else {
       await unsaveVideo(video.id);
     }
+  };
+
+  const toggleWatchLater = async () => {
+    if (!video) return;
+    if (!inWatchLater) {
+      if (!requirePurchase()) return;
+      await addToWatchLater(video);
+    } else {
+      await removeFromWatchLater(video.id);
+    }
+  };
+
+  const onPlayNext = () => {
+    if (!nextSessionId) return;
+    router.replace({
+      pathname: "/watch/[id]",
+      params: { id: nextSessionId, session: sessionIds.join(","), i: String(sessionIndex + 1) },
+    });
   };
 
   const onAddToQueue = () => {
@@ -157,12 +199,24 @@ export default function WatchScreen() {
         </Pressable>
         {ended && (
           <View style={styles.endedOverlay}>
-            <Text style={[type.caption, { color: palette.wall, opacity: 0.7 }]}>The end</Text>
-            <Text style={[type.title, { color: palette.wall, marginTop: spacing.sm, textAlign: "center" }]}>That's it.</Text>
-            <Pressable onPress={onRewatch} style={styles.rewatchBtn} testID="rewatch">
-              <RotateCcw size={14} color={palette.wall} strokeWidth={1.6} />
-              <Text style={[type.label, { color: palette.wall }]}>Watch again</Text>
-            </Pressable>
+            <Text style={[type.caption, { color: palette.wall, opacity: 0.7 }]}>
+              {sessionIds.length > 0 ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
+            </Text>
+            <Text style={[type.title, { color: palette.wall, marginTop: spacing.sm, textAlign: "center" }]}>
+              {nextSessionId ? "One done." : "That's it."}
+            </Text>
+            <View style={styles.endedActions}>
+              <Pressable onPress={onRewatch} style={styles.rewatchBtn} testID="rewatch">
+                <RotateCcw size={14} color={palette.wall} strokeWidth={1.6} />
+                <Text style={[type.label, { color: palette.wall }]}>Watch again</Text>
+              </Pressable>
+              {nextSessionId ? (
+                <Pressable onPress={onPlayNext} style={[styles.rewatchBtn, styles.nextBtn]} testID="session-next">
+                  <Text style={[type.label, { color: palette.ink }]}>Next</Text>
+                  <ChevronRight size={14} color={palette.ink} strokeWidth={1.6} />
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         )}
       </View>
@@ -179,9 +233,13 @@ export default function WatchScreen() {
             <Bookmark size={16} color={isSaved ? palette.accent : palette.ink} strokeWidth={1.6} fill={isSaved ? palette.accent : "transparent"} />
             <Text style={[type.label, isSaved && { color: palette.accent }]}>{isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
+          <Pressable onPress={toggleWatchLater} style={styles.actionBtn} testID="action-watchlater">
+            <Clock size={16} color={inWatchLater ? palette.accent : palette.ink} strokeWidth={1.6} />
+            <Text style={[type.label, inWatchLater && { color: palette.accent }]}>{inWatchLater ? "Added" : "Later"}</Text>
+          </Pressable>
           <Pressable onPress={onAddToQueue} style={styles.actionBtn} testID="action-queue">
             <ListPlus size={16} color={palette.ink} strokeWidth={1.6} />
-            <Text style={type.label}>Add to queue</Text>
+            <Text style={type.label}>Queue</Text>
           </Pressable>
         </View>
 
@@ -192,14 +250,16 @@ export default function WatchScreen() {
           </View>
         ) : null}
 
-        <Pressable
-          onPress={() => router.push({ pathname: "/channel/[id]", params: { id: video.channelId } })}
-          style={styles.channelLink}
-        >
-          <Text style={type.caption}>Channel</Text>
-          <Text style={[type.heading, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
-          <Text style={[type.caption, { color: palette.accent, marginTop: spacing.md }]}>View channel →</Text>
-        </Pressable>
+        {video.channelId ? (
+          <Pressable
+            onPress={() => router.push({ pathname: "/channel/[id]", params: { id: video.channelId } })}
+            style={styles.channelLink}
+          >
+            <Text style={type.caption}>Channel</Text>
+            <Text style={[type.heading, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
+            <Text style={[type.caption, { color: palette.accent, marginTop: spacing.md }]}>View channel →</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -216,8 +276,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: spacing.lg,
   },
+  endedActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xl, alignItems: "center" },
   rewatchBtn: {
-    marginTop: spacing.xl,
     flexDirection: "row",
     gap: spacing.sm,
     alignItems: "center",
@@ -226,6 +286,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(250,249,246,0.4)",
   },
+  nextBtn: { backgroundColor: palette.wall, borderColor: palette.wall },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
   actionBtn: {
     flexDirection: "row",

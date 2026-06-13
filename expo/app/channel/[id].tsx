@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Check, Plus } from "lucide-react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
 import { palette, spacing, type } from "@/constants/theme";
@@ -10,7 +11,7 @@ import { getChannel, getChannelVideos } from "@/services/youtube";
 
 export default function ChannelScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { prefs } = useApp();
+  const { prefs, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
 
   const channelQuery = useQuery({
     queryKey: ["channel", id, prefs.youtubeApiKey],
@@ -24,6 +25,17 @@ export default function ChannelScreen() {
   });
 
   const channel = channelQuery.data;
+  const following = id ? isChannelFollowed(id) : false;
+
+  const toggleFollow = async () => {
+    if (!channel) return;
+    if (following) {
+      await unfollowChannel(channel.id);
+      return;
+    }
+    if (!requirePurchase()) return;
+    await followChannel({ ...channel, followedAt: Date.now() });
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
@@ -39,6 +51,22 @@ export default function ChannelScreen() {
           <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 360 }]} numberOfLines={4}>
             {channel.description}
           </Text>
+        ) : null}
+
+        {channel ? (
+          <Pressable onPress={toggleFollow} style={[styles.followBtn, following && styles.followBtnActive]} testID="follow-channel">
+            {following ? (
+              <>
+                <Check size={15} color={palette.accent} strokeWidth={1.8} />
+                <Text style={[styles.followText, { color: palette.accent }]}>Following</Text>
+              </>
+            ) : (
+              <>
+                <Plus size={15} color={palette.wall} strokeWidth={1.8} />
+                <Text style={[styles.followText, { color: palette.wall }]}>Follow channel</Text>
+              </>
+            )}
+          </Pressable>
         ) : null}
       </View>
 
@@ -67,4 +95,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     overflow: "hidden",
   },
+  followBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    alignSelf: "flex-start",
+    marginTop: spacing.lg,
+    backgroundColor: palette.ink,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+  },
+  followBtnActive: { backgroundColor: palette.surface },
+  followText: { fontFamily: "Georgia", fontSize: 14 },
 });

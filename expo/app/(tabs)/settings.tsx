@@ -1,5 +1,5 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { ChevronRight, Key, Lock, RotateCcw, Trash2 } from "lucide-react-native";
+import { ChevronRight, Key, Lock, RotateCcw, Shield, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -90,6 +90,18 @@ export default function SettingsScreen() {
         <Pressable onPress={onSaveKey} style={styles.saveBtn} testID="save-api-key">
           <Text style={styles.saveText}>Save</Text>
         </Pressable>
+      </Section>
+
+      <Section label="Privacy" hint="Frame is built to leave you alone.">
+        <View style={styles.simpleRow}>
+          <Shield size={16} color={palette.accent} strokeWidth={1.6} />
+          <View style={{ flex: 1 }}>
+            <Text style={type.label}>Nothing leaves this device</Text>
+            <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]}>
+              No accounts, no analytics, no tracking. Embeds use youtube-nocookie.com.
+            </Text>
+          </View>
+        </View>
       </Section>
 
       <Section label="Data">

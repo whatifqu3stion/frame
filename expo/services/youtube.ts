@@ -126,6 +126,25 @@ export async function getChannel(channelId: string, apiKey: string | null): Prom
   }
 }
 
+/** Extracts a YouTube video id from a raw URL or returns null. */
+export function extractYouTubeId(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  // Bare 11-char id
+  if (/^[A-Za-z0-9_-]{11}$/.test(text)) return text;
+  const patterns = [
+    /[?&]v=([A-Za-z0-9_-]{11})/,
+    /youtu\.be\/([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/embed\/([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/,
+  ];
+  for (const re of patterns) {
+    const m = re.exec(text);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
 export function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "—";
   const h = Math.floor(seconds / 3600);

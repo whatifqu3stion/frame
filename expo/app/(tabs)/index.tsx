@@ -1,4 +1,6 @@
 import { router } from "expo-router";
+import { Image } from "expo-image";
+import { Play } from "lucide-react-native";
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,24 +10,38 @@ import VideoCard from "@/components/VideoCard";
 import { SAMPLE_CHANNELS, SAMPLE_VIDEOS } from "@/constants/sampleData";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
-import { Image } from "expo-image";
+import type { Channel } from "@/types";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { resumeList, savedVideos } = useApp();
+  const { resumeList, savedVideos, watchLater, followedChannels } = useApp();
 
   const resumeVideos = useMemo(() => {
     return resumeList.map((r) => {
       const fromSaved = savedVideos.find((s) => s.id === r.videoId);
+      const fromLater = watchLater.find((s) => s.id === r.videoId);
       const fromSample = SAMPLE_VIDEOS.find((s) => s.id === r.videoId);
-      const v = fromSaved ?? fromSample;
+      const v = fromSaved ?? fromLater ?? fromSample;
       if (!v) return null;
       return { video: v, progress: r.timestampSeconds };
     }).filter(Boolean) as { video: typeof SAMPLE_VIDEOS[number]; progress: number }[];
-  }, [resumeList, savedVideos]);
+  }, [resumeList, savedVideos, watchLater]);
 
-  const featured = SAMPLE_VIDEOS[0];
+  // Hero pulls from the user's own intent first: Watch Later, then Saved, then a curated sample.
+  const hero = watchLater[0] ?? savedVideos[0] ?? SAMPLE_VIDEOS[0];
   const more = SAMPLE_VIDEOS.slice(1, 5);
+
+  const channels = useMemo<Channel[]>(() => {
+    const seen = new Set<string>();
+    const merged: Channel[] = [];
+    [...followedChannels, ...SAMPLE_CHANNELS].forEach((c) => {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        merged.push(c);
+      }
+    });
+    return merged;
+  }, [followedChannels]);
 
   return (
     <ScrollView
@@ -37,8 +53,22 @@ export default function HomeScreen() {
         <ScreenHeader eyebrow="Today" title={"Welcome\nback."} subtitle="A small selection. Pick one. Watch it whole." />
       </View>
 
+      <Pressable
+        onPress={() => router.push("/session")}
+        style={styles.sessionBanner}
+        testID="start-session"
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[type.caption, { color: palette.accentSoft }]}>Sit down for a while</Text>
+          <Text style={styles.sessionTitle}>Start a session</Text>
+        </View>
+        <View style={styles.sessionPlay}>
+          <Play size={16} color={palette.ink} strokeWidth={1.8} fill={palette.ink} />
+        </View>
+      </Pressable>
+
       {resumeVideos.length > 0 && (
-        <View style={{ marginTop: spacing.lg }}>
+        <View style={{ marginTop: spacing.xl }}>
           <View style={styles.sectionLabel}>
             <Text style={type.caption}>Continue Watching</Text>
           </View>
@@ -54,16 +84,36 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {watchLater.length > 0 && (
+        <View style={{ marginTop: spacing.xl }}>
+          <View style={[styles.sectionLabel, styles.sectionRow]}>
+            <Text style={type.caption}>Watch Later</Text>
+            <Pressable onPress={() => router.push("/(tabs)/library")} hitSlop={8}>
+              <Text style={[type.caption, { color: palette.accent }]}>All →</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
+          >
+            {watchLater.slice(0, 8).map((video) => (
+              <VideoCard key={video.id} video={video} variant="compact" />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       <View style={{ marginTop: spacing.xxl, paddingHorizontal: spacing.lg }}>
         <View style={styles.sectionLabel}>
           <Text style={type.caption}>Featured</Text>
         </View>
-        {featured && <VideoCard video={featured} variant="full" />}
+        {hero && <VideoCard video={hero} variant="full" />}
       </View>
 
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
         <View style={styles.sectionLabel}>
-          <Text style={type.caption}>Channels</Text>
+          <Text style={type.caption}>{followedChannels.length > 0 ? "Your Channels" : "Channels"}</Text>
         </View>
       </View>
       <ScrollView
@@ -71,7 +121,7 @@ export default function HomeScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}
       >
-        {SAMPLE_CHANNELS.map((c) => (
+        {channels.map((c) => (
           <Pressable
             key={c.id}
             style={styles.channelTile}
@@ -103,7 +153,25 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  sectionLabel: { marginBottom: spacing.md },
+  sectionLabel: { marginBottom: spacing.md, paddingHorizontal: 0 },
+  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
+  sessionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: palette.ink,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  sessionTitle: { fontFamily: "Georgia", fontSize: 22, color: palette.wall, marginTop: spacing.xs },
+  sessionPlay: {
+    width: 44,
+    height: 44,
+    backgroundColor: palette.wall,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
   channelAvatar: {
     width: 88,

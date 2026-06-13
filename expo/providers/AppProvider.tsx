@@ -2,22 +2,30 @@ import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import type { FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import {
+  addWatchLater,
   clearAllData,
   deleteQueue,
+  followChannel,
   isVideoSaved as dbIsVideoSaved,
+  listFollowedChannels,
   listQueues,
   listResume,
   listSavedVideos,
+  listWatchLater,
+  removeWatchLater,
   saveVideo,
+  unfollowChannel,
   unsaveVideo,
   upsertQueue,
 } from "@/db/database";
 
 const PREFS_KEY = "frame.preferences.v1";
 const INTERESTS_KEY = "frame.interests.v1";
+const RECENT_SEARCHES_KEY = "frame.recentSearches.v1";
+const MAX_RECENT_SEARCHES = 8;
 
 const defaultPrefs: UserPreferences = {
   theme: "warm",
@@ -46,6 +54,25 @@ async function savePrefs(p: UserPreferences): Promise<void> {
   }
 }
 
+async function loadRecentSearches(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as string[];
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function persistRecentSearches(items: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(items));
+  } catch (err) {
+    console.warn("[recent] save failed", err);
+  }
+}
+
 async function loadInterests(): Promise<InterestTopic[]> {
   try {
     const raw = await AsyncStorage.getItem(INTERESTS_KEY);
@@ -68,17 +95,19 @@ async function saveInterests(items: InterestTopic[]): Promise<void> {
 export const [AppProvider, useApp] = createContextHook(() => {
   const [prefs, setPrefs] = useState<UserPreferences>(defaultPrefs);
   const [interests, setInterests] = useState<InterestTopic[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [paywallOpen, setPaywallOpen] = useState<boolean>(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([loadPrefs(), loadInterests()])
-      .then(([p, i]) => {
+    Promise.all([loadPrefs(), loadInterests(), loadRecentSearches()])
+      .then(([p, i, r]) => {
         if (!mounted) return;
         setPrefs(p);
         setInterests(i);
+        setRecentSearches(r);
         setReady(true);
       })
       .catch((err) => {
@@ -120,6 +149,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
     [],
   );
 
+  const addRecentSearch = useCallback((term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const next = [trimmed, ...prev.filter((t) => t.toLowerCase() !== trimmed.toLowerCase())].slice(0, MAX_RECENT_SEARCHES);
+      void persistRecentSearches(next);
+      return next;
+    });
+  }, []);
+
+  const clearRecentSearches = useCallback(() => {
+    setRecentSearches([]);
+    void persistRecentSearches([]);
+  }, []);
+
   const requirePurchase = useCallback((): boolean => {
     if (prefs.hasPurchased) return true;
     setPaywallOpen(true);
@@ -142,6 +186,18 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const queuesQuery = useQuery({
     queryKey: ["library", "queues"],
     queryFn: listQueues,
+    enabled: ready,
+  });
+
+  const watchLaterQuery = useQuery({
+    queryKey: ["library", "watchLater"],
+    queryFn: listWatchLater,
+    enabled: ready,
+  });
+
+  const channelsQuery = useQuery({
+    queryKey: ["library", "channels"],
+    queryFn: listFollowedChannels,
     enabled: ready,
   });
 
@@ -176,6 +232,58 @@ export const [AppProvider, useApp] = createContextHook(() => {
     [queuesQuery.data, invalidateLibrary],
   );
 
+  const renameQueue = useCallback(
+    async (id: string, name: string) => {
+      const existing = queuesQuery.data?.find((q) => q.id === id);
+      if (!existing) return;
+      await upsertQueue({ ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
+      invalidateLibrary();
+    },
+    [queuesQuery.data, invalidateLibrary],
+  );
+
+  const removeFromQueue = useCallback(
+    async (queueId: string, videoId: string) => {
+      const existing = queuesQuery.data?.find((q) => q.id === queueId);
+      if (!existing) return;
+      await upsertQueue({
+        ...existing,
+        orderedVideoIds: existing.orderedVideoIds.filter((v) => v !== videoId),
+        updatedAt: Date.now(),
+      });
+      invalidateLibrary();
+    },
+    [queuesQuery.data, invalidateLibrary],
+  );
+
+  const watchLaterMutation = useMutation({
+    mutationFn: async (video: Video) => {
+      await addWatchLater(video);
+    },
+    onSuccess: invalidateLibrary,
+  });
+
+  const removeWatchLaterMutation = useMutation({
+    mutationFn: async (videoId: string) => {
+      await removeWatchLater(videoId);
+    },
+    onSuccess: invalidateLibrary,
+  });
+
+  const followMutation = useMutation({
+    mutationFn: async (channel: FollowedChannel) => {
+      await followChannel(channel);
+    },
+    onSuccess: invalidateLibrary,
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await unfollowChannel(id);
+    },
+    onSuccess: invalidateLibrary,
+  });
+
   const createQueue = useCallback(
     async (name: string, firstVideoId?: string): Promise<VideoQueue> => {
       const q: VideoQueue = {
@@ -201,9 +309,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const wipeAllData = useCallback(async () => {
     await clearAllData();
-    await AsyncStorage.multiRemove([PREFS_KEY, INTERESTS_KEY]);
+    await AsyncStorage.multiRemove([PREFS_KEY, INTERESTS_KEY, RECENT_SEARCHES_KEY]);
     setPrefs(defaultPrefs);
     setInterests([]);
+    setRecentSearches([]);
     invalidateLibrary();
   }, [invalidateLibrary]);
 
@@ -221,16 +330,29 @@ export const [AppProvider, useApp] = createContextHook(() => {
       replaceInterests,
       toggleInterest,
       requirePurchase,
+      recentSearches,
+      addRecentSearch,
+      clearRecentSearches,
       savedVideos: savedQuery.data ?? [],
       resumeList: resumeQuery.data ?? [],
       queues: queuesQuery.data ?? [],
+      watchLater: watchLaterQuery.data ?? [],
+      followedChannels: channelsQuery.data ?? [],
       isVideoSaved: (id: string) => (savedQuery.data ?? []).some((v) => v.id === id),
+      isInWatchLater: (id: string) => (watchLaterQuery.data ?? []).some((v) => v.id === id),
+      isChannelFollowed: (id: string) => (channelsQuery.data ?? []).some((c) => c.id === id),
       checkIsVideoSaved: (id: string) => dbIsVideoSaved(id),
       saveVideo: (v: Video) => saveMutation.mutateAsync(v),
       unsaveVideo: (id: string) => unsaveMutation.mutateAsync(id),
+      addToWatchLater: (v: Video) => watchLaterMutation.mutateAsync(v),
+      removeFromWatchLater: (id: string) => removeWatchLaterMutation.mutateAsync(id),
+      followChannel: (c: FollowedChannel) => followMutation.mutateAsync(c),
+      unfollowChannel: (id: string) => unfollowMutation.mutateAsync(id),
       addToQueue,
       createQueue,
+      renameQueue,
       removeQueue,
+      removeFromQueue,
       wipeAllData,
     }),
     [
@@ -245,14 +367,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
       replaceInterests,
       toggleInterest,
       requirePurchase,
+      recentSearches,
+      addRecentSearch,
+      clearRecentSearches,
       savedQuery.data,
       resumeQuery.data,
       queuesQuery.data,
+      watchLaterQuery.data,
+      channelsQuery.data,
       saveMutation,
       unsaveMutation,
+      watchLaterMutation,
+      removeWatchLaterMutation,
+      followMutation,
+      unfollowMutation,
       addToQueue,
       createQueue,
+      renameQueue,
       removeQueue,
+      removeFromQueue,
       wipeAllData,
     ],
   );

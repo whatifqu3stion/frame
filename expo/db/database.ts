@@ -1,6 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { Platform } from "react-native";
-import type { ResumePosition, Video, VideoQueue } from "@/types";
+import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -37,6 +37,24 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           orderedVideoIds TEXT NOT NULL,
           updatedAt INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS watch_later (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT NOT NULL,
+          channelId TEXT NOT NULL,
+          channelTitle TEXT NOT NULL,
+          thumbnailUrl TEXT NOT NULL,
+          publishedAt TEXT NOT NULL,
+          durationSeconds INTEGER NOT NULL,
+          description TEXT,
+          addedAt INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS followed_channels (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          thumbnailUrl TEXT NOT NULL,
+          followedAt INTEGER NOT NULL
+        );
       `);
       return db;
     });
@@ -49,6 +67,8 @@ const webStore = {
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumePosition & { title?: string; channelTitle?: string; thumbnailUrl?: string; durationSeconds?: number }>(),
   queues: new Map<string, VideoQueue>(),
+  watchLater: new Map<string, Video & { addedAt: number }>(),
+  channels: new Map<string, FollowedChannel>(),
 };
 
 export async function listSavedVideos(): Promise<Video[]> {
@@ -193,11 +213,75 @@ export async function deleteQueue(id: string): Promise<void> {
   await db.runAsync("DELETE FROM queues WHERE id = ?", [id]);
 }
 
+export async function listWatchLater(): Promise<Video[]> {
+  if (Platform.OS === "web") {
+    return Array.from(webStore.watchLater.values())
+      .sort((a, b) => b.addedAt - a.addedAt)
+      .map((v) => ({ ...v }));
+  }
+  const db = await getDb();
+  return db.getAllAsync<Video & { addedAt: number }>("SELECT * FROM watch_later ORDER BY addedAt DESC");
+}
+
+export async function addWatchLater(v: Video): Promise<void> {
+  const addedAt = Date.now();
+  if (Platform.OS === "web") {
+    webStore.watchLater.set(v.id, { ...v, addedAt });
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO watch_later (id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [v.id, v.title, v.channelId, v.channelTitle, v.thumbnailUrl, v.publishedAt, v.durationSeconds, v.description ?? null, addedAt],
+  );
+}
+
+export async function removeWatchLater(videoId: string): Promise<void> {
+  if (Platform.OS === "web") {
+    webStore.watchLater.delete(videoId);
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM watch_later WHERE id = ?", [videoId]);
+}
+
+export async function listFollowedChannels(): Promise<FollowedChannel[]> {
+  if (Platform.OS === "web") {
+    return Array.from(webStore.channels.values()).sort((a, b) => b.followedAt - a.followedAt);
+  }
+  const db = await getDb();
+  return db.getAllAsync<FollowedChannel>("SELECT * FROM followed_channels ORDER BY followedAt DESC");
+}
+
+export async function followChannel(c: FollowedChannel): Promise<void> {
+  if (Platform.OS === "web") {
+    webStore.channels.set(c.id, { ...c });
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO followed_channels (id,title,description,thumbnailUrl,followedAt) VALUES (?,?,?,?,?)",
+    [c.id, c.title, c.description ?? null, c.thumbnailUrl, c.followedAt],
+  );
+}
+
+export async function unfollowChannel(id: string): Promise<void> {
+  if (Platform.OS === "web") {
+    webStore.channels.delete(id);
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM followed_channels WHERE id = ?", [id]);
+}
+
 export async function clearAllData(): Promise<void> {
   if (Platform.OS === "web") {
     webStore.saved.clear();
     webStore.resume.clear();
     webStore.queues.clear();
+    webStore.watchLater.clear();
+    webStore.channels.clear();
     return;
   }
   const db = await getDb();
@@ -205,5 +289,7 @@ export async function clearAllData(): Promise<void> {
     DELETE FROM saved_videos;
     DELETE FROM resume_positions;
     DELETE FROM queues;
+    DELETE FROM watch_later;
+    DELETE FROM followed_channels;
   `);
 }

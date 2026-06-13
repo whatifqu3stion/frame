@@ -16,6 +16,10 @@ export type Channel = {
   thumbnailUrl: string;
 };
 
+export type FollowedChannel = Channel & {
+  followedAt: number;
+};
+
 export type ResumePosition = {
   videoId: string;
   timestampSeconds: number;

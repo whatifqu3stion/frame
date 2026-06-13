@@ -49,6 +49,7 @@ function AppContent() {
       <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to Queue" }} />
+      <Stack.Screen name="session" options={{ presentation: "modal", title: "Session" }} />
     </Stack>
   );
 }
