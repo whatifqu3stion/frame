@@ -126,6 +126,108 @@ export async function getChannel(channelId: string, apiKey: string | null): Prom
   }
 }
 
+export type ParsedLink =
+  | { kind: "channelId"; value: string }
+  | { kind: "handle"; value: string }
+  | { kind: "video"; value: string }
+  | { kind: "unknown"; value: string };
+
+/** Classifies a pasted YouTube link as a channel id, @handle, or video. */
+export function parseYouTubeLink(input: string): ParsedLink {
+  const text = input.trim();
+  if (!text) return { kind: "unknown", value: "" };
+
+  const channelId = /youtube\.com\/channel\/(UC[A-Za-z0-9_-]{20,})/.exec(text);
+  if (channelId?.[1]) return { kind: "channelId", value: channelId[1] };
+  if (/^UC[A-Za-z0-9_-]{20,}$/.test(text)) return { kind: "channelId", value: text };
+
+  const handle = /youtube\.com\/@([A-Za-z0-9_.-]+)/.exec(text);
+  if (handle?.[1]) return { kind: "handle", value: handle[1] };
+  if (/^@[A-Za-z0-9_.-]+$/.test(text)) return { kind: "handle", value: text.slice(1) };
+
+  const legacy = /youtube\.com\/(?:c|user)\/([A-Za-z0-9_.-]+)/.exec(text);
+  if (legacy?.[1]) return { kind: "handle", value: legacy[1] };
+
+  const videoId = extractYouTubeId(text);
+  if (videoId) return { kind: "video", value: videoId };
+
+  return { kind: "unknown", value: text };
+}
+
+/**
+ * Resolves a pasted link into the creator's channel. With an API key we resolve
+ * handles and video → channel precisely; without one we create a calm placeholder
+ * so manual lists still work offline.
+ */
+export async function resolveChannelFromLink(
+  parsed: ParsedLink,
+  apiKey: string | null,
+): Promise<{ channel?: Channel; error?: string }> {
+  if (parsed.kind === "unknown") {
+    return { error: "That doesn't look like a YouTube link." };
+  }
+
+  if (parsed.kind === "channelId") {
+    const channel = await getChannel(parsed.value, apiKey);
+    return { channel: channel ?? { id: parsed.value, title: "YouTube channel", thumbnailUrl: "" } };
+  }
+
+  if (parsed.kind === "handle") {
+    if (!apiKey) {
+      return {
+        channel: {
+          id: `@${parsed.value}`,
+          title: `@${parsed.value}`,
+          thumbnailUrl: "",
+        },
+      };
+    }
+    try {
+      const url = `${API_BASE}/channels?part=snippet&forHandle=@${encodeURIComponent(parsed.value)}&key=${apiKey}`;
+      const res = await fetchJson<{
+        items?: { id: string; snippet: { title: string; description: string; thumbnails: { high?: { url: string } } } }[];
+      }>(url);
+      const item = res.items?.[0];
+      if (!item) return { error: "Couldn't find that channel." };
+      return {
+        channel: {
+          id: item.id,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          thumbnailUrl: item.snippet.thumbnails.high?.url ?? "",
+        },
+      };
+    } catch {
+      return { error: "Couldn't reach YouTube. Try again." };
+    }
+  }
+
+  // video → resolve its channel
+  if (!apiKey) {
+    return {
+      channel: {
+        id: `video:${parsed.value}`,
+        title: "Creator from link",
+        thumbnailUrl: `https://i.ytimg.com/vi/${parsed.value}/hqdefault.jpg`,
+      },
+    };
+  }
+  try {
+    const url = `${API_BASE}/videos?part=snippet&id=${parsed.value}&key=${apiKey}`;
+    const res = await fetchJson<{
+      items?: { snippet: { channelId: string; channelTitle: string } }[];
+    }>(url);
+    const snippet = res.items?.[0]?.snippet;
+    if (!snippet) return { error: "Couldn't find that video." };
+    const channel = await getChannel(snippet.channelId, apiKey);
+    return {
+      channel: channel ?? { id: snippet.channelId, title: snippet.channelTitle, thumbnailUrl: "" },
+    };
+  } catch {
+    return { error: "Couldn't reach YouTube. Try again." };
+  }
+}
+
 /** Extracts a YouTube video id from a raw URL or returns null. */
 export function extractYouTubeId(input: string): string | null {
   const text = input.trim();

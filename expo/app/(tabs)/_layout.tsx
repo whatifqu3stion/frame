@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Compass, Home, Library, Search, Settings } from "lucide-react-native";
+import { Compass, Home, Library, Settings } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 import { palette, fonts } from "@/constants/theme";
@@ -40,13 +40,6 @@ export default function TabLayout() {
         options={{
           title: "Explore",
           tabBarIcon: ({ color }) => <Compass size={20} color={color} strokeWidth={1.6} />,
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-          tabBarIcon: ({ color }) => <Search size={20} color={color} strokeWidth={1.6} />,
         }}
       />
       <Tabs.Screen

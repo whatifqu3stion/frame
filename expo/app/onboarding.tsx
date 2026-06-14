@@ -1,12 +1,28 @@
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { Check, Link2, Plus, Search as SearchIcon } from "lucide-react-native";
 import { useRef, useState } from "react";
-import { Animated, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
+import { searchVideos } from "@/services/youtube";
+import type { Video } from "@/types";
 
 const { width } = Dimensions.get("window");
+const LAST_STEP = 4;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
@@ -16,7 +32,7 @@ export default function Onboarding() {
   const fade = useRef(new Animated.Value(1)).current;
 
   const goTo = (i: number) => {
-    const clamped = Math.max(0, Math.min(3, i));
+    const clamped = Math.max(0, Math.min(LAST_STEP, i));
     setStep(clamped);
     scrollRef.current?.scrollTo({ x: clamped * width, animated: true });
     fade.setValue(0.4);
@@ -32,7 +48,7 @@ export default function Onboarding() {
     <View style={{ flex: 1, backgroundColor: palette.wall }}>
       <View style={[styles.topRow, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.dots}>
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
           ))}
         </View>
@@ -50,11 +66,8 @@ export default function Onboarding() {
       >
         <StepWelcome width={width} />
         <StepPhilosophy width={width} />
-        <StepInterests
-          width={width}
-          interests={interests.map((i) => i.id)}
-          onToggle={toggleInterest}
-        />
+        <StepBringChannels width={width} />
+        <StepInterests width={width} interests={interests.map((i) => i.id)} onToggle={toggleInterest} />
         <StepCompletion width={width} />
       </ScrollView>
 
@@ -67,11 +80,11 @@ export default function Onboarding() {
           <View />
         )}
         <Pressable
-          onPress={() => (step === 3 ? finish() : goTo(step + 1))}
+          onPress={() => (step === LAST_STEP ? finish() : goTo(step + 1))}
           style={styles.nextBtn}
           testID="next"
         >
-          <Text style={styles.nextText}>{step === 3 ? "Enter Frame" : "Continue"}</Text>
+          <Text style={styles.nextText}>{step === LAST_STEP ? "Enter Frame" : "Continue"}</Text>
         </Pressable>
       </Animated.View>
     </View>
@@ -101,7 +114,7 @@ function StepPhilosophy({ width }: { width: number }) {
   ];
   return (
     <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>What Frame doesn't do</Text>
+      <Text style={[type.caption, { color: palette.accent }]}>What Frame doesn&apos;t do</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg }]}>Less,{"\n"}on purpose.</Text>
       <View style={{ marginTop: spacing.xl }}>
         {items.map((it) => (
@@ -115,13 +128,205 @@ function StepPhilosophy({ width }: { width: number }) {
   );
 }
 
+function StepBringChannels({ width }: { width: number }) {
+  const {
+    prefs,
+    googleConfigured,
+    googleConnected,
+    importing,
+    signInWithGoogle,
+    addChannelByLink,
+    searchCreditsRemaining,
+    consumeSearchCredit,
+    followChannel,
+    isChannelFollowed,
+  } = useApp();
+
+  const [mode, setMode] = useState<"choose" | "manual">(googleConnected ? "manual" : "choose");
+  const [signInMsg, setSignInMsg] = useState<string | null>(null);
+  const [link, setLink] = useState<string>("");
+  const [linkMsg, setLinkMsg] = useState<{ ok: boolean; message: string } | null>(null);
+  const [linkBusy, setLinkBusy] = useState<boolean>(false);
+  const [term, setTerm] = useState<string>("");
+  const [submitted, setSubmitted] = useState<string>("");
+
+  const searchQuery = useQuery({
+    queryKey: ["onboard-search", submitted, prefs.youtubeApiKey],
+    queryFn: () => searchVideos(submitted, prefs.youtubeApiKey),
+    enabled: submitted.length > 0,
+  });
+
+  const onSignIn = async () => {
+    setSignInMsg(null);
+    const result = await signInWithGoogle();
+    setSignInMsg(result.message);
+    if (result.ok) setMode("manual");
+  };
+
+  const onAddLink = async () => {
+    if (!link.trim() || linkBusy) return;
+    setLinkBusy(true);
+    setLinkMsg(null);
+    const result = await addChannelByLink(link.trim());
+    setLinkBusy(false);
+    setLinkMsg(result);
+    if (result.ok) setLink("");
+  };
+
+  const runSearch = () => {
+    const trimmed = term.trim();
+    if (!trimmed || searchCreditsRemaining <= 0) return;
+    setSubmitted(trimmed);
+    consumeSearchCredit();
+    Keyboard.dismiss();
+  };
+
+  const addFromVideo = async (v: Video) => {
+    if (!v.channelId) return;
+    await followChannel({ id: v.channelId, title: v.channelTitle || "Channel", thumbnailUrl: "", followedAt: Date.now() });
+  };
+
+  return (
+    <ScrollView
+      style={[styles.step, { width }]}
+      contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
+      <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>Bring your{"\n"}channels.</Text>
+      <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
+        Start with voices you already trust. Nothing leaves this device.
+      </Text>
+
+      <Pressable
+        onPress={onSignIn}
+        style={[styles.bigChoice, importing && { opacity: 0.7 }]}
+        disabled={importing}
+        testID="onboard-google"
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.choiceTitle}>{googleConnected ? "Subscriptions imported" : "Bring your channels"}</Text>
+          <Text style={styles.choiceBody}>
+            {googleConnected
+              ? prefs.googleEmail ?? "Connected"
+              : googleConfigured
+                ? "Sign in with Google to import the channels you already follow."
+                : "Google sign-in needs setup — you can still add channels yourself below."}
+          </Text>
+        </View>
+        {importing ? (
+          <ActivityIndicator color={palette.wall} />
+        ) : googleConnected ? (
+          <Check size={18} color={palette.wall} strokeWidth={2} />
+        ) : (
+          <Plus size={18} color={palette.wall} strokeWidth={2} />
+        )}
+      </Pressable>
+      {signInMsg ? <Text style={[type.label, { marginTop: spacing.sm, color: palette.accent }]}>{signInMsg}</Text> : null}
+
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={[type.caption, { color: palette.inkMuted }]}>or add them yourself</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <View style={styles.inputRow}>
+        <Link2 size={16} color={palette.inkMuted} strokeWidth={1.6} />
+        <TextInput
+          value={link}
+          onChangeText={(t) => {
+            setLink(t);
+            setLinkMsg(null);
+          }}
+          placeholder="Paste a channel or video link"
+          placeholderTextColor={palette.inkMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.input}
+          onSubmitEditing={onAddLink}
+          returnKeyType="done"
+          testID="onboard-link-input"
+        />
+        <Pressable onPress={onAddLink} hitSlop={8} disabled={linkBusy}>
+          {linkBusy ? <ActivityIndicator size="small" color={palette.accent} /> : <Text style={[type.label, { color: palette.accent }]}>Add</Text>}
+        </Pressable>
+      </View>
+      {linkMsg ? (
+        <Text style={[type.label, { marginTop: spacing.sm, color: linkMsg.ok ? palette.accent : "#8C3A2E" }]}>{linkMsg.message}</Text>
+      ) : null}
+
+      <View style={styles.searchHeader}>
+        <Text style={type.caption}>A few searches to start</Text>
+        <Text style={[type.caption, { color: palette.inkMuted }]}>{searchCreditsRemaining} of 3 left</Text>
+      </View>
+
+      {searchCreditsRemaining > 0 ? (
+        <View style={styles.inputRow}>
+          <SearchIcon size={16} color={palette.inkMuted} strokeWidth={1.6} />
+          <TextInput
+            value={term}
+            onChangeText={setTerm}
+            placeholder="Search for a channel or topic"
+            placeholderTextColor={palette.inkMuted}
+            autoCapitalize="none"
+            style={styles.input}
+            onSubmitEditing={runSearch}
+            returnKeyType="search"
+            testID="onboard-search-input"
+          />
+          <Pressable onPress={runSearch} hitSlop={8}>
+            <Text style={[type.label, { color: palette.accent }]}>Go</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text style={[type.bodySoft, { marginTop: spacing.sm, color: palette.inkMuted }]}>
+          Search taste used up. Keep adding by pasting links anytime.
+        </Text>
+      )}
+
+      {submitted.length > 0 ? (
+        <View style={{ marginTop: spacing.lg }}>
+          {searchQuery.isLoading ? (
+            <Text style={[type.bodySoft, { paddingVertical: spacing.md }]}>Searching…</Text>
+          ) : (
+            (searchQuery.data ?? []).slice(0, 6).map((v) => {
+              const added = v.channelId ? isChannelFollowed(v.channelId) : false;
+              return (
+                <View key={v.id} style={styles.resultRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={type.caption} numberOfLines={1}>{v.channelTitle || "YouTube"}</Text>
+                    <Text style={styles.resultTitle} numberOfLines={2}>{v.title}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => addFromVideo(v)}
+                    style={[styles.addChip, added && styles.addChipDone]}
+                    disabled={added || !v.channelId}
+                    testID={`onboard-add-${v.id}`}
+                  >
+                    {added ? (
+                      <Check size={14} color={palette.accent} strokeWidth={2} />
+                    ) : (
+                      <Plus size={14} color={palette.ink} strokeWidth={2} />
+                    )}
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
 function StepInterests({ width, interests, onToggle }: { width: number; interests: string[]; onToggle: (id: string) => void }) {
   return (
     <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
+      <Text style={[type.caption, { color: palette.accent }]}>Step four</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>What do you{"\n"}care about?</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Pick a few. These seed your Explore tab. You can change them later.
+        Pick a few. These seed your Explore collections. You can change them later.
       </Text>
       <ScrollView style={{ marginTop: spacing.lg }} showsVerticalScrollIndicator={false}>
         <View style={styles.chipsGrid}>
@@ -148,15 +353,15 @@ function StepInterests({ width, interests, onToggle }: { width: number; interest
 function StepCompletion({ width }: { width: number }) {
   return (
     <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>That's it</Text>
-      <Text style={[styles.bigTitle, { marginTop: spacing.lg }]}>When a video{"\n"}ends, that's it.</Text>
+      <Text style={[type.caption, { color: palette.accent }]}>That&apos;s it</Text>
+      <Text style={[styles.bigTitle, { marginTop: spacing.lg }]}>When a video{"\n"}ends, that&apos;s it.</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.lg, maxWidth: 320 }]}>
         Nothing autoplays. Nothing pulls you forward. You choose what to watch next, if anything.
       </Text>
       <View style={{ marginTop: spacing.xxl }}>
         <Text style={type.caption}>A note on storage</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.sm, maxWidth: 320 }]}>
-          Frame keeps everything on this device. No cloud. No accounts. Uninstall the app and it's gone.
+          Frame keeps everything on this device. No cloud. No accounts. Uninstall the app and it&apos;s gone.
         </Text>
       </View>
     </View>
@@ -172,7 +377,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   dots: { flexDirection: "row", gap: 6 },
-  dot: { width: 18, height: 2, backgroundColor: palette.surfaceDeep },
+  dot: { width: 16, height: 2, backgroundColor: palette.surfaceDeep },
   dotActive: { backgroundColor: palette.accent },
   step: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, flex: 1 },
   bigTitle: { ...type.display, fontSize: 44, lineHeight: 50, marginTop: spacing.xl },
@@ -190,6 +395,51 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.accent,
   },
+  bigChoice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: palette.ink,
+    padding: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  choiceTitle: { color: palette.wall, fontFamily: "Georgia", fontSize: 19 },
+  choiceBody: { color: "rgba(250,249,246,0.7)", fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
+  divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.xl },
+  dividerLine: { flex: 1, height: 1, backgroundColor: palette.surfaceDeep },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: palette.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    marginTop: spacing.sm,
+  },
+  input: { flex: 1, ...type.body, padding: 0, fontSize: 15 },
+  searchHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: spacing.xl,
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.surfaceDeep,
+  },
+  resultTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
+  addChip: {
+    width: 34,
+    height: 34,
+    backgroundColor: palette.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addChipDone: { backgroundColor: palette.surfaceDeep },
   chipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl },
   interestChip: {
     flexDirection: "row",

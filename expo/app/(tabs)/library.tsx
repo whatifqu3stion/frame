@@ -1,9 +1,10 @@
 import { router } from "expo-router";
 import { Image } from "expo-image";
-import { ListPlus, Pencil, Play, Trash2 } from "lucide-react-native";
+import { Link2, ListPlus, Pencil, Play, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
@@ -40,6 +41,7 @@ export default function LibraryScreen() {
   const [tab, setTab] = useState<Tab>("saved");
   const [queueModal, setQueueModal] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
   const [queueName, setQueueName] = useState<string>("");
+  const [addChannelOpen, setAddChannelOpen] = useState<boolean>(false);
 
   const openCreateQueue = () => {
     if (!prefs.hasPurchased && !requirePurchase()) return;
@@ -173,8 +175,15 @@ export default function LibraryScreen() {
         )}
 
         {tab === "channels" && (
+          <Pressable onPress={() => setAddChannelOpen(true)} style={styles.newQueueRow} testID="library-add-channel">
+            <Link2 size={18} color={palette.accent} strokeWidth={1.6} />
+            <Text style={[type.label, { color: palette.accent }]}>Add a channel by link</Text>
+          </Pressable>
+        )}
+
+        {tab === "channels" && (
           followedChannels.length === 0 ? (
-            <EmptyState title="No followed channels" body="Open a channel and follow it to keep a quiet shelf of voices you trust." />
+            <EmptyState title="No followed channels" body="Paste a channel or video link above, or follow channels while you watch." />
           ) : (
             followedChannels.map((c) => (
               <Pressable
@@ -224,6 +233,8 @@ export default function LibraryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <AddChannelModal visible={addChannelOpen} onClose={() => setAddChannelOpen(false)} />
     </ScrollView>
   );
 }

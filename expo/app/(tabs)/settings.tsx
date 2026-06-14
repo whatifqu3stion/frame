@@ -1,7 +1,8 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { ChevronRight, Key, Lock, RotateCcw, Shield, Trash2 } from "lucide-react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ChevronRight, Key, Link2, Lock, LogOut, RefreshCw, RotateCcw, Shield, Trash2, UserCircle2 } from "lucide-react-native";
 import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AddChannelModal from "@/components/AddChannelModal";
 import ScreenHeader from "@/components/ScreenHeader";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { palette, spacing, type } from "@/constants/theme";
@@ -9,9 +10,48 @@ import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { interests, toggleInterest, prefs, setApiKey, setPaywallOpen, markPurchased, wipeAllData } = useApp();
+  const {
+    interests,
+    toggleInterest,
+    prefs,
+    setApiKey,
+    setPaywallOpen,
+    markPurchased,
+    wipeAllData,
+    googleConfigured,
+    googleConnected,
+    googleEmail,
+    importing,
+    signInWithGoogle,
+    signOutGoogle,
+    refreshSubscriptions,
+    followedChannels,
+  } = useApp();
   const [apiInput, setApiInput] = useState<string>(prefs.youtubeApiKey ?? "");
   const [showKey, setShowKey] = useState<boolean>(false);
+  const [addOpen, setAddOpen] = useState<boolean>(false);
+  const [accountBusy, setAccountBusy] = useState<boolean>(false);
+
+  const onConnect = async () => {
+    setAccountBusy(true);
+    const result = await signInWithGoogle();
+    setAccountBusy(false);
+    Alert.alert(result.ok ? "Connected" : "Sign-in", result.message);
+  };
+
+  const onRefresh = async () => {
+    setAccountBusy(true);
+    const result = await refreshSubscriptions();
+    setAccountBusy(false);
+    Alert.alert(result.ok ? "Synced" : "Sync", result.message);
+  };
+
+  const onSignOut = () => {
+    Alert.alert("Sign out?", "Imported channels stay on your shelf. You can sign in again anytime.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: () => signOutGoogle() },
+    ]);
+  };
 
   const onSaveKey = async () => {
     await setApiKey(apiInput);
@@ -34,6 +74,55 @@ export default function SettingsScreen() {
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} />
       </View>
+
+      <Section label="Account" hint="Optional. Bring in the channels you already follow.">
+        {googleConnected ? (
+          <>
+            <View style={styles.accountRow}>
+              <UserCircle2 size={20} color={palette.accent} strokeWidth={1.6} />
+              <View style={{ flex: 1 }}>
+                <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google account"}</Text>
+                <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
+                  {followedChannels.length} channel{followedChannels.length === 1 ? "" : "s"} on your shelf
+                </Text>
+              </View>
+            </View>
+            <View style={styles.accountActions}>
+              <Pressable onPress={onRefresh} style={styles.accountBtn} disabled={accountBusy || importing} testID="refresh-subs">
+                {accountBusy || importing ? (
+                  <ActivityIndicator size="small" color={palette.accent} />
+                ) : (
+                  <>
+                    <RefreshCw size={14} color={palette.accent} strokeWidth={1.8} />
+                    <Text style={[type.label, { color: palette.accent }]}>Refresh</Text>
+                  </>
+                )}
+              </Pressable>
+              <Pressable onPress={onSignOut} style={styles.accountBtn} testID="sign-out">
+                <LogOut size={14} color={palette.inkMuted} strokeWidth={1.8} />
+                <Text style={[type.label, { color: palette.inkMuted }]}>Sign out</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <Pressable onPress={onConnect} style={styles.cta} disabled={accountBusy || importing} testID="connect-google">
+            {accountBusy || importing ? (
+              <ActivityIndicator color={palette.wall} />
+            ) : (
+              <>
+                <Text style={styles.ctaTitle}>Sign in with Google</Text>
+                <Text style={styles.ctaSub}>
+                  {googleConfigured ? "Import the channels you already follow." : "Needs setup — add your keys below to enable."}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
+        <Pressable onPress={() => setAddOpen(true)} style={styles.linkRow} testID="settings-add-channel">
+          <Link2 size={14} color={palette.accent} strokeWidth={1.8} />
+          <Text style={[type.label, { color: palette.accent }]}>Add a channel by link</Text>
+        </Pressable>
+      </Section>
 
       <Section label="Purchase">
         {prefs.hasPurchased ? (
@@ -123,6 +212,8 @@ export default function SettingsScreen() {
         </Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
       </Section>
+
+      <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />
     </ScrollView>
   );
 }
@@ -162,7 +253,23 @@ const styles = StyleSheet.create({
   },
   ctaTitle: { color: palette.wall, fontFamily: "Georgia", fontSize: 22 },
   ctaSub: { color: "rgba(250,249,246,0.7)", fontSize: 13, marginTop: spacing.xs },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, marginTop: spacing.sm },
+  accountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: palette.surface,
+    padding: spacing.lg,
+  },
+  accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  accountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    backgroundColor: palette.surface,
+  },
   interestsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   interestChip: {
     flexDirection: "row",

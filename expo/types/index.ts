@@ -46,4 +46,16 @@ export type UserPreferences = {
   hasCompletedOnboarding: boolean;
   youtubeApiKey: string | null;
   hasPurchased: boolean;
+  /** Searches consumed during first-time setup (capped at 3). */
+  onboardingSearchCount: number;
+  /** Email of the connected Google account, if any. */
+  googleEmail: string | null;
+  /** When the Google account was connected (ms epoch), or null. */
+  googleConnectedAt: number | null;
+};
+
+/** Result of adding a creator from a pasted link. */
+export type AddChannelResult = {
+  ok: boolean;
+  message: string;
 };
