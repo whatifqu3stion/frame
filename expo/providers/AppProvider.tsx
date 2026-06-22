@@ -7,7 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured } from "@/constants/config";
+import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { fetchGoogleEmail, fetchSubscriptions } from "@/services/googleAuth";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
 
@@ -115,12 +115,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [importing, setImporting] = useState<boolean>(false);
   const queryClient = useQueryClient();
 
-  const [, , promptGoogle] = Google.useAuthRequest({
-    iosClientId: GOOGLE_CONFIG.iosClientId,
-    androidClientId: GOOGLE_CONFIG.androidClientId,
-    webClientId: GOOGLE_CONFIG.webClientId,
-    scopes: GOOGLE_SCOPES,
-  });
+  // `expo-auth-session` throws if the active platform's client ID is missing, so we
+  // only start the auth request when this platform is actually configured. The
+  // condition is derived from build-time env + platform, so it's constant for the
+  // whole session and safe to gate the hook on.
+  let promptGoogle: ReturnType<typeof Google.useAuthRequest>[2] | null = null;
+  if (isGooglePlatformConfigured()) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [, , prompt] = Google.useAuthRequest({
+      iosClientId: GOOGLE_CONFIG.iosClientId,
+      androidClientId: GOOGLE_CONFIG.androidClientId,
+      webClientId: GOOGLE_CONFIG.webClientId,
+      scopes: GOOGLE_SCOPES,
+    });
+    promptGoogle = prompt;
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -361,6 +370,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (!isGoogleConfigured()) {
       return { ok: false, message: "Google sign-in needs setup. Add your keys in Settings to enable it." };
+    }
+    if (!promptGoogle) {
+      return { ok: false, message: "Google sign-in isn't set up for this platform yet." };
     }
     try {
       const result = await promptGoogle();
