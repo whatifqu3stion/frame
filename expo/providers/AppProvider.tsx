@@ -122,13 +122,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
   let promptGoogle: ReturnType<typeof Google.useAuthRequest>[2] | null = null;
   if (isGooglePlatformConfigured()) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    const [, , prompt] = Google.useAuthRequest({
+    const [request, , prompt] = Google.useAuthRequest({
       iosClientId: GOOGLE_CONFIG.iosClientId,
       androidClientId: GOOGLE_CONFIG.androidClientId,
       webClientId: GOOGLE_CONFIG.webClientId,
       scopes: GOOGLE_SCOPES,
     });
     promptGoogle = prompt;
+    // Surface the exact redirect URI Google expects to be whitelisted. This is the
+    // value you must add under "Authorized redirect URIs" in the Google Cloud console
+    // for your OAuth client to resolve `redirect_uri_mismatch`.
+    if (request?.redirectUri) {
+      console.log("[google] redirectUri to whitelist:", request.redirectUri);
+    }
   }
 
   useEffect(() => {
