@@ -1,5 +1,6 @@
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { ChevronRight, Key, Link2, Lock, LogOut, RefreshCw, RotateCcw, Shield, Trash2, UserCircle2 } from "lucide-react-native";
+import { router } from "expo-router";
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ChevronRight, FileText, Link2, Lock, LogOut, RefreshCw, RotateCcw, Shield, Trash2, UserCircle2 } from "lucide-react-native";
 import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
@@ -13,8 +14,6 @@ export default function SettingsScreen() {
   const {
     interests,
     toggleInterest,
-    prefs,
-    setApiKey,
     setPaywallOpen,
     isPremium,
     subscriptionStatusLoading,
@@ -29,8 +28,6 @@ export default function SettingsScreen() {
     refreshSubscriptions,
     followedChannels,
   } = useApp();
-  const [apiInput, setApiInput] = useState<string>(prefs.youtubeApiKey ?? "");
-  const [showKey, setShowKey] = useState<boolean>(false);
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
 
@@ -49,15 +46,19 @@ export default function SettingsScreen() {
   };
 
   const onSignOut = () => {
-    Alert.alert("Sign out?", "Imported channels stay on your shelf. You can sign in again anytime.", [
+    Alert.alert("Disconnect Google?", "Frame will revoke Google access. Imported creators stay on this device.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: () => signOutGoogle() },
+      {
+        text: "Disconnect",
+        style: "destructive",
+        onPress: async () => {
+          setAccountBusy(true);
+          const result = await signOutGoogle();
+          setAccountBusy(false);
+          Alert.alert(result.ok ? "Disconnected" : "Couldn't disconnect", result.message);
+        },
+      },
     ]);
-  };
-
-  const onSaveKey = async () => {
-    await setApiKey(apiInput);
-    Alert.alert("Saved", apiInput ? "YouTube API key updated." : "API key cleared. Sample content will be used.");
   };
 
   const onWipe = () => {
@@ -141,7 +142,7 @@ export default function SettingsScreen() {
         ) : (
           <Pressable onPress={() => setPaywallOpen(true)} style={styles.cta} testID="open-premium">
             <Text style={styles.ctaTitle}>Explore Frame Premium</Text>
-            <Text style={styles.ctaSub}>$4.99 monthly or $29.99 yearly. Cancel anytime.</Text>
+            <Text style={styles.ctaSub}>See the current plans and localized store prices.</Text>
           </Pressable>
         )}
         {subscriptionStatusError ? (
@@ -172,39 +173,24 @@ export default function SettingsScreen() {
         </View>
       </Section>
 
-      <Section label="YouTube" hint="Optional. Without a key, Frame uses a curated sample.">
-        <View style={styles.apiRow}>
-          <Key size={16} color={palette.inkMuted} strokeWidth={1.6} />
-          <TextInput
-            value={apiInput}
-            onChangeText={setApiInput}
-            placeholder="YouTube Data API v3 key"
-            placeholderTextColor={palette.inkMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry={!showKey}
-            style={styles.apiInput}
-            testID="api-key-input"
-          />
-          <Pressable onPress={() => setShowKey((v) => !v)} hitSlop={8}>
-            <Text style={[type.caption, { color: palette.accent }]}>{showKey ? "Hide" : "Show"}</Text>
-          </Pressable>
-        </View>
-        <Pressable onPress={onSaveKey} style={styles.saveBtn} testID="save-api-key">
-          <Text style={styles.saveText}>Save</Text>
-        </Pressable>
-      </Section>
-
-      <Section label="Privacy" hint="Frame is built to leave you alone.">
+      <Section label="Privacy" hint="Clear controls, without behavioral personalization.">
         <View style={styles.simpleRow}>
           <Shield size={16} color={palette.accent} strokeWidth={1.6} />
           <View style={{ flex: 1 }}>
-            <Text style={type.label}>Nothing leaves this device</Text>
+            <Text style={type.label}>Local library, disclosed services</Text>
             <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]}>
-              No accounts, no analytics, no tracking. Embeds use youtube-nocookie.com.
+              Your library stays on this device. YouTube handles playback and creator lookups; Google is optional; RevenueCat and your app store verify Premium.
             </Text>
           </View>
         </View>
+        <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link">
+          <FileText size={14} color={palette.accent} strokeWidth={1.8} />
+          <Text style={[type.label, { color: palette.accent }]}>Privacy Policy</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link">
+          <FileText size={14} color={palette.accent} strokeWidth={1.8} />
+          <Text style={[type.label, { color: palette.accent }]}>Terms of Use</Text>
+        </Pressable>
       </Section>
 
       <Section label="Data">
@@ -213,17 +199,21 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[type.label, { color: "#8C3A2E" }]}>Delete all on-device data</Text>
             <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
-              Saved, queues, resume, preferences.
+              Library, follows, queues, resume, preferences, searches, and Google credentials. Store purchase records remain with your store account.
             </Text>
           </View>
           <ChevronRight size={16} color={palette.inkMuted} />
         </Pressable>
       </Section>
 
+      {Platform.OS === "web" ? (
+        <Section label="Web preview">
+          <Text style={[type.bodySoft, { maxWidth: 340 }]}>This browser version is a temporary preview. Library changes may disappear when the page refreshes, and purchases are mobile-only.</Text>
+        </Section>
+      ) : null}
+
       <Section label="About">
-        <Text style={[type.bodySoft, { maxWidth: 320 }]}>
-          Frame is a clean YouTube viewer. No accounts. No tracking. No autoplay. When a video ends, that is it.
-        </Text>
+        <Text style={[type.bodySoft, { maxWidth: 340 }]}>Frame is an intentional YouTube viewer. It keeps playback user-initiated and stops when your chosen video or finite session ends.</Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
       </Section>
 
@@ -296,17 +286,6 @@ const styles = StyleSheet.create({
   interestChipActive: { backgroundColor: palette.ink },
   interestEmoji: { color: palette.accent, fontSize: 14 },
   interestLabel: { ...type.label, fontSize: 13 },
-  apiRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: palette.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
-  apiInput: { flex: 1, ...type.body, padding: 0, fontSize: 14 },
-  saveBtn: { marginTop: spacing.md, backgroundColor: palette.ink, paddingVertical: 14, alignItems: "center" },
-  saveText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
   dangerRow: {
     flexDirection: "row",
     alignItems: "center",

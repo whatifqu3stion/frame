@@ -11,20 +11,27 @@ import { getChannel, getChannelVideos } from "@/services/youtube";
 
 export default function ChannelScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { prefs, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
+  const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
 
   const channelQuery = useQuery({
-    queryKey: ["channel", id, prefs.youtubeApiKey],
-    queryFn: () => getChannel(id!, prefs.youtubeApiKey),
+    queryKey: ["channel", id],
+    queryFn: () => getChannel(id!),
     enabled: !!id,
   });
   const videosQuery = useQuery({
-    queryKey: ["channel-videos", id, prefs.youtubeApiKey],
-    queryFn: () => getChannelVideos(id!, prefs.youtubeApiKey),
+    queryKey: ["channel-videos", id],
+    queryFn: () => getChannelVideos(id!),
     enabled: !!id,
   });
 
-  const channel = channelQuery.data;
+  const savedChannel = followedChannels.find((candidate) => candidate.id === id);
+  const channel = channelQuery.data?.status === "success" ? channelQuery.data.data : savedChannel;
+  const videos = videosQuery.data?.status === "success" || videosQuery.data?.status === "partial"
+    ? videosQuery.data.data
+    : [];
+  const videosMessage = videosQuery.data && "message" in videosQuery.data
+    ? videosQuery.data.message
+    : undefined;
   const following = id ? isChannelFollowed(id) : false;
 
   const toggleFollow = async () => {
@@ -34,7 +41,7 @@ export default function ChannelScreen() {
       return;
     }
     if (!requirePurchase()) return;
-    await followChannel({ ...channel, followedAt: Date.now() });
+    await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
   };
 
   return (
@@ -74,11 +81,13 @@ export default function ChannelScreen() {
         <Text style={type.caption}>Videos</Text>
         <View style={{ marginTop: spacing.md }}>
           {videosQuery.isLoading ? (
-            <Text style={type.bodySoft}>Loading…</Text>
-          ) : (videosQuery.data ?? []).length === 0 ? (
-            <EmptyState title="No videos" body="This channel has nothing to show right now." />
+            <Text style={type.bodySoft}>Loading verified uploads…</Text>
+          ) : videos.length > 0 ? (
+            videos.map((video) => <VideoCard key={video.id} video={video} variant="wide" />)
+          ) : videosQuery.data?.status === "empty" ? (
+            <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
           ) : (
-            (videosQuery.data ?? []).map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
+            <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "The saved creator is still on your shelf. Try again later."} />
           )}
         </View>
       </View>

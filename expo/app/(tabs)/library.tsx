@@ -8,7 +8,6 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
-import { SAMPLE_VIDEOS } from "@/constants/sampleData";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
 import type { Video } from "@/types";
@@ -130,7 +129,6 @@ export default function LibraryScreen() {
             resumeList.map((r) => {
               const v: Video | null = savedVideos.find((s) => s.id === r.videoId)
                 ?? watchLater.find((s) => s.id === r.videoId)
-                ?? SAMPLE_VIDEOS.find((s) => s.id === r.videoId)
                 ?? (r.title ? {
                   id: r.videoId,
                   title: r.title ?? "",

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BlurView } from "expo-blur";
+import { router } from "expo-router";
 import { Check, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -32,6 +33,7 @@ const FEATURES: string[] = [
   "Keep a calm Watch Later list",
   "Resume exactly where you stopped",
   "Create intentional one-to-three-video sessions",
+  "Follow trusted creators and use enhanced discovery",
 ];
 
 function packageLabel(aPackage: PurchasesPackage): string {
@@ -196,9 +198,6 @@ export default function PaywallSheet() {
                       <View style={{ flex: 1 }}>
                         <View style={styles.planTitleRow}>
                           <Text style={styles.planTitle}>{packageLabel(aPackage)}</Text>
-                          {aPackage.identifier === "$rc_annual" ? (
-                            <Text style={styles.valueBadge}>Save 50%</Text>
-                          ) : null}
                         </View>
                         <Text style={styles.planDetail}>{packageDetail(aPackage)}</Text>
                       </View>
@@ -246,9 +245,31 @@ export default function PaywallSheet() {
               )}
             </Pressable>
 
+            <View style={styles.legalLinks}>
+              <Pressable
+                onPress={() => {
+                  setPaywallOpen(false);
+                  router.push("/privacy");
+                }}
+                accessibilityRole="link"
+              >
+                <Text style={styles.legalLink}>Privacy Policy</Text>
+              </Pressable>
+              <Text style={styles.legalDivider}>·</Text>
+              <Pressable
+                onPress={() => {
+                  setPaywallOpen(false);
+                  router.push("/terms");
+                }}
+                accessibilityRole="link"
+              >
+                <Text style={styles.legalLink}>Terms of Use</Text>
+              </Pressable>
+            </View>
             <Text style={styles.legal}>
               Payment is charged to your store account. Your subscription renews automatically unless cancelled before the current period ends. Manage or cancel it in your App Store or Play Store settings.
             </Text>
+            {Platform.OS === "web" ? <Text style={styles.previewNotice}>Web is a preview. Premium purchases are available in the iPhone and Android apps.</Text> : null}
           </ScrollView>
         </View>
       </View>
@@ -304,14 +325,6 @@ const styles = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.accent },
   planTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   planTitle: { ...type.heading, fontSize: 18, lineHeight: 23 },
-  valueBadge: {
-    ...type.caption,
-    color: palette.wall,
-    backgroundColor: palette.accent,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    overflow: "hidden",
-  },
   planDetail: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
   feedback: { ...type.bodySoft, color: "#8C3A2E", marginTop: spacing.md, textAlign: "center" },
   buyButton: {
@@ -326,5 +339,9 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.82 },
   buyText: { color: palette.wall, fontFamily: "Georgia", fontSize: 16, letterSpacing: 0.3 },
   restoreButton: { minHeight: 44, alignSelf: "center", alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
+  legalLinks: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm },
+  legalLink: { ...type.caption, color: palette.accent, textDecorationLine: "underline" },
+  legalDivider: { ...type.caption, color: palette.inkMuted },
   legal: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
+  previewNotice: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
 });

@@ -1,129 +1,73 @@
-import type { Channel, Video } from "@/types";
-import { SAMPLE_CHANNELS, SAMPLE_TOPIC_VIDEOS, SAMPLE_VIDEOS } from "@/constants/sampleData";
+import type { Channel, ServiceFailureKind, ServiceResult, Video } from "@/types";
 
-const API_BASE = "https://www.googleapis.com/youtube/v3";
+const FUNCTIONS_URL = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL?.replace(/\/$/, "") ?? "";
 
-function parseISO8601Duration(input: string): number {
-  const match = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(input ?? "");
-  if (!match) return 0;
-  const h = Number(match[1] ?? 0);
-  const m = Number(match[2] ?? 0);
-  const s = Number(match[3] ?? 0);
-  return h * 3600 + m * 60 + s;
-}
-
-type SearchListItem = {
-  id: { videoId?: string; channelId?: string };
-  snippet: {
-    title: string;
-    channelId: string;
-    channelTitle: string;
-    publishedAt: string;
-    description: string;
-    thumbnails: { medium?: { url: string }; high?: { url: string } };
-  };
+type BackendEnvelope<T> = {
+  status: "success" | "empty" | "partial" | ServiceFailureKind;
+  data?: T;
+  message?: string;
 };
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.warn("[youtube] request failed", res.status, text.slice(0, 200));
-    throw new Error("YouTube API request failed");
-  }
-  return (await res.json()) as T;
+function failure<T>(status: ServiceFailureKind, message: string): ServiceResult<T> {
+  return { status, message };
 }
 
-function pickThumb(item: SearchListItem): string {
-  return item.snippet.thumbnails.high?.url ?? item.snippet.thumbnails.medium?.url ?? "";
-}
-
-export async function searchVideos(query: string, apiKey: string | null): Promise<Video[]> {
-  if (!apiKey) {
-    const lower = query.trim().toLowerCase();
-    if (!lower) return SAMPLE_VIDEOS;
-    return SAMPLE_VIDEOS.filter(
-      (v) => v.title.toLowerCase().includes(lower) || v.channelTitle.toLowerCase().includes(lower),
-    );
+async function requestBackend<T>(path: string, init?: RequestInit): Promise<ServiceResult<T>> {
+  if (!FUNCTIONS_URL) {
+    return failure("unavailable", "Frame's YouTube service is not configured for this build.");
   }
+
   try {
-    const searchUrl = `${API_BASE}/search?part=snippet&type=video&maxResults=24&q=${encodeURIComponent(query)}&key=${apiKey}`;
-    const search = await fetchJson<{ items: SearchListItem[] }>(searchUrl);
-    const ids = search.items.map((i) => i.id.videoId).filter(Boolean).join(",");
-    if (!ids) return [];
-    const detailsUrl = `${API_BASE}/videos?part=contentDetails,snippet&id=${ids}&key=${apiKey}`;
-    const details = await fetchJson<{
-      items: { id: string; contentDetails: { duration: string }; snippet: SearchListItem["snippet"] }[];
-    }>(detailsUrl);
-    return details.items.map<Video>((d) => ({
-      id: d.id,
-      title: d.snippet.title,
-      channelId: d.snippet.channelId,
-      channelTitle: d.snippet.channelTitle,
-      thumbnailUrl: d.snippet.thumbnails.high?.url ?? d.snippet.thumbnails.medium?.url ?? "",
-      publishedAt: d.snippet.publishedAt,
-      durationSeconds: parseISO8601Duration(d.contentDetails.duration),
-      description: d.snippet.description,
-    }));
-  } catch (err) {
-    console.warn("[youtube] search failed, falling back to sample", err);
-    return SAMPLE_VIDEOS;
+    const response = await fetch(`${FUNCTIONS_URL}${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+    const envelope = (await response.json().catch(() => null)) as BackendEnvelope<T> | null;
+    if (!envelope) return failure("failed", "YouTube returned an unreadable response.");
+
+    if (envelope.status === "success" && envelope.data !== undefined) {
+      return { status: "success", data: envelope.data };
+    }
+    if (envelope.status === "empty" && envelope.data !== undefined) {
+      return { status: "empty", data: envelope.data, message: envelope.message };
+    }
+    if (envelope.status === "partial" && envelope.data !== undefined) {
+      return { status: "partial", data: envelope.data, message: envelope.message ?? "Some results could not be loaded." };
+    }
+    if (["offline", "unauthorized", "quota", "unavailable", "failed"].includes(envelope.status)) {
+      return failure(envelope.status as ServiceFailureKind, envelope.message ?? "YouTube is unavailable right now.");
+    }
+    return failure("failed", "YouTube returned an unexpected response.");
+  } catch (error) {
+    console.warn("[youtube] backend request failed", error instanceof Error ? error.message : "unknown error");
+    return failure("offline", "Frame couldn't reach YouTube. Check your connection and try again.");
   }
 }
 
-export async function getTopicVideos(topicId: string, apiKey: string | null): Promise<Video[]> {
-  if (!apiKey) {
-    const ids = SAMPLE_TOPIC_VIDEOS[topicId] ?? [];
-    return SAMPLE_VIDEOS.filter((v) => ids.includes(v.id));
-  }
-  return searchVideos(topicId, apiKey);
+/** Searches verified, embeddable YouTube videos. */
+export async function searchVideos(query: string): Promise<ServiceResult<Video[]>> {
+  const trimmed = query.trim();
+  if (!trimmed) return { status: "empty", data: [], message: "Enter something to search for." };
+  return requestBackend<Video[]>(`/youtube/search?q=${encodeURIComponent(trimmed)}`);
 }
 
-export async function getChannelVideos(channelId: string, apiKey: string | null): Promise<Video[]> {
-  if (!apiKey) {
-    return SAMPLE_VIDEOS.filter((v) => v.channelId === channelId);
-  }
-  try {
-    const url = `${API_BASE}/search?part=snippet&channelId=${channelId}&type=video&order=date&maxResults=24&key=${apiKey}`;
-    const res = await fetchJson<{ items: SearchListItem[] }>(url);
-    return res.items
-      .filter((i) => i.id.videoId)
-      .map<Video>((i) => ({
-        id: i.id.videoId as string,
-        title: i.snippet.title,
-        channelId: i.snippet.channelId,
-        channelTitle: i.snippet.channelTitle,
-        thumbnailUrl: pickThumb(i),
-        publishedAt: i.snippet.publishedAt,
-        durationSeconds: 0,
-        description: i.snippet.description,
-      }));
-  } catch (err) {
-    console.warn("[youtube] channel videos failed", err);
-    return SAMPLE_VIDEOS.filter((v) => v.channelId === channelId);
-  }
+/** Loads a finite topic collection from the protected YouTube service. */
+export async function getTopicVideos(topic: string): Promise<ServiceResult<Video[]>> {
+  return searchVideos(topic);
 }
 
-export async function getChannel(channelId: string, apiKey: string | null): Promise<Channel | null> {
-  const sample = SAMPLE_CHANNELS.find((c) => c.id === channelId);
-  if (!apiKey) return sample ?? null;
-  try {
-    const url = `${API_BASE}/channels?part=snippet&id=${channelId}&key=${apiKey}`;
-    const res = await fetchJson<{
-      items: { id: string; snippet: { title: string; description: string; thumbnails: { high?: { url: string } } } }[];
-    }>(url);
-    const item = res.items[0];
-    if (!item) return sample ?? null;
-    return {
-      id: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnailUrl: item.snippet.thumbnails.high?.url ?? "",
-    };
-  } catch (err) {
-    console.warn("[youtube] channel failed", err);
-    return sample ?? null;
-  }
+/** Loads recent verified uploads for one stable YouTube channel id. */
+export async function getChannelVideos(channelId: string): Promise<ServiceResult<Video[]>> {
+  return requestBackend<Video[]>(`/youtube/channels/${encodeURIComponent(channelId)}/videos`);
+}
+
+/** Loads one real YouTube channel by its stable id. */
+export async function getChannel(channelId: string): Promise<ServiceResult<Channel>> {
+  return requestBackend<Channel>(`/youtube/channels/${encodeURIComponent(channelId)}`);
 }
 
 export type ParsedLink =
@@ -137,112 +81,47 @@ export function parseYouTubeLink(input: string): ParsedLink {
   const text = input.trim();
   if (!text) return { kind: "unknown", value: "" };
 
-  const channelId = /youtube\.com\/channel\/(UC[A-Za-z0-9_-]{20,})/.exec(text);
+  const channelId = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})(?:[/?#]|$)/i.exec(text);
   if (channelId?.[1]) return { kind: "channelId", value: channelId[1] };
-  if (/^UC[A-Za-z0-9_-]{20,}$/.test(text)) return { kind: "channelId", value: text };
+  if (/^UC[A-Za-z0-9_-]{22}$/.test(text)) return { kind: "channelId", value: text };
 
-  const handle = /youtube\.com\/@([A-Za-z0-9_.-]+)/.exec(text);
+  const handle = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/@([A-Za-z0-9_.-]+)(?:[/?#]|$)/i.exec(text);
   if (handle?.[1]) return { kind: "handle", value: handle[1] };
   if (/^@[A-Za-z0-9_.-]+$/.test(text)) return { kind: "handle", value: text.slice(1) };
 
-  const legacy = /youtube\.com\/(?:c|user)\/([A-Za-z0-9_.-]+)/.exec(text);
+  const legacy = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:c|user)\/([A-Za-z0-9_.-]+)(?:[/?#]|$)/i.exec(text);
   if (legacy?.[1]) return { kind: "handle", value: legacy[1] };
 
   const videoId = extractYouTubeId(text);
   if (videoId) return { kind: "video", value: videoId };
-
   return { kind: "unknown", value: text };
 }
 
-/**
- * Resolves a pasted link into the creator's channel. With an API key we resolve
- * handles and video → channel precisely; without one we create a calm placeholder
- * so manual lists still work offline.
- */
-export async function resolveChannelFromLink(
-  parsed: ParsedLink,
-  apiKey: string | null,
-): Promise<{ channel?: Channel; error?: string }> {
+/** Resolves a link to a verified stable channel; placeholders are never returned. */
+export async function resolveChannelFromLink(parsed: ParsedLink): Promise<ServiceResult<Channel>> {
   if (parsed.kind === "unknown") {
-    return { error: "That doesn't look like a YouTube link." };
+    return { status: "failed", message: "That doesn't look like a YouTube channel or video link." };
   }
-
-  if (parsed.kind === "channelId") {
-    const channel = await getChannel(parsed.value, apiKey);
-    return { channel: channel ?? { id: parsed.value, title: "YouTube channel", thumbnailUrl: "" } };
-  }
-
-  if (parsed.kind === "handle") {
-    if (!apiKey) {
-      return {
-        channel: {
-          id: `@${parsed.value}`,
-          title: `@${parsed.value}`,
-          thumbnailUrl: "",
-        },
-      };
-    }
-    try {
-      const url = `${API_BASE}/channels?part=snippet&forHandle=@${encodeURIComponent(parsed.value)}&key=${apiKey}`;
-      const res = await fetchJson<{
-        items?: { id: string; snippet: { title: string; description: string; thumbnails: { high?: { url: string } } } }[];
-      }>(url);
-      const item = res.items?.[0];
-      if (!item) return { error: "Couldn't find that channel." };
-      return {
-        channel: {
-          id: item.id,
-          title: item.snippet.title,
-          description: item.snippet.description,
-          thumbnailUrl: item.snippet.thumbnails.high?.url ?? "",
-        },
-      };
-    } catch {
-      return { error: "Couldn't reach YouTube. Try again." };
-    }
-  }
-
-  // video → resolve its channel
-  if (!apiKey) {
-    return {
-      channel: {
-        id: `video:${parsed.value}`,
-        title: "Creator from link",
-        thumbnailUrl: `https://i.ytimg.com/vi/${parsed.value}/hqdefault.jpg`,
-      },
-    };
-  }
-  try {
-    const url = `${API_BASE}/videos?part=snippet&id=${parsed.value}&key=${apiKey}`;
-    const res = await fetchJson<{
-      items?: { snippet: { channelId: string; channelTitle: string } }[];
-    }>(url);
-    const snippet = res.items?.[0]?.snippet;
-    if (!snippet) return { error: "Couldn't find that video." };
-    const channel = await getChannel(snippet.channelId, apiKey);
-    return {
-      channel: channel ?? { id: snippet.channelId, title: snippet.channelTitle, thumbnailUrl: "" },
-    };
-  } catch {
-    return { error: "Couldn't reach YouTube. Try again." };
-  }
+  return requestBackend<Channel>("/youtube/resolve", {
+    method: "POST",
+    body: JSON.stringify(parsed),
+  });
 }
 
 /** Extracts a YouTube video id from a raw URL or returns null. */
 export function extractYouTubeId(input: string): string | null {
   const text = input.trim();
   if (!text) return null;
-  // Bare 11-char id
   if (/^[A-Za-z0-9_-]{11}$/.test(text)) return text;
   const patterns = [
-    /[?&]v=([A-Za-z0-9_-]{11})/,
-    /youtu\.be\/([A-Za-z0-9_-]{11})/,
-    /youtube\.com\/embed\/([A-Za-z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/,
+    /[?&]v=([A-Za-z0-9_-]{11})(?:[&#]|$)/,
+    /youtu\.be\/([A-Za-z0-9_-]{11})(?:[/?#]|$)/,
+    /youtube\.com\/embed\/([A-Za-z0-9_-]{11})(?:[/?#]|$)/,
+    /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})(?:[/?#]|$)/,
   ];
-  for (const re of patterns) {
-    const m = re.exec(text);
-    if (m?.[1]) return m[1];
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match?.[1]) return match[1];
   }
   return null;
 }
@@ -259,12 +138,11 @@ export function formatDuration(seconds: number): string {
 export function formatRelativeDate(iso: string): string {
   try {
     if (!iso.trim()) return "";
-    const d = new Date(iso);
-    const time = d.getTime();
+    const date = new Date(iso);
+    const time = date.getTime();
     if (!Number.isFinite(time)) return "";
-    const now = Date.now();
-    const diff = Math.max(0, now - time);
-    const day = 86400000;
+    const diff = Math.max(0, Date.now() - time);
+    const day = 86_400_000;
     if (diff < day) return "Today";
     if (diff < day * 2) return "Yesterday";
     if (diff < day * 30) return `${Math.floor(diff / day)} days ago`;

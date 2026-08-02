@@ -4,11 +4,11 @@ import * as SecureStore from "expo-secure-store";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
-import { fetchGoogleEmail, fetchSubscriptions } from "@/services/googleAuth";
+import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
 import {
   getRevenueCatCustomerInfo,
@@ -25,6 +25,7 @@ import {
   clearResume,
   deleteQueue,
   followChannel,
+  followChannels,
   isVideoSaved as dbIsVideoSaved,
   listFollowedChannels,
   listQueues,
@@ -44,13 +45,15 @@ const INTERESTS_KEY = "frame.interests.v1";
 const RECENT_SEARCHES_KEY = "frame.recentSearches.v1";
 const GOOGLE_TOKEN_KEY = "frame.google.token.v1";
 const MAX_RECENT_SEARCHES = 8;
-const MAX_ONBOARDING_SEARCHES = 3;
+
+type GoogleCredential = {
+  accessToken: string;
+  expiresAt: number;
+};
 
 const defaultPrefs: UserPreferences = {
   theme: "warm",
   hasCompletedOnboarding: false,
-  youtubeApiKey: null,
-  onboardingSearchCount: 0,
   googleEmail: null,
   googleConnectedAt: null,
 };
@@ -60,7 +63,14 @@ async function loadPrefs(): Promise<UserPreferences> {
     const raw = await AsyncStorage.getItem(PREFS_KEY);
     if (!raw) return defaultPrefs;
     const parsed = JSON.parse(raw) as Partial<UserPreferences>;
-    return { ...defaultPrefs, ...parsed };
+    return {
+      theme: parsed.theme === "ink" ? "ink" : "warm",
+      hasCompletedOnboarding: parsed.hasCompletedOnboarding === true,
+      googleEmail: typeof parsed.googleEmail === "string" ? parsed.googleEmail : null,
+      googleConnectedAt: typeof parsed.googleConnectedAt === "number" && Number.isFinite(parsed.googleConnectedAt)
+        ? parsed.googleConnectedAt
+        : null,
+    };
   } catch (err) {
     console.warn("[prefs] load failed", err);
     return defaultPrefs;
@@ -98,8 +108,19 @@ async function loadInterests(): Promise<InterestTopic[]> {
   try {
     const raw = await AsyncStorage.getItem(INTERESTS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as InterestTopic[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const validIds = new Set(INTEREST_LIBRARY.map((interest) => interest.id));
+    return parsed
+      .filter(
+        (item): item is InterestTopic =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as InterestTopic).id === "string" &&
+          validIds.has((item as InterestTopic).id),
+      )
+      .map((item) => INTEREST_LIBRARY.find((interest) => interest.id === item.id)!)
+      .filter(Boolean);
   } catch {
     return [];
   }
@@ -113,14 +134,32 @@ async function saveInterests(items: InterestTopic[]): Promise<void> {
   }
 }
 
+function parseGoogleCredential(raw: string | null): GoogleCredential | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<GoogleCredential>;
+    if (typeof parsed.accessToken !== "string" || typeof parsed.expiresAt !== "number") return null;
+    return { accessToken: parsed.accessToken, expiresAt: parsed.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
 export const [AppProvider, useApp] = createContextHook(() => {
   const [prefs, setPrefs] = useState<UserPreferences>(defaultPrefs);
   const [interests, setInterests] = useState<InterestTopic[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [paywallOpen, setPaywallOpen] = useState<boolean>(false);
-  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [googleCredential, setGoogleCredential] = useState<GoogleCredential | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
+  const prefsRef = useRef<UserPreferences>(defaultPrefs);
+  const interestsRef = useRef<InterestTopic[]>([]);
+  const recentSearchesRef = useRef<string[]>([]);
+  const storageGenerationRef = useRef<number>(0);
+  const prefsWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const interestsWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const searchesWriteRef = useRef<Promise<void>>(Promise.resolve());
   const queryClient = useQueryClient();
 
   // `expo-auth-session` throws if the active platform's client ID is missing, so we
@@ -148,12 +187,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     let mounted = true;
     Promise.all([loadPrefs(), loadInterests(), loadRecentSearches(), SecureStore.getItemAsync(GOOGLE_TOKEN_KEY).catch(() => null)])
-      .then(([p, i, r, token]) => {
+      .then(([p, i, r, rawCredential]) => {
         if (!mounted) return;
-        setPrefs(p);
+        const credential = parseGoogleCredential(rawCredential);
+        const activeCredential = credential && credential.expiresAt > Date.now() ? credential : null;
+        const nextPrefs = activeCredential ? p : { ...p, googleEmail: null, googleConnectedAt: null };
+        prefsRef.current = nextPrefs;
+        interestsRef.current = i;
+        recentSearchesRef.current = r;
+        setPrefs(nextPrefs);
         setInterests(i);
         setRecentSearches(r);
-        setGoogleToken(token);
+        setGoogleCredential(activeCredential);
+        if (!activeCredential && rawCredential) void SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
         setReady(true);
       })
       .catch((err) => {
@@ -165,59 +211,67 @@ export const [AppProvider, useApp] = createContextHook(() => {
     };
   }, []);
 
-  const updatePrefs = useCallback(async (patch: Partial<UserPreferences>) => {
-    setPrefs((prev) => {
-      const next = { ...prev, ...patch };
-      void savePrefs(next);
-      return next;
+  const updatePrefs = useCallback(async (patch: Partial<UserPreferences>): Promise<void> => {
+    const next = { ...prefsRef.current, ...patch };
+    const generation = storageGenerationRef.current;
+    prefsRef.current = next;
+    setPrefs(next);
+    const write = prefsWriteRef.current.then(async () => {
+      if (storageGenerationRef.current === generation) await savePrefs(next);
     });
+    prefsWriteRef.current = write.catch(() => {});
+    await write;
   }, []);
 
   const setTheme = useCallback((mode: ThemeMode) => updatePrefs({ theme: mode }), [updatePrefs]);
-  const setApiKey = useCallback((key: string | null) => updatePrefs({ youtubeApiKey: key && key.trim() ? key.trim() : null }), [updatePrefs]);
   const finishOnboarding = useCallback(() => updatePrefs({ hasCompletedOnboarding: true }), [updatePrefs]);
 
-  const replaceInterests = useCallback(async (items: InterestTopic[]) => {
+  const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
+    const generation = storageGenerationRef.current;
+    interestsRef.current = items;
     setInterests(items);
-    await saveInterests(items);
+    const write = interestsWriteRef.current.then(async () => {
+      if (storageGenerationRef.current === generation) await saveInterests(items);
+    });
+    interestsWriteRef.current = write.catch(() => {});
+    await write;
   }, []);
 
   const toggleInterest = useCallback(
     (id: string) => {
-      setInterests((prev) => {
-        const exists = prev.some((i) => i.id === id);
-        const next = exists ? prev.filter((i) => i.id !== id) : [...prev, INTEREST_LIBRARY.find((x) => x.id === id)!].filter(Boolean);
-        void saveInterests(next);
-        return next;
-      });
+      const interest = INTEREST_LIBRARY.find((item) => item.id === id);
+      if (!interest) return;
+      const current = interestsRef.current;
+      const next = current.some((item) => item.id === id)
+        ? current.filter((item) => item.id !== id)
+        : [...current, interest];
+      void replaceInterests(next);
     },
-    [],
+    [replaceInterests],
   );
+
+  const persistSearches = useCallback(async (items: string[]): Promise<void> => {
+    const generation = storageGenerationRef.current;
+    recentSearchesRef.current = items;
+    setRecentSearches(items);
+    const write = searchesWriteRef.current.then(async () => {
+      if (storageGenerationRef.current === generation) await persistRecentSearches(items);
+    });
+    searchesWriteRef.current = write.catch(() => {});
+    await write;
+  }, []);
 
   const addRecentSearch = useCallback((term: string) => {
     const trimmed = term.trim();
     if (!trimmed) return;
-    setRecentSearches((prev) => {
-      const next = [trimmed, ...prev.filter((t) => t.toLowerCase() !== trimmed.toLowerCase())].slice(0, MAX_RECENT_SEARCHES);
-      void persistRecentSearches(next);
-      return next;
-    });
-  }, []);
+    const current = recentSearchesRef.current;
+    const next = [trimmed, ...current.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, MAX_RECENT_SEARCHES);
+    void persistSearches(next);
+  }, [persistSearches]);
 
   const clearRecentSearches = useCallback(() => {
-    setRecentSearches([]);
-    void persistRecentSearches([]);
-  }, []);
-
-  const consumeSearchCredit = useCallback(() => {
-    setPrefs((prev) => {
-      const next = { ...prev, onboardingSearchCount: Math.min(MAX_ONBOARDING_SEARCHES, prev.onboardingSearchCount + 1) };
-      void savePrefs(next);
-      return next;
-    });
-  }, []);
-
-  const searchCreditsRemaining = Math.max(0, MAX_ONBOARDING_SEARCHES - prefs.onboardingSearchCount);
+    void persistSearches([]);
+  }, [persistSearches]);
 
   const customerInfoQuery = useQuery({
     queryKey: REVENUECAT_CUSTOMER_INFO_KEY,
@@ -388,15 +442,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   // --- Google account / subscription import ---
   const importSubscriptions = useCallback(
-    async (token: string): Promise<number> => {
+    async (token: string): Promise<AddChannelResult> => {
       setImporting(true);
       try {
-        const subs = await fetchSubscriptions(token);
-        for (const channel of subs) {
-          await followChannel(channel);
+        const result = await fetchSubscriptions(token);
+        if (result.status !== "success" && result.status !== "empty" && result.status !== "partial") {
+          return { ok: false, message: result.message };
         }
+        await followChannels(result.data);
         invalidateLibrary();
-        return subs.length;
+        if (result.status === "partial") return { ok: true, message: result.message };
+        if (result.status === "empty") return { ok: true, message: result.message ?? "No YouTube subscriptions were found." };
+        const count = result.data.length;
+        return { ok: true, message: `Imported ${count} channel${count === 1 ? "" : "s"}.` };
       } finally {
         setImporting(false);
       }
@@ -405,66 +463,87 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
-    if (!isGoogleConfigured()) {
-      return { ok: false, message: "Google sign-in needs setup. Add your keys in Settings to enable it." };
-    }
-    if (!promptGoogle) {
-      return { ok: false, message: "Google sign-in isn't set up for this platform yet." };
-    }
+    if (!requirePurchase()) return { ok: false, message: "Following creators is part of Frame Premium." };
+    if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
+    if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
       const result = await promptGoogle();
-      if (result?.type !== "success") {
-        return { ok: false, message: "Sign-in cancelled." };
-      }
+      if (result?.type !== "success") return { ok: false, message: "Sign-in cancelled." };
       const token = result.authentication?.accessToken ?? null;
-      if (!token) return { ok: false, message: "Couldn't complete sign-in." };
-      setGoogleToken(token);
-      await SecureStore.setItemAsync(GOOGLE_TOKEN_KEY, token).catch(() => {});
-      const email = await fetchGoogleEmail(token);
-      await updatePrefs({ googleEmail: email, googleConnectedAt: Date.now() });
-      const count = await importSubscriptions(token);
-      return { ok: true, message: count > 0 ? `Imported ${count} channel${count === 1 ? "" : "s"}.` : "Signed in. No subscriptions found." };
+      if (!token) return { ok: false, message: "Google didn't return a usable credential." };
+
+      const emailResult = await fetchGoogleEmail(token);
+      if (emailResult.status !== "success") {
+        return {
+          ok: false,
+          message: emailResult.status === "empty"
+            ? emailResult.message ?? "Google did not return an email address."
+            : emailResult.message,
+        };
+      }
+      const importResult = await importSubscriptions(token);
+      if (!importResult.ok) return importResult;
+
+      const expiresInSeconds = result.authentication?.expiresIn ?? 3600;
+      const credential = {
+        accessToken: token,
+        expiresAt: Date.now() + Math.max(60, expiresInSeconds - 60) * 1000,
+      };
+      await SecureStore.setItemAsync(GOOGLE_TOKEN_KEY, JSON.stringify(credential));
+      setGoogleCredential(credential);
+      await updatePrefs({ googleEmail: emailResult.data, googleConnectedAt: Date.now() });
+      return importResult;
     } catch (err) {
-      console.warn("[google] sign-in failed", err);
+      console.warn("[google] sign-in failed", err instanceof Error ? err.message : "unknown error");
       return { ok: false, message: "Sign-in failed. Please try again." };
     }
-  }, [promptGoogle, updatePrefs, importSubscriptions]);
+  }, [promptGoogle, requirePurchase, updatePrefs, importSubscriptions]);
 
   const refreshSubscriptions = useCallback(async (): Promise<AddChannelResult> => {
-    if (!googleToken) return { ok: false, message: "Sign in with Google first." };
-    try {
-      const count = await importSubscriptions(googleToken);
-      return { ok: true, message: count > 0 ? `Synced ${count} channel${count === 1 ? "" : "s"}.` : "Nothing new to sync." };
-    } catch {
-      return { ok: false, message: "Couldn't refresh. Your session may have expired — sign in again." };
+    if (!googleCredential || googleCredential.expiresAt <= Date.now()) {
+      setGoogleCredential(null);
+      await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
+      await updatePrefs({ googleEmail: null, googleConnectedAt: null });
+      return { ok: false, message: "Your Google connection expired. Sign in again to refresh." };
     }
-  }, [googleToken, importSubscriptions]);
+    return importSubscriptions(googleCredential.accessToken);
+  }, [googleCredential, importSubscriptions, updatePrefs]);
 
-  const signOutGoogle = useCallback(async () => {
-    setGoogleToken(null);
+  const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
+    if (googleCredential) {
+      const result = await revokeGoogleAccess(googleCredential.accessToken);
+      if (result.status !== "success") return { ok: false, message: result.message ?? "Google couldn't revoke access. Try again." };
+    }
+    setGoogleCredential(null);
     await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
     await updatePrefs({ googleEmail: null, googleConnectedAt: null });
-  }, [updatePrefs]);
+    return { ok: true, message: "Google access was revoked. Imported creators remain on this device." };
+  }, [googleCredential, updatePrefs]);
 
   const addChannelByLink = useCallback(
     async (input: string): Promise<AddChannelResult> => {
-      const parsed = parseYouTubeLink(input);
-      const { channel, error } = await resolveChannelFromLink(parsed, prefs.youtubeApiKey);
-      if (error || !channel) {
-        return { ok: false, message: error ?? "Couldn't add that link." };
+      if (!requirePurchase()) return { ok: false, message: "Following creators is part of Frame Premium." };
+      const result = await resolveChannelFromLink(parseYouTubeLink(input));
+      if (result.status !== "success") {
+        return { ok: false, message: result.message ?? "That creator could not be verified." };
       }
-      await followChannel({ ...channel, followedAt: Date.now() });
+      await followChannel({ ...result.data, followedAt: Date.now(), source: "link" });
       invalidateLibrary();
-      return { ok: true, message: `Added ${channel.title}.` };
+      return { ok: true, message: `Added ${result.data.title}.` };
     },
-    [prefs.youtubeApiKey, invalidateLibrary],
+    [requirePurchase, invalidateLibrary],
   );
 
-  const wipeAllData = useCallback(async () => {
+  const wipeAllData = useCallback(async (): Promise<void> => {
+    storageGenerationRef.current += 1;
+    await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
     await clearAllData();
     await AsyncStorage.multiRemove([PREFS_KEY, INTERESTS_KEY, RECENT_SEARCHES_KEY]);
     await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
-    setGoogleToken(null);
+    prefsRef.current = defaultPrefs;
+    interestsRef.current = [];
+    recentSearchesRef.current = [];
+    setGoogleCredential(null);
     setPrefs(defaultPrefs);
     setInterests([]);
     setRecentSearches([]);
@@ -479,7 +558,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       paywallOpen,
       setPaywallOpen,
       setTheme,
-      setApiKey,
       finishOnboarding,
       isPremium,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
@@ -490,10 +568,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       recentSearches,
       addRecentSearch,
       clearRecentSearches,
-      searchCreditsRemaining,
-      consumeSearchCredit,
       googleConfigured: isGoogleConfigured(),
-      googleConnected: Boolean(prefs.googleConnectedAt),
+      googleConnected: Boolean(googleCredential && googleCredential.expiresAt > Date.now() && prefs.googleConnectedAt),
       googleEmail: prefs.googleEmail,
       importing,
       signInWithGoogle,
@@ -530,7 +606,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       interests,
       paywallOpen,
       setTheme,
-      setApiKey,
       finishOnboarding,
       isPremium,
       customerInfoQuery.isLoading,
@@ -541,8 +616,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       recentSearches,
       addRecentSearch,
       clearRecentSearches,
-      searchCreditsRemaining,
-      consumeSearchCredit,
+      googleCredential,
       importing,
       signInWithGoogle,
       signOutGoogle,

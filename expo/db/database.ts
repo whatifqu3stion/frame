@@ -11,6 +11,7 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = SQLite.openDatabaseAsync("frame.db").then(async (db) => {
       await db.execAsync(`
+        PRAGMA journal_mode = WAL;
         CREATE TABLE IF NOT EXISTS saved_videos (
           id TEXT PRIMARY KEY NOT NULL,
           title TEXT NOT NULL,
@@ -53,10 +54,18 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           title TEXT NOT NULL,
           description TEXT,
           thumbnailUrl TEXT NOT NULL,
-          followedAt INTEGER NOT NULL
+          followedAt INTEGER NOT NULL,
+          source TEXT NOT NULL DEFAULT 'manual'
         );
       `);
+      const columns = await db.getAllAsync<{ name: string }>("PRAGMA table_info(followed_channels)");
+      if (!columns.some((column) => column.name === "source")) {
+        await db.execAsync("ALTER TABLE followed_channels ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+      }
       return db;
+    }).catch((error) => {
+      dbPromise = null;
+      throw error;
     });
   }
   return dbPromise;
@@ -261,9 +270,36 @@ export async function followChannel(c: FollowedChannel): Promise<void> {
   }
   const db = await getDb();
   await db.runAsync(
-    "INSERT OR REPLACE INTO followed_channels (id,title,description,thumbnailUrl,followedAt) VALUES (?,?,?,?,?)",
-    [c.id, c.title, c.description ?? null, c.thumbnailUrl, c.followedAt],
+    `INSERT INTO followed_channels (id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       title=excluded.title,
+       description=excluded.description,
+       thumbnailUrl=excluded.thumbnailUrl`,
+    [c.id, c.title, c.description ?? null, c.thumbnailUrl, c.followedAt, c.source],
   );
+}
+
+export async function followChannels(channels: FollowedChannel[]): Promise<void> {
+  if (Platform.OS === "web") {
+    channels.forEach((channel) => {
+      const existing = webStore.channels.get(channel.id);
+      webStore.channels.set(channel.id, existing ? { ...channel, followedAt: existing.followedAt, source: existing.source } : { ...channel });
+    });
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const channel of channels) {
+      await db.runAsync(
+        `INSERT INTO followed_channels (id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           title=excluded.title,
+           description=excluded.description,
+           thumbnailUrl=excluded.thumbnailUrl`,
+        [channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
+      );
+    }
+  });
 }
 
 export async function unfollowChannel(id: string): Promise<void> {
@@ -285,11 +321,13 @@ export async function clearAllData(): Promise<void> {
     return;
   }
   const db = await getDb();
-  await db.execAsync(`
-    DELETE FROM saved_videos;
-    DELETE FROM resume_positions;
-    DELETE FROM queues;
-    DELETE FROM watch_later;
-    DELETE FROM followed_channels;
-  `);
+  await db.withTransactionAsync(async () => {
+    await db.execAsync(`
+      DELETE FROM saved_videos;
+      DELETE FROM resume_positions;
+      DELETE FROM queues;
+      DELETE FROM watch_later;
+      DELETE FROM followed_channels;
+    `);
+  });
 }

@@ -15,15 +15,15 @@ import { getTopicVideos } from "@/services/youtube";
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
-  const { interests, prefs, followedChannels } = useApp();
+  const { interests, followedChannels } = useApp();
   const [active, setActive] = useState<string | null>(interests[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
 
   const activeTopic = interests.find((i) => i.id === active) ?? interests[0] ?? null;
 
   const topicQuery = useQuery({
-    queryKey: ["topic", activeTopic?.id, prefs.youtubeApiKey],
-    queryFn: () => getTopicVideos(activeTopic!.id, prefs.youtubeApiKey),
+    queryKey: ["topic", activeTopic?.id],
+    queryFn: () => getTopicVideos(activeTopic!.name),
     enabled: !!activeTopic,
   });
 
@@ -123,10 +123,12 @@ export default function ExploreScreen() {
             </View>
             {topicQuery.isLoading ? (
               <Text style={[type.bodySoft, { paddingVertical: spacing.lg }]}>Loading…</Text>
-            ) : (topicQuery.data ?? []).length === 0 ? (
-              <EmptyState title="Quiet topic" body="Nothing to show right now. Try another." />
+            ) : topicQuery.data?.status === "success" || topicQuery.data?.status === "partial" ? (
+              topicQuery.data.data.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
+            ) : topicQuery.data?.status === "empty" ? (
+              <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
             ) : (
-              (topicQuery.data ?? []).map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
+              <EmptyState title="Couldn't load this collection" body={topicQuery.data?.message ?? "Try again in a moment."} />
             )}
           </View>
         </>

@@ -16,8 +16,11 @@ export type Channel = {
   thumbnailUrl: string;
 };
 
+export type ChannelProvenance = "google" | "link" | "digest" | "manual";
+
 export type FollowedChannel = Channel & {
   followedAt: number;
+  source: ChannelProvenance;
 };
 
 export type ResumePosition = {
@@ -44,16 +47,20 @@ export type ThemeMode = "warm" | "ink";
 export type UserPreferences = {
   theme: ThemeMode;
   hasCompletedOnboarding: boolean;
-  youtubeApiKey: string | null;
-  /** Searches consumed during first-time setup (capped at 3). */
-  onboardingSearchCount: number;
-  /** Email of the connected Google account, if any. */
   googleEmail: string | null;
-  /** When the Google account was connected (ms epoch), or null. */
   googleConnectedAt: number | null;
 };
 
-/** Result of adding a creator from a pasted link. */
+export type ServiceFailureKind = "offline" | "unauthorized" | "quota" | "unavailable" | "failed";
+
+/** A truthful result from a network-backed service. */
+export type ServiceResult<T> =
+  | { status: "success"; data: T }
+  | { status: "empty"; data: T; message?: string }
+  | { status: "partial"; data: T; message: string }
+  | { status: ServiceFailureKind; message: string };
+
+/** Result of a user-facing account or creator action. */
 export type AddChannelResult = {
   ok: boolean;
   message: string;

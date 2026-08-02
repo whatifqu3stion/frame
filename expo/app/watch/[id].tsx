@@ -21,7 +21,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
-import { SAMPLE_VIDEOS } from "@/constants/sampleData";
 import { palette, spacing, type } from "@/constants/theme";
 import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
@@ -97,8 +96,7 @@ export default function WatchScreen() {
 
   const video = useMemo<Video | undefined>(() => {
     const stored = savedVideos.find((candidate) => candidate.id === id)
-      ?? watchLater.find((candidate) => candidate.id === id)
-      ?? SAMPLE_VIDEOS.find((candidate) => candidate.id === id);
+      ?? watchLater.find((candidate) => candidate.id === id);
     if (stored) return stored;
     if (!VIDEO_ID_PATTERN.test(id)) return undefined;
 

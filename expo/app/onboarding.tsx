@@ -130,14 +130,12 @@ function StepPhilosophy({ width }: { width: number }) {
 
 function StepBringChannels({ width }: { width: number }) {
   const {
-    prefs,
     googleConfigured,
     googleConnected,
+    googleEmail,
     importing,
     signInWithGoogle,
     addChannelByLink,
-    searchCreditsRemaining,
-    consumeSearchCredit,
     followChannel,
     isChannelFollowed,
   } = useApp();
@@ -150,8 +148,8 @@ function StepBringChannels({ width }: { width: number }) {
   const [submitted, setSubmitted] = useState<string>("");
 
   const searchQuery = useQuery({
-    queryKey: ["onboard-search", submitted, prefs.youtubeApiKey],
-    queryFn: () => searchVideos(submitted, prefs.youtubeApiKey),
+    queryKey: ["onboard-search", submitted],
+    queryFn: () => searchVideos(submitted),
     enabled: submitted.length > 0,
   });
 
@@ -173,15 +171,14 @@ function StepBringChannels({ width }: { width: number }) {
 
   const runSearch = () => {
     const trimmed = term.trim();
-    if (!trimmed || searchCreditsRemaining <= 0) return;
+    if (!trimmed) return;
     setSubmitted(trimmed);
-    consumeSearchCredit();
     Keyboard.dismiss();
   };
 
   const addFromVideo = async (v: Video) => {
     if (!v.channelId) return;
-    await followChannel({ id: v.channelId, title: v.channelTitle || "Channel", thumbnailUrl: "", followedAt: Date.now() });
+    await followChannel({ id: v.channelId, title: v.channelTitle || "Channel", thumbnailUrl: "", followedAt: Date.now(), source: "manual" });
   };
 
   return (
@@ -194,7 +191,7 @@ function StepBringChannels({ width }: { width: number }) {
       <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>Bring your{"\n"}channels.</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Start with voices you already trust. Nothing leaves this device.
+        Start with voices you already trust. Creator lookups use YouTube; your follows stay in your local library.
       </Text>
 
       <Pressable
@@ -207,7 +204,7 @@ function StepBringChannels({ width }: { width: number }) {
           <Text style={styles.choiceTitle}>{googleConnected ? "Subscriptions imported" : "Bring your channels"}</Text>
           <Text style={styles.choiceBody}>
             {googleConnected
-              ? prefs.googleEmail ?? "Connected"
+              ? googleEmail ?? "Connected"
               : googleConfigured
                 ? "Sign in with Google to import the channels you already follow."
                 : "Google sign-in needs setup — you can still add channels yourself below."}
@@ -255,40 +252,33 @@ function StepBringChannels({ width }: { width: number }) {
       ) : null}
 
       <View style={styles.searchHeader}>
-        <Text style={type.caption}>A few searches to start</Text>
-        <Text style={[type.caption, { color: palette.inkMuted }]}>{searchCreditsRemaining} of 3 left</Text>
+        <Text style={type.caption}>Search YouTube creators</Text>
       </View>
 
-      {searchCreditsRemaining > 0 ? (
-        <View style={styles.inputRow}>
-          <SearchIcon size={16} color={palette.inkMuted} strokeWidth={1.6} />
-          <TextInput
-            value={term}
-            onChangeText={setTerm}
-            placeholder="Search for a channel or topic"
-            placeholderTextColor={palette.inkMuted}
-            autoCapitalize="none"
-            style={styles.input}
-            onSubmitEditing={runSearch}
-            returnKeyType="search"
-            testID="onboard-search-input"
-          />
-          <Pressable onPress={runSearch} hitSlop={8}>
-            <Text style={[type.label, { color: palette.accent }]}>Go</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Text style={[type.bodySoft, { marginTop: spacing.sm, color: palette.inkMuted }]}>
-          Search taste used up. Keep adding by pasting links anytime.
-        </Text>
-      )}
+      <View style={styles.inputRow}>
+        <SearchIcon size={16} color={palette.inkMuted} strokeWidth={1.6} />
+        <TextInput
+          value={term}
+          onChangeText={setTerm}
+          placeholder="Search for a channel or topic"
+          placeholderTextColor={palette.inkMuted}
+          autoCapitalize="none"
+          style={styles.input}
+          onSubmitEditing={runSearch}
+          returnKeyType="search"
+          testID="onboard-search-input"
+        />
+        <Pressable onPress={runSearch} hitSlop={8}>
+          <Text style={[type.label, { color: palette.accent }]}>Go</Text>
+        </Pressable>
+      </View>
 
       {submitted.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
           {searchQuery.isLoading ? (
             <Text style={[type.bodySoft, { paddingVertical: spacing.md }]}>Searching…</Text>
-          ) : (
-            (searchQuery.data ?? []).slice(0, 6).map((v) => {
+          ) : searchQuery.data?.status === "success" || searchQuery.data?.status === "partial" ? (
+            searchQuery.data.data.slice(0, 6).map((v) => {
               const added = v.channelId ? isChannelFollowed(v.channelId) : false;
               return (
                 <View key={v.id} style={styles.resultRow}>
@@ -301,16 +291,17 @@ function StepBringChannels({ width }: { width: number }) {
                     style={[styles.addChip, added && styles.addChipDone]}
                     disabled={added || !v.channelId}
                     testID={`onboard-add-${v.id}`}
+                    accessibilityLabel={added ? `${v.channelTitle} already followed` : `Follow ${v.channelTitle}`}
                   >
-                    {added ? (
-                      <Check size={14} color={palette.accent} strokeWidth={2} />
-                    ) : (
-                      <Plus size={14} color={palette.ink} strokeWidth={2} />
-                    )}
+                    {added ? <Check size={14} color={palette.accent} strokeWidth={2} /> : <Plus size={14} color={palette.ink} strokeWidth={2} />}
                   </Pressable>
                 </View>
               );
             })
+          ) : (
+            <Text style={[type.bodySoft, { color: searchQuery.data?.status === "empty" ? palette.inkMuted : "#8C3A2E" }]}>
+              {searchQuery.data?.message ?? "Search is unavailable right now."}
+            </Text>
           )}
         </View>
       ) : null}
@@ -359,7 +350,7 @@ function StepCompletion({ width }: { width: number }) {
       <View style={{ marginTop: spacing.xxl }}>
         <Text style={type.caption}>A note on storage</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.sm, maxWidth: 320 }]}>
-          Frame keeps everything on this device. No cloud. No accounts. Uninstall the app and it&apos;s gone.
+          Your library stays on this device. YouTube provides playback and metadata; Google import and Premium verification are optional network services.
         </Text>
       </View>
     </View>
