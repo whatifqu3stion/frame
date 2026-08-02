@@ -1,71 +1,255 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BlurView } from "expo-blur";
 import { Check, X } from "lucide-react-native";
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import type { PurchasesPackage } from "react-native-purchases";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/providers/AppProvider";
 import { palette, spacing, type } from "@/constants/theme";
+import {
+  getPremiumOffering,
+  getPurchaseErrorMessage,
+  hasPremiumEntitlement,
+  isRevenueCatConfigured,
+  purchasePremiumPackage,
+  REVENUECAT_CUSTOMER_INFO_KEY,
+  REVENUECAT_OFFERING_KEY,
+  restorePremiumPurchases,
+} from "@/services/revenueCat";
 
-const FEATURES = [
-  "Save videos to your library, forever",
-  "Build custom queues",
-  "Resume where you left off",
-  "Add channels manually",
-  "No subscription. Pay once.",
+const FEATURES: string[] = [
+  "Save videos and build a personal shelf",
+  "Keep a calm Watch Later list",
+  "Resume exactly where you stopped",
+  "Create intentional one-to-three-video sessions",
 ];
 
-export default function PaywallSheet() {
-  const { paywallOpen, setPaywallOpen, markPurchased, prefs } = useApp();
+function packageLabel(aPackage: PurchasesPackage): string {
+  return aPackage.identifier === "$rc_annual" ? "Yearly" : "Monthly";
+}
 
-  const onPurchase = async () => {
-    // RevenueCat is unavailable in Expo Go. Simulate a one-time purchase locally.
-    await markPurchased();
-    setPaywallOpen(false);
-  };
-
-  const onRestore = async () => {
-    await markPurchased();
-    setPaywallOpen(false);
-  };
-
-  if (!paywallOpen) {
-    return null;
+function packageDetail(aPackage: PurchasesPackage): string {
+  if (aPackage.identifier === "$rc_annual") {
+    return `${aPackage.product.priceString} per year · best value`;
   }
+  return `${aPackage.product.priceString} per month`;
+}
+
+export default function PaywallSheet() {
+  const { paywallOpen, setPaywallOpen, isPremium } = useApp();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [selectedIdentifier, setSelectedIdentifier] = useState<string>("$rc_annual");
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const offeringQuery = useQuery({
+    queryKey: REVENUECAT_OFFERING_KEY,
+    queryFn: getPremiumOffering,
+    enabled: paywallOpen && isRevenueCatConfigured,
+    retry: 1,
+  });
+
+  const packages = useMemo<PurchasesPackage[]>(() => {
+    const available = offeringQuery.data?.availablePackages ?? [];
+    return available
+      .filter((item) => item.identifier === "$rc_annual" || item.identifier === "$rc_monthly")
+      .sort((a, b) => (a.identifier === "$rc_annual" ? -1 : b.identifier === "$rc_annual" ? 1 : 0));
+  }, [offeringQuery.data]);
+
+  useEffect(() => {
+    if (packages.length === 0) return;
+    const stillAvailable = packages.some((item) => item.identifier === selectedIdentifier);
+    if (!stillAvailable) setSelectedIdentifier(packages[0].identifier);
+  }, [packages, selectedIdentifier]);
+
+  useEffect(() => {
+    if (paywallOpen) setFeedback(null);
+  }, [paywallOpen]);
+
+  const purchaseMutation = useMutation({
+    mutationFn: purchasePremiumPackage,
+    onSuccess: (customerInfo) => {
+      queryClient.setQueryData(REVENUECAT_CUSTOMER_INFO_KEY, customerInfo);
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: restorePremiumPurchases,
+    onSuccess: (customerInfo) => {
+      queryClient.setQueryData(REVENUECAT_CUSTOMER_INFO_KEY, customerInfo);
+    },
+  });
+
+  const selectedPackage = packages.find((item) => item.identifier === selectedIdentifier) ?? null;
+  const isBusy = purchaseMutation.isPending || restoreMutation.isPending;
+
+  const onPurchase = async (): Promise<void> => {
+    if (isPremium) {
+      setPaywallOpen(false);
+      return;
+    }
+    if (!selectedPackage) {
+      setFeedback("Subscription options are unavailable right now. Please try again.");
+      return;
+    }
+
+    setFeedback(null);
+    try {
+      const customerInfo = await purchaseMutation.mutateAsync(selectedPackage);
+      if (hasPremiumEntitlement(customerInfo)) {
+        setPaywallOpen(false);
+      } else {
+        setFeedback("Your purchase is pending. Premium will activate when the store confirms it.");
+      }
+    } catch (error) {
+      const message = getPurchaseErrorMessage(error);
+      if (message) setFeedback(message);
+    }
+  };
+
+  const onRestore = async (): Promise<void> => {
+    setFeedback(null);
+    try {
+      const customerInfo = await restoreMutation.mutateAsync();
+      if (hasPremiumEntitlement(customerInfo)) {
+        setPaywallOpen(false);
+      } else {
+        setFeedback("No active Frame Premium subscription was found for this store account.");
+      }
+    } catch (error) {
+      setFeedback(getPurchaseErrorMessage(error) ?? "Restore cancelled.");
+    }
+  };
+
+  if (!paywallOpen) return null;
 
   const Backdrop = Platform.OS === "web" ? View : BlurView;
   const backdropProps = Platform.OS === "web" ? {} : { intensity: 40, tint: "light" as const };
+  const plansUnavailable = !isRevenueCatConfigured || offeringQuery.isError || (!offeringQuery.isLoading && packages.length === 0);
 
   return (
     <Modal visible animationType="slide" transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
       <Backdrop {...backdropProps} style={[StyleSheet.absoluteFill, styles.backdrop]} />
       <View style={styles.overlay}>
-        <View style={styles.sheet}>
-          <View style={styles.headerRow}>
-            <Text style={[type.caption, { color: palette.accent }]}>Frame · One Time</Text>
-            <Pressable onPress={() => setPaywallOpen(false)} hitSlop={12} testID="paywall-close">
-              <X size={20} color={palette.ink} />
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            <View style={styles.headerRow}>
+              <Text style={[type.caption, { color: palette.accent }]}>Frame Premium</Text>
+              <Pressable
+                onPress={() => setPaywallOpen(false)}
+                hitSlop={12}
+                style={styles.closeButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close Frame Premium"
+                testID="paywall-close"
+              >
+                <X size={20} color={palette.ink} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.title}>Keep only what{"\n"}matters to you.</Text>
+            <Text style={styles.subtitle}>
+              Premium turns Frame into your quiet, on-device viewing library—without adding an endless feed.
+            </Text>
+
+            <View style={styles.features}>
+              {FEATURES.map((feature) => (
+                <View key={feature} style={styles.featureRow}>
+                  <Check size={16} color={palette.accent} strokeWidth={1.8} />
+                  <Text style={styles.featureText}>{feature}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.plans}>
+              {offeringQuery.isLoading ? (
+                <View style={styles.loadingPlans}>
+                  <ActivityIndicator color={palette.accent} />
+                  <Text style={type.bodySoft}>Loading store prices…</Text>
+                </View>
+              ) : (
+                packages.map((aPackage) => {
+                  const isSelected = aPackage.identifier === selectedIdentifier;
+                  return (
+                    <Pressable
+                      key={aPackage.identifier}
+                      onPress={() => setSelectedIdentifier(aPackage.identifier)}
+                      disabled={isBusy}
+                      style={[styles.planCard, isSelected && styles.planCardSelected]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      testID={`paywall-plan-${aPackage.identifier}`}
+                    >
+                      <View style={[styles.radio, isSelected && styles.radioSelected]}>
+                        {isSelected ? <View style={styles.radioDot} /> : null}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.planTitleRow}>
+                          <Text style={styles.planTitle}>{packageLabel(aPackage)}</Text>
+                          {aPackage.identifier === "$rc_annual" ? (
+                            <Text style={styles.valueBadge}>Save 50%</Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.planDetail}>{packageDetail(aPackage)}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
+
+            {plansUnavailable ? (
+              <Text style={styles.feedback}>Subscription options are unavailable. Check your connection and try again.</Text>
+            ) : null}
+            {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+
+            <Pressable
+              onPress={onPurchase}
+              disabled={isBusy || plansUnavailable}
+              style={({ pressed }) => [
+                styles.buyButton,
+                (isBusy || plansUnavailable) && styles.buttonDisabled,
+                pressed && !isBusy && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              testID="paywall-buy"
+            >
+              {purchaseMutation.isPending ? (
+                <ActivityIndicator color={palette.wall} />
+              ) : (
+                <Text style={styles.buyText}>{isPremium ? "Premium is active" : "Continue with Premium"}</Text>
+              )}
             </Pressable>
-          </View>
-          <Text style={styles.title}>A library{"\n"}that stays yours.</Text>
-          <Text style={styles.subtitle}>
-            Buy Frame once. Keep every saved video, queue, and resume position on your device — quietly, forever.
-          </Text>
-          <View style={{ marginTop: spacing.xl }}>
-            {FEATURES.map((f) => (
-              <View key={f} style={styles.featureRow}>
-                <Check size={16} color={palette.accent} strokeWidth={1.6} />
-                <Text style={styles.featureText}>{f}</Text>
-              </View>
-            ))}
-          </View>
-          <View style={styles.priceBlock}>
-            <Text style={type.caption}>Lifetime</Text>
-            <Text style={styles.price}>$9.99</Text>
-          </View>
-          <Pressable onPress={onPurchase} style={styles.buyButton} testID="paywall-buy">
-            <Text style={styles.buyText}>{prefs.hasPurchased ? "Already Yours" : "Unlock Frame"}</Text>
-          </Pressable>
-          <Pressable onPress={onRestore} hitSlop={8} style={{ alignSelf: "center", marginTop: spacing.md }}>
-            <Text style={[type.caption, { color: palette.inkMuted }]}>Restore Purchase</Text>
-          </Pressable>
+
+            <Pressable
+              onPress={onRestore}
+              disabled={isBusy || !isRevenueCatConfigured}
+              hitSlop={8}
+              style={styles.restoreButton}
+              accessibilityRole="button"
+              testID="paywall-restore"
+            >
+              {restoreMutation.isPending ? (
+                <ActivityIndicator size="small" color={palette.inkMuted} />
+              ) : (
+                <Text style={[type.caption, { color: palette.inkMuted }]}>Restore Purchases</Text>
+              )}
+            </Pressable>
+
+            <Text style={styles.legal}>
+              Payment is charged to your store account. Your subscription renews automatically unless cancelled before the current period ends. Manage or cancel it in your App Store or Play Store settings.
+            </Text>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -76,36 +260,71 @@ const styles = StyleSheet.create({
   backdrop: { backgroundColor: "rgba(250,249,246,0.72)" },
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(26,28,26,0.35)" },
   sheet: {
+    maxHeight: "94%",
     backgroundColor: palette.wall,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingTop: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: { ...type.title, marginTop: spacing.lg, fontSize: 32, lineHeight: 38 },
-  subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 320 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
+  title: { ...type.title, marginTop: spacing.md, fontSize: 32, lineHeight: 38 },
+  subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 350 },
+  features: { marginTop: spacing.lg },
   featureRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.md },
   featureText: { ...type.body, flex: 1 },
-  priceBlock: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-    backgroundColor: palette.surface,
-    padding: spacing.lg,
-  },
-  price: { ...type.title, fontSize: 36, marginTop: spacing.xs },
-  buyButton: {
-    backgroundColor: palette.ink,
-    paddingVertical: 18,
+  plans: { marginTop: spacing.md, gap: spacing.sm },
+  loadingPlans: {
+    minHeight: 112,
     alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: palette.surface,
   },
-  buyText: {
+  planCard: {
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    padding: spacing.md,
+  },
+  planCardSelected: { borderColor: palette.accent, backgroundColor: "#F0ECE4" },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: palette.inkMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioSelected: { borderColor: palette.accent },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.accent },
+  planTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  planTitle: { ...type.heading, fontSize: 18, lineHeight: 23 },
+  valueBadge: {
+    ...type.caption,
     color: palette.wall,
-    fontFamily: "Georgia",
-    fontSize: 16,
-    letterSpacing: 0.3,
+    backgroundColor: palette.accent,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    overflow: "hidden",
   },
+  planDetail: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
+  feedback: { ...type.bodySoft, color: "#8C3A2E", marginTop: spacing.md, textAlign: "center" },
+  buyButton: {
+    minHeight: 56,
+    backgroundColor: palette.ink,
+    marginTop: spacing.lg,
+    paddingVertical: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  buttonDisabled: { opacity: 0.45 },
+  buttonPressed: { opacity: 0.82 },
+  buyText: { color: palette.wall, fontFamily: "Georgia", fontSize: 16, letterSpacing: 0.3 },
+  restoreButton: { minHeight: 44, alignSelf: "center", alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
+  legal: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
 });

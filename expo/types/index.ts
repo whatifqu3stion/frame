@@ -45,7 +45,6 @@ export type UserPreferences = {
   theme: ThemeMode;
   hasCompletedOnboarding: boolean;
   youtubeApiKey: string | null;
-  hasPurchased: boolean;
   /** Searches consumed during first-time setup (capped at 3). */
   onboardingSearchCount: number;
   /** Email of the connected Google account, if any. */

@@ -36,7 +36,6 @@ export default function LibraryScreen() {
     renameQueue,
     removeQueue,
     unfollowChannel,
-    prefs,
   } = useApp();
   const [tab, setTab] = useState<Tab>("saved");
   const [queueModal, setQueueModal] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
@@ -44,7 +43,7 @@ export default function LibraryScreen() {
   const [addChannelOpen, setAddChannelOpen] = useState<boolean>(false);
 
   const openCreateQueue = () => {
-    if (!prefs.hasPurchased && !requirePurchase()) return;
+    if (!requirePurchase()) return;
     setQueueName("");
     setQueueModal({ mode: "create" });
   };

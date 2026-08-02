@@ -10,6 +10,13 @@ import { INTEREST_LIBRARY } from "@/constants/interests";
 import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { fetchGoogleEmail, fetchSubscriptions } from "@/services/googleAuth";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
+import {
+  getRevenueCatCustomerInfo,
+  hasPremiumEntitlement,
+  isRevenueCatConfigured,
+  REVENUECAT_CUSTOMER_INFO_KEY,
+  subscribeToRevenueCatCustomerInfo,
+} from "@/services/revenueCat";
 
 WebBrowser.maybeCompleteAuthSession();
 import {
@@ -41,7 +48,6 @@ const defaultPrefs: UserPreferences = {
   theme: "warm",
   hasCompletedOnboarding: false,
   youtubeApiKey: null,
-  hasPurchased: false,
   onboardingSearchCount: 0,
   googleEmail: null,
   googleConnectedAt: null,
@@ -168,7 +174,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const setTheme = useCallback((mode: ThemeMode) => updatePrefs({ theme: mode }), [updatePrefs]);
   const setApiKey = useCallback((key: string | null) => updatePrefs({ youtubeApiKey: key && key.trim() ? key.trim() : null }), [updatePrefs]);
   const finishOnboarding = useCallback(() => updatePrefs({ hasCompletedOnboarding: true }), [updatePrefs]);
-  const markPurchased = useCallback(() => updatePrefs({ hasPurchased: true }), [updatePrefs]);
 
   const replaceInterests = useCallback(async (items: InterestTopic[]) => {
     setInterests(items);
@@ -212,11 +217,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const searchCreditsRemaining = Math.max(0, MAX_ONBOARDING_SEARCHES - prefs.onboardingSearchCount);
 
+  const customerInfoQuery = useQuery({
+    queryKey: REVENUECAT_CUSTOMER_INFO_KEY,
+    queryFn: getRevenueCatCustomerInfo,
+    enabled: ready && isRevenueCatConfigured,
+    staleTime: 1000 * 60 * 5,
+  });
+  const isPremium = hasPremiumEntitlement(customerInfoQuery.data);
+
+  useEffect(() => {
+    return subscribeToRevenueCatCustomerInfo((customerInfo) => {
+      queryClient.setQueryData(REVENUECAT_CUSTOMER_INFO_KEY, customerInfo);
+    });
+  }, [queryClient]);
+
   const requirePurchase = useCallback((): boolean => {
-    if (prefs.hasPurchased) return true;
+    if (isPremium) return true;
     setPaywallOpen(true);
     return false;
-  }, [prefs.hasPurchased]);
+  }, [isPremium]);
 
   // Library queries
   const savedQuery = useQuery({
@@ -450,7 +469,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setTheme,
       setApiKey,
       finishOnboarding,
-      markPurchased,
+      isPremium,
+      subscriptionStatusLoading: customerInfoQuery.isLoading,
+      subscriptionStatusError: customerInfoQuery.isError,
       replaceInterests,
       toggleInterest,
       requirePurchase,
@@ -497,7 +518,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setTheme,
       setApiKey,
       finishOnboarding,
-      markPurchased,
+      isPremium,
+      customerInfoQuery.isLoading,
+      customerInfoQuery.isError,
       replaceInterests,
       toggleInterest,
       requirePurchase,

@@ -16,7 +16,9 @@ export default function SettingsScreen() {
     prefs,
     setApiKey,
     setPaywallOpen,
-    markPurchased,
+    isPremium,
+    subscriptionStatusLoading,
+    subscriptionStatusError,
     wipeAllData,
     googleConfigured,
     googleConnected,
@@ -124,18 +126,30 @@ export default function SettingsScreen() {
         </Pressable>
       </Section>
 
-      <Section label="Purchase">
-        {prefs.hasPurchased ? (
-          <Row icon={<Lock size={16} color={palette.accent} strokeWidth={1.6} />} title="Frame unlocked" subtitle="Thank you. Everything is yours." />
+      <Section label="Frame Premium">
+        {subscriptionStatusLoading ? (
+          <View style={styles.simpleRow}>
+            <ActivityIndicator size="small" color={palette.accent} />
+            <Text style={type.bodySoft}>Checking your subscription…</Text>
+          </View>
+        ) : isPremium ? (
+          <Row
+            icon={<Lock size={16} color={palette.accent} strokeWidth={1.6} />}
+            title="Premium active"
+            subtitle="Saving, Watch Later, resume, and sessions are unlocked."
+          />
         ) : (
-          <Pressable onPress={() => setPaywallOpen(true)} style={styles.cta}>
-            <Text style={styles.ctaTitle}>Unlock Frame</Text>
-            <Text style={styles.ctaSub}>One-time purchase. No subscription.</Text>
+          <Pressable onPress={() => setPaywallOpen(true)} style={styles.cta} testID="open-premium">
+            <Text style={styles.ctaTitle}>Explore Frame Premium</Text>
+            <Text style={styles.ctaSub}>$4.99 monthly or $29.99 yearly. Cancel anytime.</Text>
           </Pressable>
         )}
-        <Pressable onPress={() => markPurchased()} style={styles.linkRow}>
+        {subscriptionStatusError ? (
+          <Text style={[type.bodySoft, { color: "#8C3A2E", marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
+        ) : null}
+        <Pressable onPress={() => setPaywallOpen(true)} style={styles.linkRow} testID="settings-restore-purchases">
           <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
-          <Text style={[type.caption, { color: palette.inkMuted }]}>Restore Purchase</Text>
+          <Text style={[type.caption, { color: palette.inkMuted }]}>Restore Purchases</Text>
         </Pressable>
       </Section>
 

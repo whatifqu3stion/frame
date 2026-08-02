@@ -46,7 +46,7 @@ const PLAYER_HTML = (videoId: string, startSeconds: number) => `<!DOCTYPE html>
 export default function WatchScreen() {
   const insets = useSafeAreaInsets();
   const { id, session, i } = useLocalSearchParams<{ id: string; session?: string; i?: string }>();
-  const { savedVideos, watchLater, saveVideo, unsaveVideo, addToWatchLater, removeFromWatchLater, isInWatchLater, requirePurchase, prefs } = useApp();
+  const { savedVideos, watchLater, saveVideo, unsaveVideo, addToWatchLater, removeFromWatchLater, isInWatchLater, requirePurchase, isPremium } = useApp();
 
   const sessionIds = useMemo<string[]>(() => (session ? session.split(",").filter(Boolean) : []), [session]);
   const sessionIndex = useMemo<number>(() => {
@@ -95,11 +95,11 @@ export default function WatchScreen() {
   const persist = useCallback(async () => {
     if (!video) return;
     const t = currentTimeRef.current;
-    if (!prefs.hasPurchased) return;
+    if (!isPremium) return;
     if (t > 5 && (video.durationSeconds === 0 || t < video.durationSeconds - 5)) {
       await upsertResume(video, t);
     }
-  }, [video, prefs.hasPurchased]);
+  }, [video, isPremium]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
@@ -118,7 +118,7 @@ export default function WatchScreen() {
       }
       if (data.type === "state" && data.s === 0) {
         setEnded(true);
-        if (video && prefs.hasPurchased) void clearResume(video.id);
+        if (video && isPremium) void clearResume(video.id);
       }
     } catch {}
   };
