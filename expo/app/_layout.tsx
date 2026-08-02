@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
-import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { View } from "react-native";
@@ -9,6 +8,8 @@ import { AppProvider, useApp } from "@/providers/AppProvider";
 import { palette } from "@/constants/theme";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
+import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -21,14 +22,11 @@ function AppContent() {
   const router = useRouter();
   const segments = useSegments();
   const hasNavigated = React.useRef(false);
-  const isWatching = segments[0] === "watch";
 
   useEffect(() => {
-    const orientation = isWatching
-      ? ScreenOrientation.OrientationLock.DEFAULT
-      : ScreenOrientation.OrientationLock.PORTRAIT_UP;
-    void ScreenOrientation.lockAsync(orientation).catch(() => {});
-  }, [isWatching]);
+    void setOrientationRequest("app", ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    return () => { void clearOrientationRequest("app"); };
+  }, []);
 
   useEffect(() => {
     if (!ready || hasNavigated.current) return;

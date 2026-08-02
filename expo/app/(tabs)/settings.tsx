@@ -222,7 +222,7 @@ export default function SettingsScreen() {
 
       <Section label="About">
         <Text style={[type.bodySoft, { maxWidth: 320 }]}>
-          Frame is a clean YouTube viewer. No accounts. No tracking. No autoplay. When a video ends, that's it.
+          Frame is a clean YouTube viewer. No accounts. No tracking. No autoplay. When a video ends, that is it.
         </Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
       </Section>

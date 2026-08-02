@@ -142,7 +142,6 @@ function StepBringChannels({ width }: { width: number }) {
     isChannelFollowed,
   } = useApp();
 
-  const [mode, setMode] = useState<"choose" | "manual">(googleConnected ? "manual" : "choose");
   const [signInMsg, setSignInMsg] = useState<string | null>(null);
   const [link, setLink] = useState<string>("");
   const [linkMsg, setLinkMsg] = useState<{ ok: boolean; message: string } | null>(null);
@@ -160,7 +159,6 @@ function StepBringChannels({ width }: { width: number }) {
     setSignInMsg(null);
     const result = await signInWithGoogle();
     setSignInMsg(result.message);
-    if (result.ok) setMode("manual");
   };
 
   const onAddLink = async () => {

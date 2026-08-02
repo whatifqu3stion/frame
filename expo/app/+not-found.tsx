@@ -10,7 +10,7 @@ export default function NotFoundScreen() {
         <Text style={type.caption}>404</Text>
         <Text style={[type.title, { marginTop: spacing.sm }]}>Empty frame.</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 280 }]}>
-          The page you were looking for isn't here.
+          The page you were looking for is not here.
         </Text>
         <Link href="/" style={styles.link}>
           <Text style={[type.caption, { color: palette.accent }]}>← Back home</Text>

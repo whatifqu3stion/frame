@@ -1,13 +1,14 @@
-import { BlurView } from "expo-blur";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { StatusBar } from "expo-status-bar";
 import { Bookmark, ChevronLeft, ChevronRight, Clock, ExternalLink, RotateCcw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
   AppState,
+  BackHandler,
   Linking,
   Platform,
   Pressable,
@@ -24,13 +25,18 @@ import { SAMPLE_VIDEOS } from "@/constants/sampleData";
 import { palette, spacing, type } from "@/constants/theme";
 import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
+import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
 import type { Video } from "@/types";
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const PLAYER_TIMEOUT_MS = 18000;
 const RESUME_WRITE_INTERVAL_MS = 15000;
+const FINAL_PROGRESS_DELAY_MS = 250;
 const KEEP_AWAKE_TAG = "frame-video-playback";
+const LANDSCAPE_RAIL_WIDTH = 56;
+
+type PendingAction = "retry" | "rewatch" | "save" | "later" | null;
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -38,6 +44,10 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 
 function optionalText(value: string | undefined): string {
   return value?.trim() ?? "";
+}
+
+function firstPositiveDuration(...values: (number | null | undefined)[]): number {
+  return values.find((value) => typeof value === "number" && Number.isFinite(value) && value > 0) ?? 0;
 }
 
 export default function WatchScreen() {
@@ -110,17 +120,39 @@ export default function WatchScreen() {
   const [playerReady, setPlayerReady] = useState<boolean>(false);
   const [playerError, setPlayerError] = useState<YouTubePlayerError | null>(null);
   const [playerKey, setPlayerKey] = useState<number>(0);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(video?.durationSeconds ?? 0);
   const didEndRef = useRef<boolean>(false);
   const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingActionRef = useRef<PendingAction>(null);
+  const navigationLockedRef = useRef<boolean>(false);
+  const isFullscreenRef = useRef<boolean>(false);
 
   const isLandscape = width > height;
-  const playerTopInset = isLandscape ? 0 : insets.top;
-  const availablePlayerHeight = Math.max(180, height - playerTopInset - insets.bottom);
-  const playerHeight = Math.min((width * 9) / 16, availablePlayerHeight);
-  const playerWidth = Math.min(width, (playerHeight * 16) / 9);
+  const isImmersiveLandscape = isLandscape && (Platform.OS !== "web" || width < 900);
+  const landscapeAvailableWidth = Math.max(
+    160,
+    width - insets.left - insets.right - LANDSCAPE_RAIL_WIDTH - spacing.sm,
+  );
+  const landscapeAvailableHeight = Math.max(90, height - insets.top - insets.bottom);
+  const landscapePlayerHeight = Math.min(landscapeAvailableHeight, (landscapeAvailableWidth * 9) / 16);
+  const landscapePlayerWidth = Math.min(landscapeAvailableWidth, (landscapePlayerHeight * 16) / 9);
+  const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
+  const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
+
+  const setAction = useCallback((action: PendingAction): void => {
+    pendingActionRef.current = action;
+    setPendingAction(action);
+  }, []);
+
+  const beginAction = useCallback((action: Exclude<PendingAction, null>): boolean => {
+    if (pendingActionRef.current !== null || navigationLockedRef.current) return false;
+    setAction(action);
+    return true;
+  }, [setAction]);
 
   useEffect(() => {
     let mounted = true;
@@ -129,9 +161,11 @@ export default function WatchScreen() {
     setPlayerError(null);
     setPlaybackState("unstarted");
     setStartAt(0);
+    setAction(null);
     currentTimeRef.current = 0;
     durationRef.current = video?.durationSeconds ?? 0;
     didEndRef.current = false;
+    navigationLockedRef.current = false;
 
     if (!id || !isPremium) {
       setResumeReady(true);
@@ -140,9 +174,10 @@ export default function WatchScreen() {
     getResume(id)
       .then((resume) => {
         if (!mounted) return;
-        const duration = video?.durationSeconds ?? resume?.durationSeconds ?? 0;
+        const duration = firstPositiveDuration(video?.durationSeconds, resume?.durationSeconds);
         const savedTime = Math.max(0, resume?.timestampSeconds ?? 0);
         const safeTime = duration > 0 && savedTime >= duration - 10 ? 0 : savedTime;
+        durationRef.current = duration;
         currentTimeRef.current = safeTime;
         setStartAt(safeTime);
         setResumeReady(true);
@@ -151,12 +186,12 @@ export default function WatchScreen() {
         if (mounted) setResumeReady(true);
       });
     return () => { mounted = false; };
-  }, [id, isPremium, video?.durationSeconds]);
+  }, [id, isPremium, setAction, video?.durationSeconds]);
 
   const persist = useCallback((): Promise<void> => {
     if (!video || !isPremium || didEndRef.current) return Promise.resolve();
     const current = currentTimeRef.current;
-    const duration = durationRef.current || video.durationSeconds;
+    const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
     if (current <= 5 || (duration > 0 && current >= duration - 10)) return Promise.resolve();
     const normalizedVideo = duration > 0 && duration !== video.durationSeconds
       ? { ...video, durationSeconds: Math.floor(duration) }
@@ -171,46 +206,72 @@ export default function WatchScreen() {
   }, [isPremium, recordResume, video]);
 
   const pauseAndPersist = useCallback((): void => {
+    playerRef.current?.requestProgress();
     playerRef.current?.pause();
     setPlaybackState((state) => state === "playing" ? "paused" : state);
     void persist();
+    setTimeout(() => { void persist(); }, FINAL_PROGRESS_DELAY_MS);
   }, [persist]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") pauseAndPersist();
-    });
-    return () => subscription.remove();
-  }, [pauseAndPersist]);
+  const leaveFullscreen = useCallback((): void => {
+    playerRef.current?.exitFullscreen();
+    isFullscreenRef.current = false;
+    setIsFullscreen(false);
+    void clearOrientationRequest("fullscreen");
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    void setOrientationRequest("watch", ScreenOrientation.OrientationLock.DEFAULT);
+    return () => {
+      void clearOrientationRequest("fullscreen");
+      void clearOrientationRequest("watch");
+    };
+  }, []));
 
   useFocusEffect(useCallback(() => {
     return () => pauseAndPersist();
   }, [pauseAndPersist]));
 
   useEffect(() => {
-    if (playbackState !== "playing") return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") {
+        if (isFullscreenRef.current) leaveFullscreen();
+        pauseAndPersist();
+      }
+    });
+    return () => subscription.remove();
+  }, [leaveFullscreen, pauseAndPersist]);
+
+  useEffect(() => {
+    if (playbackState !== "playing" || !playerReady) return;
     const interval = setInterval(() => { void persist(); }, RESUME_WRITE_INTERVAL_MS);
     void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
     return () => {
       clearInterval(interval);
       void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
-  }, [persist, playbackState]);
+  }, [persist, playbackState, playerReady]);
 
   useEffect(() => {
     if (!resumeReady || playerReady || playerError) return;
     const timeout = setTimeout(() => {
       setPlayerError({ message: "The player is taking too long to respond. Check your connection and retry." });
+      setAction(null);
     }, PLAYER_TIMEOUT_MS);
     return () => clearTimeout(timeout);
-  }, [playerError, playerReady, playerKey, resumeReady]);
+  }, [playerError, playerReady, playerKey, resumeReady, setAction]);
+
+  useEffect(() => {
+    if (playerError) void AccessibilityInfo.announceForAccessibility(`Couldn’t play this video. ${playerError.message}`);
+  }, [playerError]);
 
   const handleReady = useCallback((durationSeconds: number): void => {
     if (__DEV__) console.log("[player] ready", { id, durationSeconds });
     if (durationSeconds > 0) durationRef.current = durationSeconds;
     setPlayerReady(true);
     setPlayerError(null);
-  }, [id]);
+    setAction(null);
+  }, [id, setAction]);
 
   const handleProgress = useCallback((currentSeconds: number, durationSeconds: number): void => {
     currentTimeRef.current = Math.max(0, currentSeconds);
@@ -222,11 +283,14 @@ export default function WatchScreen() {
     if (state === "paused") void persist();
   }, [persist]);
 
-  const handleFullscreenChange = useCallback((isFullscreen: boolean): void => {
-    const orientationLock = isFullscreen
-      ? ScreenOrientation.OrientationLock.LANDSCAPE
-      : ScreenOrientation.OrientationLock.DEFAULT;
-    void ScreenOrientation.lockAsync(orientationLock).catch(() => {});
+  const handleFullscreenChange = useCallback((nextFullscreen: boolean): void => {
+    isFullscreenRef.current = nextFullscreen;
+    setIsFullscreen(nextFullscreen);
+    if (nextFullscreen) {
+      void setOrientationRequest("fullscreen", ScreenOrientation.OrientationLock.LANDSCAPE);
+    } else {
+      void clearOrientationRequest("fullscreen");
+    }
   }, []);
 
   const handleEnded = useCallback((): void => {
@@ -235,21 +299,28 @@ export default function WatchScreen() {
     didEndRef.current = true;
     currentTimeRef.current = 0;
     setPlaybackState("ended");
+    setAction(null);
+    if (isFullscreenRef.current) leaveFullscreen();
     writeChainRef.current = writeChainRef.current
       .then(() => clearVideoResume(video.id))
       .catch(() => {});
     void AccessibilityInfo.announceForAccessibility(isSession && nextSessionId ? "Video complete. Next video ready." : "Video complete.");
-  }, [clearVideoResume, isSession, nextSessionId, sessionIndex, video]);
+  }, [clearVideoResume, isSession, leaveFullscreen, nextSessionId, sessionIndex, setAction, video]);
 
   const handlePlayerError = useCallback((error: YouTubePlayerError): void => {
     if (__DEV__) console.warn("[player] error", { id, code: error.code ?? null });
+    playerRef.current?.requestProgress();
     playerRef.current?.pause();
     setPlaybackState("paused");
     setPlayerError(error);
+    setAction(null);
+    if (isFullscreenRef.current) leaveFullscreen();
     void persist();
-  }, [id, persist]);
+  }, [id, leaveFullscreen, persist, setAction]);
 
   const retryPlayer = useCallback((): void => {
+    if (!beginAction("retry")) return;
+    if (isFullscreenRef.current) leaveFullscreen();
     didEndRef.current = false;
     const retryAt = Math.max(0, Math.floor(currentTimeRef.current));
     setStartAt(retryAt);
@@ -257,18 +328,24 @@ export default function WatchScreen() {
     setPlayerError(null);
     setPlaybackState("unstarted");
     setPlayerKey((value) => value + 1);
-  }, []);
+  }, [beginAction, leaveFullscreen]);
 
   const closePlayer = useCallback((): void => {
+    if (navigationLockedRef.current) return;
+    navigationLockedRef.current = true;
+    if (isFullscreenRef.current) leaveFullscreen();
     pauseAndPersist();
     router.back();
-  }, [pauseAndPersist]);
+  }, [leaveFullscreen, pauseAndPersist]);
 
   const playNext = useCallback((): void => {
     if (!nextSessionId) {
       closePlayer();
       return;
     }
+    if (navigationLockedRef.current) return;
+    navigationLockedRef.current = true;
+    pauseAndPersist();
     setResumeReady(false);
     setPlayerReady(false);
     setPlayerError(null);
@@ -276,54 +353,83 @@ export default function WatchScreen() {
       pathname: "/watch/[id]",
       params: { id: nextSessionId, session: sessionIds.join(","), i: String(sessionIndex + 1) },
     });
-  }, [closePlayer, nextSessionId, sessionIds, sessionIndex]);
+  }, [closePlayer, nextSessionId, pauseAndPersist, sessionIds, sessionIndex]);
 
   const rewatch = useCallback((): void => {
+    if (!beginAction("rewatch")) return;
     didEndRef.current = false;
+    currentTimeRef.current = 0;
     setPlaybackState("playing");
     playerRef.current?.seekTo(0);
     playerRef.current?.play();
-  }, []);
+    setAction(null);
+  }, [beginAction, setAction]);
 
   const openInYouTube = useCallback((): void => {
-    void Linking.openURL(`https://www.youtube.com/watch?v=${id}`).catch(() => {});
+    void Linking.openURL(`https://www.youtube.com/watch?v=${id}`).catch(() => {
+      void AccessibilityInfo.announceForAccessibility("Couldn’t open YouTube.");
+    });
   }, [id]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isFullscreenRef.current) {
+        leaveFullscreen();
+        return true;
+      }
+      closePlayer();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [closePlayer, leaveFullscreen]);
 
   const isSaved = video ? savedVideos.some((candidate) => candidate.id === video.id) : false;
   const inWatchLater = video ? isInWatchLater(video.id) : false;
 
-  const toggleSave = async (): Promise<void> => {
-    if (!video) return;
-    if (!isSaved) {
-      if (!requirePurchase()) return;
-      const normalizedVideo = durationRef.current > 0
-        ? { ...video, durationSeconds: Math.floor(durationRef.current) }
-        : video;
-      await saveVideo(normalizedVideo);
-      return;
+  const toggleSave = useCallback(async (): Promise<void> => {
+    if (!video || !beginAction("save")) return;
+    try {
+      if (!isSaved) {
+        if (!requirePurchase()) return;
+        const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
+        const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
+        await saveVideo(normalizedVideo);
+      } else {
+        await unsaveVideo(video.id);
+      }
+    } catch {
+      void AccessibilityInfo.announceForAccessibility("Couldn’t update saved videos. Please try again.");
+    } finally {
+      setAction(null);
     }
-    await unsaveVideo(video.id);
-  };
+  }, [beginAction, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
 
-  const toggleWatchLater = async (): Promise<void> => {
-    if (!video) return;
-    if (!inWatchLater) {
-      if (!requirePurchase()) return;
-      const normalizedVideo = durationRef.current > 0
-        ? { ...video, durationSeconds: Math.floor(durationRef.current) }
-        : video;
-      await addToWatchLater(normalizedVideo);
-      return;
+  const toggleWatchLater = useCallback(async (): Promise<void> => {
+    if (!video || !beginAction("later")) return;
+    try {
+      if (!inWatchLater) {
+        if (!requirePurchase()) return;
+        const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
+        const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
+        await addToWatchLater(normalizedVideo);
+      } else {
+        await removeFromWatchLater(video.id);
+      }
+    } catch {
+      void AccessibilityInfo.announceForAccessibility("Couldn’t update Watch Later. Please try again.");
+    } finally {
+      setAction(null);
     }
-    await removeFromWatchLater(video.id);
-  };
+  }, [addToWatchLater, beginAction, inWatchLater, removeFromWatchLater, requirePurchase, setAction, video]);
 
   if (!video) {
     return (
-      <View style={styles.unavailableScreen}>
+      <View style={[styles.unavailableScreen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
+        <StatusBar style="dark" />
         <Text style={type.heading}>Video unavailable</Text>
         <Text style={[type.bodySoft, styles.unavailableBody]}>This link is incomplete or no longer valid.</Text>
-        <Pressable onPress={() => router.back()} style={styles.primaryLightButton} accessibilityRole="button">
+        <Pressable onPress={closePlayer} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={[type.label, { color: palette.accent }]}>Go back</Text>
         </Pressable>
       </View>
@@ -331,91 +437,135 @@ export default function WatchScreen() {
   }
 
   const dateLabel = formatRelativeDate(video.publishedAt);
-  const durationLabel = formatDuration(durationRef.current || video.durationSeconds);
+  const durationLabel = formatDuration(firstPositiveDuration(durationRef.current, video.durationSeconds));
   const detailLabel = [dateLabel, durationLabel === "—" ? "" : durationLabel].filter(Boolean).join(" · ");
   const showEnded = playbackState === "ended";
+  const showPlayer = resumeReady && playerReady && !playerError && !showEnded;
+  const playerBusy = pendingAction === "retry";
+
+  const stage = (
+    <View style={styles.playerStage}>
+      {resumeReady ? (
+        <View
+          style={[styles.playerEmbed, !showPlayer && styles.playerEmbedHidden]}
+          pointerEvents={showPlayer ? "auto" : "none"}
+          accessibilityElementsHidden={!showPlayer}
+          importantForAccessibility={showPlayer ? "auto" : "no-hide-descendants"}
+        >
+          <YouTubePlayer
+            key={`${id}-${playerKey}`}
+            ref={playerRef}
+            videoId={video.id}
+            startSeconds={startAt}
+            onReady={handleReady}
+            onProgress={handleProgress}
+            onStateChange={handleStateChange}
+            onEnded={handleEnded}
+            onError={handlePlayerError}
+            onFullscreenChange={handleFullscreenChange}
+          />
+        </View>
+      ) : null}
+
+      {!playerReady && !playerError ? (
+        <View style={styles.stateSurface} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
+          <ActivityIndicator color={palette.wall} />
+          <Text style={styles.playerStatusText}>{resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
+        </View>
+      ) : null}
+
+      {playerError ? (
+        <View style={styles.stateSurface} accessibilityLiveRegion="assertive">
+          <Text style={styles.errorTitle} accessibilityRole="alert">Couldn’t play this video</Text>
+          <Text style={styles.errorBody}>{playerError.message}</Text>
+          <View style={styles.stateActions}>
+            <Pressable
+              onPress={retryPlayer}
+              disabled={playerBusy}
+              style={({ pressed }) => [styles.darkOutlineButton, (pressed || playerBusy) && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityState={{ busy: playerBusy, disabled: playerBusy }}
+              testID="player-retry"
+            >
+              {playerBusy ? <ActivityIndicator size="small" color={palette.wall} /> : <RotateCcw size={15} color={palette.wall} />}
+              <Text style={styles.darkButtonText}>{playerBusy ? "Retrying" : "Retry"}</Text>
+            </Pressable>
+            <Pressable onPress={openInYouTube} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="link" testID="open-youtube">
+              <ExternalLink size={15} color={palette.wall} />
+              <Text style={styles.darkButtonText}>YouTube</Text>
+            </Pressable>
+          </View>
+          {isSession ? (
+            <Pressable onPress={playNext} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
+              <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
+              {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {showEnded ? (
+        <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+          <Text style={styles.endEyebrow}>
+            {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
+          </Text>
+          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done." : "That’s it."}</Text>
+          <View style={styles.stateActions}>
+            <Pressable onPress={rewatch} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
+              <RotateCcw size={15} color={palette.wall} />
+              <Text style={styles.darkButtonText}>Watch again</Text>
+            </Pressable>
+            <Pressable onPress={nextSessionId ? playNext : closePlayer} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
+              <Text style={styles.lightButtonText}>{nextSessionId ? "Next" : "Done"}</Text>
+              {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (isImmersiveLandscape) {
+    return (
+      <View style={[styles.landscapeScreen, { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left }]}>
+        <StatusBar style="light" hidden={isFullscreen} />
+        <View style={styles.landscapeRail}>
+          <Pressable
+            onPress={closePlayer}
+            style={({ pressed }) => [styles.landscapeClose, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Close video"
+            testID="watch-back"
+          >
+            <ChevronLeft color={palette.wall} size={23} />
+          </Pressable>
+        </View>
+        <View style={styles.landscapeStageArea}>
+          <View style={{ width: landscapePlayerWidth, height: landscapePlayerHeight }}>{stage}</View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.playerArea, { marginTop: playerTopInset, height: playerHeight }]}> 
-        <View style={[styles.playerStage, { width: playerWidth, height: playerHeight }]}>
-          {resumeReady ? (
-            <YouTubePlayer
-              key={`${id}-${playerKey}`}
-              ref={playerRef}
-              videoId={video.id}
-              startSeconds={startAt}
-              onReady={handleReady}
-              onProgress={handleProgress}
-              onStateChange={handleStateChange}
-              onEnded={handleEnded}
-              onError={handlePlayerError}
-              onFullscreenChange={handleFullscreenChange}
-            />
-          ) : null}
-
-          {!playerReady && !playerError ? (
-            <View style={styles.playerStatus} accessible accessibilityRole="progressbar" accessibilityLabel="Loading video">
-              <ActivityIndicator color={palette.wall} />
-              <Text style={styles.playerStatusText}>{resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
-            </View>
-          ) : null}
-
-          {playerError ? (
-            <View style={styles.playerStatus} accessibilityViewIsModal accessible accessibilityRole="alert">
-              <Text style={styles.errorTitle}>Couldn’t play this video</Text>
-              <Text style={styles.errorBody}>{playerError.message}</Text>
-              <View style={styles.overlayActions}>
-                <Pressable onPress={retryPlayer} style={styles.darkOutlineButton} accessibilityRole="button" testID="player-retry">
-                  <RotateCcw size={15} color={palette.wall} />
-                  <Text style={styles.darkButtonText}>Retry</Text>
-                </Pressable>
-                <Pressable onPress={openInYouTube} style={styles.darkOutlineButton} accessibilityRole="link" testID="open-youtube">
-                  <ExternalLink size={15} color={palette.wall} />
-                  <Text style={styles.darkButtonText}>YouTube</Text>
-                </Pressable>
-              </View>
-              {isSession ? (
-                <Pressable onPress={playNext} style={styles.skipButton} accessibilityRole="button" testID="session-skip">
-                  <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
-                  {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          {showEnded ? (
-            <View style={styles.endedOverlay} accessibilityViewIsModal accessible accessibilityRole="summary">
-              <Text style={styles.endEyebrow}>
-                {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
-              </Text>
-              <Text style={styles.endTitle}>{nextSessionId ? "One done." : "That’s it."}</Text>
-              <View style={styles.overlayActions}>
-                <Pressable onPress={rewatch} style={styles.darkOutlineButton} accessibilityRole="button" testID="rewatch">
-                  <RotateCcw size={15} color={palette.wall} />
-                  <Text style={styles.darkButtonText}>Watch again</Text>
-                </Pressable>
-                <Pressable onPress={nextSessionId ? playNext : closePlayer} style={styles.lightOverlayButton} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
-                  <Text style={styles.lightButtonText}>{nextSessionId ? "Next" : "Done"}</Text>
-                  {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-        </View>
-
+      <StatusBar style="dark" hidden={isFullscreen} />
+      <View style={[styles.watchChrome, { paddingTop: insets.top }]}>
         <Pressable
           onPress={closePlayer}
-          style={[styles.backButton, { top: spacing.sm, left: Math.max(spacing.sm, insets.left + spacing.sm) }]}
-          hitSlop={8}
+          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel="Close video"
           testID="watch-back"
         >
-          <BlurView intensity={Platform.OS === "ios" ? 60 : 90} tint="dark" style={styles.backButtonBlur}>
-            <ChevronLeft color={palette.wall} size={23} />
-          </BlurView>
+          <ChevronLeft color={palette.ink} size={22} />
+          <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
+        {isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
+      </View>
+
+      <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>
+        <View style={{ width: portraitPlayerWidth, height: portraitPlayerHeight }}>{stage}</View>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
@@ -424,13 +574,29 @@ export default function WatchScreen() {
         {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
 
         <View style={styles.actionRow} accessibilityRole="toolbar">
-          <Pressable onPress={toggleSave} style={styles.actionButton} accessibilityRole="button" accessibilityState={{ selected: isSaved }} accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"} testID="action-save">
-            <Bookmark size={17} color={isSaved ? palette.accent : palette.ink} strokeWidth={1.6} fill={isSaved ? palette.accent : "transparent"} />
-            <Text style={[type.label, isSaved && { color: palette.accent }]}>{isSaved ? "Saved" : "Save"}</Text>
+          <Pressable
+            onPress={toggleSave}
+            disabled={pendingAction === "save"}
+            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "save") && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: pendingAction === "save" }}
+            accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
+            testID="action-save"
+          >
+            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accent} /> : <Bookmark size={17} color={isSaved ? palette.accent : palette.ink} strokeWidth={1.6} fill={isSaved ? palette.accent : "transparent"} />}
+            <Text style={[type.label, isSaved && { color: palette.accent }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
-          <Pressable onPress={toggleWatchLater} style={styles.actionButton} accessibilityRole="button" accessibilityState={{ selected: inWatchLater }} accessibilityLabel={inWatchLater ? "Remove from Watch Later" : "Add to Watch Later"} testID="action-watchlater">
-            <Clock size={17} color={inWatchLater ? palette.accent : palette.ink} strokeWidth={1.6} />
-            <Text style={[type.label, inWatchLater && { color: palette.accent }]}>{inWatchLater ? "Added" : "Later"}</Text>
+          <Pressable
+            onPress={toggleWatchLater}
+            disabled={pendingAction === "later"}
+            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "later") && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: inWatchLater, busy: pendingAction === "later", disabled: pendingAction === "later" }}
+            accessibilityLabel={inWatchLater ? "Remove from Watch Later" : "Add to Watch Later"}
+            testID="action-watchlater"
+          >
+            {pendingAction === "later" ? <ActivityIndicator size="small" color={palette.accent} /> : <Clock size={17} color={inWatchLater ? palette.accent : palette.ink} strokeWidth={1.6} />}
+            <Text style={[type.label, inWatchLater && { color: palette.accent }]}>{pendingAction === "later" ? "Updating…" : inWatchLater ? "Added" : "Later"}</Text>
           </Pressable>
         </View>
 
@@ -444,7 +610,7 @@ export default function WatchScreen() {
         {video.channelId ? (
           <Pressable
             onPress={() => router.push({ pathname: "/channel/[id]", params: { id: video.channelId } })}
-            style={styles.channelLink}
+            style={({ pressed }) => [styles.channelLink, pressed && styles.pressed]}
             accessibilityRole="link"
             accessibilityLabel={`View ${video.channelTitle || "video"} channel`}
           >
@@ -460,30 +626,51 @@ export default function WatchScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.wall },
-  playerArea: { width: "100%", backgroundColor: "#000", alignItems: "center", position: "relative" },
-  playerStage: { backgroundColor: "#000", position: "relative" },
-  playerStatus: {
+  watchChrome: {
+    minHeight: 52,
+    backgroundColor: palette.wall,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.sm,
+  },
+  closeButton: {
+    minWidth: 88,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  closeLabel: { ...type.label, color: palette.ink },
+  fullscreenStatus: { ...type.caption, marginRight: spacing.sm },
+  portraitPlayerArea: { width: "100%", backgroundColor: "#000", alignItems: "center" },
+  playerStage: { width: "100%", height: "100%", backgroundColor: "#000", overflow: "hidden" },
+  playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
+  playerEmbedHidden: { opacity: 0 },
+  stateSurface: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.9)",
+    backgroundColor: "#080808",
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.lg,
   },
   playerStatusText: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", marginTop: spacing.md },
-  backButton: { position: "absolute", zIndex: 20, overflow: "hidden" },
-  backButtonBlur: { width: 44, height: 44, justifyContent: "center", alignItems: "center" },
   errorTitle: { ...type.heading, color: palette.wall, textAlign: "center" },
-  errorBody: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", textAlign: "center", marginTop: spacing.sm, maxWidth: 320 },
-  overlayActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
+  errorBody: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", textAlign: "center", marginTop: spacing.sm, maxWidth: 360 },
+  stateActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
   darkOutlineButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: "rgba(250,249,246,0.45)", paddingHorizontal: spacing.md },
   darkButtonText: { ...type.label, color: palette.wall },
   skipButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: palette.wall, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   skipButtonText: { ...type.label, color: palette.ink },
-  endedOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.88)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
   endEyebrow: { ...type.caption, color: "rgba(250,249,246,0.7)" },
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
-  lightOverlayButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: palette.wall, paddingHorizontal: spacing.lg },
+  lightStateButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: palette.wall, paddingHorizontal: spacing.lg },
   lightButtonText: { ...type.label, color: palette.ink },
+  landscapeScreen: { flex: 1, backgroundColor: "#000", flexDirection: "row" },
+  landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
+  landscapeClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(250,249,246,0.26)", backgroundColor: "rgba(250,249,246,0.08)" },
+  landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
   content: { padding: spacing.lg },
   detailLabel: { marginTop: spacing.md, color: palette.inkMuted },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
@@ -492,7 +679,8 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing.sm, color: palette.inkSoft },
   channelLink: { marginTop: spacing.xxl, padding: spacing.lg, backgroundColor: palette.surface, minHeight: 44 },
   channelLinkLabel: { color: palette.accent, marginTop: spacing.md },
-  unavailableScreen: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", padding: spacing.lg },
+  unavailableScreen: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", paddingHorizontal: spacing.lg },
   unavailableBody: { marginTop: spacing.sm, color: palette.inkMuted },
   primaryLightButton: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", marginTop: spacing.lg },
+  pressed: { opacity: 0.58 },
 });

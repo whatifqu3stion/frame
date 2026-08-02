@@ -9,6 +9,8 @@ export type YouTubePlayerHandle = {
   pause: () => void;
   play: () => void;
   seekTo: (seconds: number) => void;
+  requestProgress: () => void;
+  exitFullscreen: () => void;
 };
 
 export type YouTubePlayerProps = {

@@ -60,6 +60,17 @@ function playerHtml(videoId: string, startSeconds: number): string {
         }
       } catch (error) {}
     }
+    function exitFullscreen() {
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen();
+          return;
+        }
+        if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      } catch (error) {}
+    }
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         host: 'https://www.youtube-nocookie.com',
@@ -129,6 +140,8 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
     pause: () => runCommand("player.pauseVideo();reportProgress();"),
     play: () => runCommand("player.playVideo();"),
     seekTo: (seconds: number) => runCommand(`player.seekTo(${Math.max(0, Math.floor(seconds))},true);reportProgress();`),
+    requestProgress: () => runCommand("reportProgress();"),
+    exitFullscreen: () => runCommand("exitFullscreen();"),
   }), [runCommand]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent): void => {
@@ -179,12 +192,10 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
 
   const shouldStart = useCallback((request: ShouldStartLoadRequest): boolean => {
     const url = request.url;
-    if (
-      url === "about:blank"
-      || url.startsWith(PLAYER_ORIGIN)
-      || url.startsWith("https://www.youtube.com/")
-      || url.startsWith("https://www.youtube-nocookie.com/")
-    ) return true;
+    const isTrustedPlayerUrl = url.startsWith("https://www.youtube.com/")
+      || url.startsWith("https://www.youtube-nocookie.com/");
+    if (url === "about:blank" || url.startsWith(PLAYER_ORIGIN)) return true;
+    if (request.isTopFrame === false && isTrustedPlayerUrl) return true;
     if (/^https?:\/\//.test(url)) void Linking.openURL(url).catch(() => {});
     return false;
   }, []);
