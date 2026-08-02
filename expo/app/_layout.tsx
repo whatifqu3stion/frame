@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { View } from "react-native";
@@ -20,6 +21,14 @@ function AppContent() {
   const router = useRouter();
   const segments = useSegments();
   const hasNavigated = React.useRef(false);
+  const isWatching = segments[0] === "watch";
+
+  useEffect(() => {
+    const orientation = isWatching
+      ? ScreenOrientation.OrientationLock.DEFAULT
+      : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+    void ScreenOrientation.lockAsync(orientation).catch(() => {});
+  }, [isWatching]);
 
   useEffect(() => {
     if (!ready || hasNavigated.current) return;
@@ -55,6 +64,9 @@ function AppContent() {
 }
 
 export default function RootLayout() {
+  const segments = useSegments();
+  const isWatching = segments[0] === "watch";
+
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
@@ -64,7 +76,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AppProvider>
           <View style={{ flex: 1, backgroundColor: palette.wall }}>
-            <StatusBar style="dark" />
+            <StatusBar style={isWatching ? "light" : "dark"} />
             <AppContent />
             <PaywallSheet />
           </View>

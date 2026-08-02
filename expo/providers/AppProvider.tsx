@@ -22,6 +22,7 @@ WebBrowser.maybeCompleteAuthSession();
 import {
   addWatchLater,
   clearAllData,
+  clearResume,
   deleteQueue,
   followChannel,
   isVideoSaved as dbIsVideoSaved,
@@ -35,6 +36,7 @@ import {
   unfollowChannel,
   unsaveVideo,
   upsertQueue,
+  upsertResume,
 } from "@/db/database";
 
 const PREFS_KEY = "frame.preferences.v1";
@@ -249,6 +251,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryFn: listResume,
     enabled: ready,
   });
+
+  const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
+    await upsertResume(video, timestampSeconds);
+    await queryClient.invalidateQueries({ queryKey: ["library", "resume"] });
+  }, [queryClient]);
+
+  const clearVideoResume = useCallback(async (videoId: string): Promise<void> => {
+    await clearResume(videoId);
+    await queryClient.invalidateQueries({ queryKey: ["library", "resume"] });
+  }, [queryClient]);
 
   const queuesQuery = useQuery({
     queryKey: ["library", "queues"],
@@ -508,6 +520,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameQueue,
       removeQueue,
       removeFromQueue,
+      recordResume,
+      clearVideoResume,
       wipeAllData,
     }),
     [
@@ -550,6 +564,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameQueue,
       removeQueue,
       removeFromQueue,
+      recordResume,
+      clearVideoResume,
       wipeAllData,
     ],
   );

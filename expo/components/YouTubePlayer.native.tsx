@@ -1,0 +1,202 @@
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
+import { Linking, StyleSheet } from "react-native";
+import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from "react-native-webview/lib/WebViewTypes";
+import type {
+  YouTubePlaybackState,
+  YouTubePlayerError,
+  YouTubePlayerHandle,
+  YouTubePlayerProps,
+} from "@/components/YouTubePlayer.types";
+
+const PLAYER_ORIGIN = "https://frame-video-viewer-backend.rork.app";
+const VALID_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+const STATE_MAP: Record<number, YouTubePlaybackState> = {
+  [-1]: "unstarted",
+  0: "ended",
+  1: "playing",
+  2: "paused",
+  3: "buffering",
+  5: "cued",
+};
+
+function playerHtml(videoId: string, startSeconds: number): string {
+  const safeId = VALID_VIDEO_ID.test(videoId) ? videoId : "";
+  const safeStart = Math.max(0, Math.floor(Number.isFinite(startSeconds) ? startSeconds : 0));
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <style>html,body,#player{margin:0;padding:0;background:#000;width:100%;height:100%;overflow:hidden}</style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    var player = null;
+    var timer = null;
+    var lastPosted = -1;
+    function post(message) {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
+    }
+    function reportProgress() {
+      if (!player || typeof player.getCurrentTime !== 'function') return;
+      try {
+        var current = Number(player.getCurrentTime()) || 0;
+        var duration = Number(player.getDuration()) || 0;
+        if (Math.abs(current - lastPosted) >= 0.75) {
+          lastPosted = current;
+          post({ type: 'progress', current: current, duration: duration });
+        }
+      } catch (error) {}
+    }
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        host: 'https://www.youtube-nocookie.com',
+        videoId: ${JSON.stringify(safeId)},
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          enablejsapi: 1,
+          fs: 1,
+          playsinline: 1,
+          rel: 0,
+          start: ${safeStart},
+          origin: ${JSON.stringify(PLAYER_ORIGIN)}
+        },
+        events: {
+          onReady: function() {
+            var duration = Number(player.getDuration()) || 0;
+            post({ type: 'ready', duration: duration });
+            if (timer) clearInterval(timer);
+            timer = setInterval(reportProgress, 1000);
+          },
+          onStateChange: function(event) {
+            reportProgress();
+            post({ type: 'state', state: event.data });
+          },
+          onError: function(event) {
+            post({ type: 'error', code: Number(event.data) || 0 });
+          }
+        }
+      });
+    }
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+    var tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.onerror = function() { post({ type: 'shellError' }); };
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>`;
+}
+
+function youtubeError(code?: number): YouTubePlayerError {
+  if (code === 100) return { code, message: "This video was removed or is private." };
+  if (code === 101 || code === 150) return { code, message: "This creator does not allow this video to play inside Frame." };
+  if (code === 153) return { code, message: "YouTube could not verify this player. Please retry or open the video in YouTube." };
+  if (code === 2) return { code, message: "This YouTube link is not valid." };
+  if (code === 5) return { code, message: "This video could not play on this device." };
+  return { code, message: "The player could not load this video." };
+}
+
+const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
+  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError },
+  ref,
+) {
+  const webViewRef = useRef<WebView>(null);
+  const html = useMemo<string>(() => playerHtml(videoId, startSeconds), [videoId, startSeconds]);
+
+  const runCommand = useCallback((command: string): void => {
+    webViewRef.current?.injectJavaScript(`try{if(player){${command}}}catch(error){};true;`);
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    pause: () => runCommand("player.pauseVideo();reportProgress();"),
+    play: () => runCommand("player.playVideo();"),
+    seekTo: (seconds: number) => runCommand(`player.seekTo(${Math.max(0, Math.floor(seconds))},true);reportProgress();`),
+  }), [runCommand]);
+
+  const handleMessage = useCallback((event: WebViewMessageEvent): void => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data) as {
+        type?: string;
+        current?: number;
+        duration?: number;
+        state?: number;
+        code?: number;
+      };
+      if (data.type === "ready") {
+        onReady(data.duration ?? 0);
+        return;
+      }
+      if (data.type === "progress") {
+        onProgress(data.current ?? 0, data.duration ?? 0);
+        return;
+      }
+      if (data.type === "state" && typeof data.state === "number") {
+        const nextState = STATE_MAP[data.state] ?? "unstarted";
+        onStateChange(nextState);
+        if (nextState === "ended") onEnded();
+        return;
+      }
+      if (data.type === "error") {
+        onError(youtubeError(data.code));
+        return;
+      }
+      if (data.type === "shellError") onError({ message: "YouTube could not be reached. Check your connection and retry." });
+    } catch {
+      onError({ message: "The player returned an unreadable response." });
+    }
+  }, [onEnded, onError, onProgress, onReady, onStateChange]);
+
+  const handleWebViewError = useCallback((_event: WebViewErrorEvent): void => {
+    onError({ message: "YouTube could not be reached. Check your connection and retry." });
+  }, [onError]);
+
+  const handleHttpError = useCallback((event: WebViewHttpErrorEvent): void => {
+    onError({ code: event.nativeEvent.statusCode, message: "YouTube returned an error while loading the player." });
+  }, [onError]);
+
+  const shouldStart = useCallback((request: ShouldStartLoadRequest): boolean => {
+    const url = request.url;
+    if (
+      url === "about:blank"
+      || url.startsWith(PLAYER_ORIGIN)
+      || url.startsWith("https://www.youtube.com/")
+      || url.startsWith("https://www.youtube-nocookie.com/")
+    ) return true;
+    if (/^https?:\/\//.test(url)) void Linking.openURL(url).catch(() => {});
+    return false;
+  }, []);
+
+  return (
+    <WebView
+      ref={webViewRef}
+      source={{ html, baseUrl: PLAYER_ORIGIN }}
+      originWhitelist={[PLAYER_ORIGIN, "https://www.youtube.com", "https://www.youtube-nocookie.com", "about:blank"]}
+      allowsFullscreenVideo
+      allowsInlineMediaPlayback
+      mediaPlaybackRequiresUserAction
+      javaScriptEnabled
+      domStorageEnabled
+      scrollEnabled={false}
+      bounces={false}
+      setSupportMultipleWindows={false}
+      onMessage={handleMessage}
+      onError={handleWebViewError}
+      onHttpError={handleHttpError}
+      onContentProcessDidTerminate={() => onError({ message: "The player stopped unexpectedly. Please retry." })}
+      onRenderProcessGone={() => onError({ message: "The player stopped unexpectedly. Please retry." })}
+      onShouldStartLoadWithRequest={shouldStart}
+      style={styles.webView}
+      testID="youtube-player"
+    />
+  );
+});
+
+export default YouTubePlayer;
+
+const styles = StyleSheet.create({
+  webView: { flex: 1, backgroundColor: "#000" },
+});

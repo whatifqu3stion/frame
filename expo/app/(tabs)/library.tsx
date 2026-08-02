@@ -137,7 +137,7 @@ export default function LibraryScreen() {
                   channelTitle: r.channelTitle ?? "",
                   channelId: "",
                   thumbnailUrl: r.thumbnailUrl ?? "",
-                  publishedAt: new Date(r.updatedAt).toISOString(),
+                  publishedAt: "",
                   durationSeconds: r.durationSeconds ?? 0,
                 } : null);
               if (!v) return null;

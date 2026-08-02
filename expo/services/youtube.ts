@@ -258,9 +258,12 @@ export function formatDuration(seconds: number): string {
 
 export function formatRelativeDate(iso: string): string {
   try {
+    if (!iso.trim()) return "";
     const d = new Date(iso);
+    const time = d.getTime();
+    if (!Number.isFinite(time)) return "";
     const now = Date.now();
-    const diff = Math.max(0, now - d.getTime());
+    const diff = Math.max(0, now - time);
     const day = 86400000;
     if (diff < day) return "Today";
     if (diff < day * 2) return "Yesterday";

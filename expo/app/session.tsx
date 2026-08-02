@@ -11,7 +11,7 @@ import type { Video } from "@/types";
 
 export default function SessionBuilder() {
   const insets = useSafeAreaInsets();
-  const { savedVideos, watchLater } = useApp();
+  const { savedVideos, watchLater, isPremium, requirePurchase } = useApp();
   const [selected, setSelected] = useState<string[]>([]);
 
   const pool = useMemo<Video[]>(() => {
@@ -28,7 +28,12 @@ export default function SessionBuilder() {
   );
 
   const toggle = (id: string) => {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    if (!isPremium && !requirePurchase()) return;
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((candidate) => candidate !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
   };
 
   const begin = () => {
@@ -46,7 +51,7 @@ export default function SessionBuilder() {
         <Text style={[type.caption, { color: palette.accent }]}>Session</Text>
         <Text style={[type.title, { marginTop: spacing.xs }]}>Choose a few.{"\n"}Watch. Stop.</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-          Pick the videos for this sitting. When the last one ends, Frame stops. No feed, no next-up.
+          Pick up to three videos for this sitting. When the last one ends, Frame stops. No feed, no next-up.
         </Text>
 
         {pool.length === 0 ? (
@@ -62,7 +67,15 @@ export default function SessionBuilder() {
               const isOn = selected.includes(v.id);
               const order = selected.indexOf(v.id) + 1;
               return (
-                <Pressable key={v.id} onPress={() => toggle(v.id)} style={styles.row} testID={`session-pick-${v.id}`}>
+                <Pressable
+                  key={v.id}
+                  onPress={() => toggle(v.id)}
+                  style={[styles.row, selected.length >= 3 && !isOn && styles.rowDisabled]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isOn, disabled: selected.length >= 3 && !isOn }}
+                  accessibilityLabel={`${v.title}${isOn ? `, selection ${order}` : ""}`}
+                  testID={`session-pick-${v.id}`}
+                >
                   <View style={[styles.indexBox, isOn && styles.indexBoxOn]}>
                     {isOn ? <Text style={styles.indexText}>{order}</Text> : <Check size={14} color={palette.inkMuted} strokeWidth={1.6} />}
                   </View>
@@ -110,6 +123,7 @@ const styles = StyleSheet.create({
   },
   indexBoxOn: { backgroundColor: palette.ink },
   indexText: { color: palette.wall, fontFamily: "Georgia", fontSize: 14 },
+  rowDisabled: { opacity: 0.45 },
   rowTitle: { ...type.heading, fontSize: 16, lineHeight: 20, marginTop: 2 },
   footer: {
     position: "absolute",
