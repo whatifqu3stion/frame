@@ -36,8 +36,18 @@ function playerHtml(videoId: string, startSeconds: number): string {
     var player = null;
     var timer = null;
     var lastPosted = -1;
+    var isFullscreen = false;
     function post(message) {
       if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
+    }
+    function reportFullscreen(nextFullscreen) {
+      var next = !!nextFullscreen;
+      if (next === isFullscreen) return;
+      isFullscreen = next;
+      post({ type: 'fullscreen', isFullscreen: next });
+    }
+    function detectFullscreen() {
+      reportFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
     }
     function reportProgress() {
       if (!player || typeof player.getCurrentTime !== 'function') return;
@@ -82,6 +92,10 @@ function playerHtml(videoId: string, startSeconds: number): string {
       });
     }
     window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+    document.addEventListener('fullscreenchange', detectFullscreen);
+    document.addEventListener('webkitfullscreenchange', detectFullscreen);
+    document.addEventListener('webkitbeginfullscreen', function() { reportFullscreen(true); }, true);
+    document.addEventListener('webkitendfullscreen', function() { reportFullscreen(false); }, true);
     var tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
     tag.onerror = function() { post({ type: 'shellError' }); };
@@ -101,7 +115,7 @@ function youtubeError(code?: number): YouTubePlayerError {
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
-  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError },
+  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
@@ -125,6 +139,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         duration?: number;
         state?: number;
         code?: number;
+        isFullscreen?: boolean;
       };
       if (data.type === "ready") {
         onReady(data.duration ?? 0);
@@ -144,11 +159,15 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         onError(youtubeError(data.code));
         return;
       }
+      if (data.type === "fullscreen" && typeof data.isFullscreen === "boolean") {
+        onFullscreenChange(data.isFullscreen);
+        return;
+      }
       if (data.type === "shellError") onError({ message: "YouTube could not be reached. Check your connection and retry." });
     } catch {
       onError({ message: "The player returned an unreadable response." });
     }
-  }, [onEnded, onError, onProgress, onReady, onStateChange]);
+  }, [onEnded, onError, onFullscreenChange, onProgress, onReady, onStateChange]);
 
   const handleWebViewError = useCallback((_event: WebViewErrorEvent): void => {
     onError({ message: "YouTube could not be reached. Check your connection and retry." });

@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { Bookmark, ChevronLeft, ChevronRight, Clock, ExternalLink, RotateCcw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -221,6 +222,13 @@ export default function WatchScreen() {
     if (state === "paused") void persist();
   }, [persist]);
 
+  const handleFullscreenChange = useCallback((isFullscreen: boolean): void => {
+    const orientationLock = isFullscreen
+      ? ScreenOrientation.OrientationLock.LANDSCAPE
+      : ScreenOrientation.OrientationLock.DEFAULT;
+    void ScreenOrientation.lockAsync(orientationLock).catch(() => {});
+  }, []);
+
   const handleEnded = useCallback((): void => {
     if (!video || didEndRef.current) return;
     if (__DEV__) console.log("[player] ended", { id: video.id, sessionIndex: isSession ? sessionIndex : null });
@@ -342,6 +350,7 @@ export default function WatchScreen() {
               onStateChange={handleStateChange}
               onEnded={handleEnded}
               onError={handlePlayerError}
+              onFullscreenChange={handleFullscreenChange}
             />
           ) : null}
 

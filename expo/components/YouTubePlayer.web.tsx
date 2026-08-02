@@ -15,7 +15,7 @@ const STATE_MAP: Record<number, YouTubePlaybackState> = {
 };
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
-  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError },
+  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -75,6 +75,14 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
     return () => window.removeEventListener("message", receive);
   }, [onEnded, onError, onProgress, onReady, onStateChange]);
 
+  useEffect(() => {
+    const reportFullscreen = (): void => {
+      onFullscreenChange(document.fullscreenElement === iframeRef.current);
+    };
+    document.addEventListener("fullscreenchange", reportFullscreen);
+    return () => document.removeEventListener("fullscreenchange", reportFullscreen);
+  }, [onFullscreenChange]);
+
   const handleLoad = useCallback((): void => {
     iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: "frame-player" }), "https://www.youtube-nocookie.com");
     onReady(0);
@@ -84,7 +92,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
     ref: iframeRef,
     src,
     title: "YouTube video player",
-    allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+    allow: "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share",
     allowFullScreen: true,
     referrerPolicy: "strict-origin-when-cross-origin",
     onLoad: handleLoad,

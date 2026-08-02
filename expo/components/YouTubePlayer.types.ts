@@ -19,4 +19,5 @@ export type YouTubePlayerProps = {
   onStateChange: (state: YouTubePlaybackState) => void;
   onEnded: () => void;
   onError: (error: YouTubePlayerError) => void;
+  onFullscreenChange: (isFullscreen: boolean) => void;
 };
