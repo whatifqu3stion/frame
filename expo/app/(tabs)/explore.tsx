@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { ChevronRight, Plus } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { ChevronRight, Plus, RotateCcw } from "lucide-react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
@@ -12,6 +13,7 @@ import VideoCard from "@/components/VideoCard";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
 import { getTopicVideos } from "@/services/youtube";
+import type { Video } from "@/types";
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -19,165 +21,189 @@ export default function ExploreScreen() {
   const [active, setActive] = useState<string | null>(interests[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
 
-  const activeTopic = interests.find((i) => i.id === active) ?? interests[0] ?? null;
-
+  const activeTopic = interests.find((interest) => interest.id === active) ?? interests[0] ?? null;
   const topicQuery = useQuery({
     queryKey: ["topic", activeTopic?.id],
     queryFn: () => getTopicVideos(activeTopic!.name),
     enabled: !!activeTopic,
   });
+  const videos = useMemo<Video[]>(() => {
+    if (topicQuery.data?.status === "success" || topicQuery.data?.status === "partial") return topicQuery.data.data;
+    return [];
+  }, [topicQuery.data]);
+  const topicMessage = topicQuery.data && "message" in topicQuery.data ? topicQuery.data.message : undefined;
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: palette.wall }}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: 120 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={{ paddingHorizontal: spacing.lg }}>
+  const chooseTopic = useCallback((id: string): void => {
+    void Haptics.selectionAsync().catch(() => {});
+    setActive(id);
+  }, []);
+
+  const retryTopic = useCallback((): void => {
+    void topicQuery.refetch();
+  }, [topicQuery]);
+
+  const listHeader = (
+    <>
+      <View style={styles.pageHeader}>
         <ScreenHeader eyebrow="Explore" title={"Curated\nfor you."} subtitle="No recommendations. Only the topics and channels you chose." />
       </View>
 
-      <Pressable onPress={() => setAddOpen(true)} style={styles.addRow} testID="explore-add-channel">
-        <View style={styles.addIcon}>
-          <Plus size={16} color={palette.wall} strokeWidth={2} />
-        </View>
-        <View style={{ flex: 1 }}>
+      <Pressable
+        onPress={() => setAddOpen(true)}
+        style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
+        accessibilityRole="button"
+        testID="explore-add-channel"
+      >
+        <View style={styles.addIcon}><Plus size={16} color={palette.wall} strokeWidth={2} /></View>
+        <View style={styles.flex}>
           <Text style={type.label}>Add a channel by link</Text>
-          <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 1 }]}>Paste a channel or video URL.</Text>
+          <Text style={styles.addSubtitle}>Paste a channel or video URL.</Text>
         </View>
         <ChevronRight size={16} color={palette.inkMuted} />
       </Pressable>
 
-      {followedChannels.length > 0 && (
-        <View style={{ marginTop: spacing.xl }}>
+      {followedChannels.length > 0 ? (
+        <View style={styles.channelSection}>
           <View style={[styles.sectionLabel, styles.sectionRow]}>
             <Text style={type.caption}>Your Channels</Text>
-            <Pressable onPress={() => router.push("/(tabs)/library")} hitSlop={8}>
-              <Text style={[type.caption, { color: palette.accent }]}>Manage →</Text>
+            <Pressable onPress={() => router.push("/(tabs)/library")} style={styles.textAction} accessibilityRole="button">
+              <Text style={styles.accentCaption}>Manage →</Text>
             </Pressable>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
-          >
-            {followedChannels.map((c) => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalContent}>
+            {followedChannels.map((channel) => (
               <Pressable
-                key={c.id}
-                style={styles.channelTile}
-                onPress={() => router.push({ pathname: "/channel/[id]", params: { id: c.id } })}
-                testID={`explore-channel-${c.id}`}
+                key={channel.id}
+                style={({ pressed }) => [styles.channelTile, pressed && styles.pressed]}
+                onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${channel.title} channel`}
+                testID={`explore-channel-${channel.id}`}
               >
                 <View style={styles.channelAvatar}>
-                  {c.thumbnailUrl ? (
-                    <Image source={{ uri: c.thumbnailUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+                  {channel.thumbnailUrl ? (
+                    <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" recyclingKey={channel.id} />
                   ) : null}
                 </View>
-                <Text style={styles.channelName} numberOfLines={2}>{c.title}</Text>
+                <Text style={styles.channelName} numberOfLines={2}>{channel.title}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
-      )}
+      ) : null}
 
       {interests.length === 0 ? (
-        <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
-          <EmptyState
-            title="No topics yet"
-            body="Add interests in Settings to populate this space with what you actually want to watch."
-          />
-          <Pressable onPress={() => router.push("/(tabs)/settings")} style={styles.linkRow}>
-            <Text style={[type.label, { color: palette.accent }]}>Open Settings</Text>
+        <View style={styles.noTopics}>
+          <EmptyState title="No topics yet" body="Add interests in Settings to populate this space with what you actually want to watch." />
+          <Pressable onPress={() => router.push("/(tabs)/settings")} style={styles.linkRow} accessibilityRole="button">
+            <Text style={styles.accentLabel}>Open Settings</Text>
             <ChevronRight size={14} color={palette.accent} />
           </Pressable>
         </View>
       ) : (
         <>
-          <View style={[styles.sectionLabel, styles.sectionRow, { marginTop: spacing.xl }]}>
+          <View style={[styles.sectionLabel, styles.sectionRow, styles.collectionsHeader]}>
             <Text style={type.caption}>Collections</Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }}
-          >
-            {interests.map((t) => {
-              const isActive = activeTopic?.id === t.id;
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContent}>
+            {interests.map((interest) => {
+              const isActive = activeTopic?.id === interest.id;
               return (
                 <Pressable
-                  key={t.id}
-                  onPress={() => setActive(t.id)}
-                  style={[styles.chip, isActive && styles.chipActive]}
-                  testID={`topic-${t.id}`}
+                  key={interest.id}
+                  onPress={() => chooseTopic(interest.id)}
+                  style={({ pressed }) => [styles.chip, isActive && styles.chipActive, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  testID={`topic-${interest.id}`}
                 >
-                  <Text style={[styles.chipEmoji, isActive && { color: palette.wall }]}>{t.emoji}</Text>
-                  <Text style={[styles.chipLabel, isActive && { color: palette.wall }]}>{t.name}</Text>
+                  <Text style={[styles.chipEmoji, isActive && styles.lightText]}>{interest.emoji}</Text>
+                  <Text style={[styles.chipLabel, isActive && styles.lightText]}>{interest.name}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-
-          <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-            <View style={styles.sectionLabel}>
-              <Text style={[type.heading, { fontSize: 18 }]}>{activeTopic?.name ?? ""}</Text>
-            </View>
-            {topicQuery.isLoading ? (
-              <Text style={[type.bodySoft, { paddingVertical: spacing.lg }]}>Loading…</Text>
-            ) : topicQuery.data?.status === "success" || topicQuery.data?.status === "partial" ? (
-              topicQuery.data.data.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
-            ) : topicQuery.data?.status === "empty" ? (
-              <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
-            ) : (
-              <EmptyState title="Couldn't load this collection" body={topicQuery.data?.message ?? "Try again in a moment."} />
-            )}
+          <View style={styles.topicHeading}>
+            <Text style={styles.topicTitle} accessibilityRole="header">{activeTopic?.name ?? ""}</Text>
           </View>
         </>
       )}
+    </>
+  );
 
+  const listEmpty = interests.length === 0 ? null : topicQuery.isLoading ? (
+    <View style={styles.loadingState} accessible accessibilityRole="progressbar" accessibilityLabel="Loading videos">
+      <ActivityIndicator color={palette.accent} />
+      <Text style={styles.loadingText}>Finding verified videos…</Text>
+    </View>
+  ) : topicQuery.data?.status === "empty" ? (
+    <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
+  ) : (
+    <View>
+      <EmptyState title="Couldn't load this collection" body={topicMessage ?? "Check your connection and try again."} />
+      <Pressable onPress={retryTopic} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
+        <RotateCcw size={16} color={palette.accent} />
+        <Text style={styles.accentLabel}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <>
+      <FlatList<Video>
+        data={videos}
+        keyExtractor={(video) => video.id}
+        renderItem={({ item }) => <VideoCard video={item} variant="wide" />}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        contentContainerStyle={[styles.listContent, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }]}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={50}
+        windowSize={7}
+        removeClippedSubviews
+        refreshing={topicQuery.isRefetching}
+        onRefresh={activeTopic ? retryTopic : undefined}
+        style={styles.list}
+      />
       <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />
-    </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  list: { flex: 1, backgroundColor: palette.wall },
+  listContent: { flexGrow: 1, paddingHorizontal: spacing.lg },
+  pageHeader: { marginBottom: spacing.md },
+  flex: { flex: 1 },
   sectionLabel: { marginBottom: spacing.md },
-  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
-  addRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    backgroundColor: palette.surface,
-  },
-  addIcon: {
-    width: 36,
-    height: 36,
-    backgroundColor: palette.ink,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: palette.surface,
-    marginRight: spacing.sm,
-  },
+  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  addRow: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, padding: spacing.md, backgroundColor: palette.surface },
+  addIcon: { width: 36, height: 36, backgroundColor: palette.ink, justifyContent: "center", alignItems: "center" },
+  addSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
+  channelSection: { marginTop: spacing.xl, marginHorizontal: -spacing.lg },
+  horizontalContent: { paddingHorizontal: spacing.lg },
+  textAction: { minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" },
+  accentCaption: { ...type.caption, color: palette.accent },
+  channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
+  channelAvatar: { width: 88, height: 88, backgroundColor: palette.surfaceDeep, overflow: "hidden", marginBottom: spacing.sm },
+  avatarImage: { width: "100%", height: "100%" },
+  channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
+  noTopics: { marginTop: spacing.xl },
+  linkRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, marginTop: -spacing.md, alignSelf: "flex-start" },
+  accentLabel: { ...type.label, color: palette.accent },
+  collectionsHeader: { marginTop: spacing.xl },
+  chipsContent: { paddingVertical: spacing.sm },
+  chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, backgroundColor: palette.surface, marginRight: spacing.sm },
   chipActive: { backgroundColor: palette.ink },
   chipEmoji: { fontSize: 14, color: palette.accent },
   chipLabel: { ...type.label, fontSize: 13 },
-  channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
-  channelAvatar: {
-    width: 88,
-    height: 88,
-    backgroundColor: palette.surfaceDeep,
-    overflow: "hidden",
-    marginBottom: spacing.sm,
-  },
-  channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.md },
+  lightText: { color: palette.wall },
+  topicHeading: { marginTop: spacing.lg, marginBottom: spacing.md },
+  topicTitle: { ...type.heading, fontSize: 18 },
+  loadingState: { minHeight: 180, alignItems: "center", justifyContent: "center" },
+  loadingText: { ...type.bodySoft, marginTop: spacing.md },
+  retryButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: -spacing.lg, alignSelf: "flex-start" },
+  pressed: { opacity: 0.6 },
 });

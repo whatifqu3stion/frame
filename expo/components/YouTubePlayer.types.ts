@@ -22,4 +22,5 @@ export type YouTubePlayerProps = {
   onEnded: () => void;
   onError: (error: YouTubePlayerError) => void;
   onFullscreenChange: (isFullscreen: boolean) => void;
+  onConnectivityChange: (isOnline: boolean) => void;
 };

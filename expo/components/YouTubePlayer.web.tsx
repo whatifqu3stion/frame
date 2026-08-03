@@ -213,6 +213,17 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
   }, [props.startSeconds, props.videoId, reportProgress]);
 
   useEffect(() => {
+    const reportConnectivity = (): void => callbacksRef.current.onConnectivityChange(navigator.onLine !== false);
+    reportConnectivity();
+    window.addEventListener("online", reportConnectivity);
+    window.addEventListener("offline", reportConnectivity);
+    return () => {
+      window.removeEventListener("online", reportConnectivity);
+      window.removeEventListener("offline", reportConnectivity);
+    };
+  }, []);
+
+  useEffect(() => {
     const reportFullscreen = (): void => {
       const fullscreenElement = document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
       let isPlayerFullscreen = false;

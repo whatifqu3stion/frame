@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { Linking, StyleSheet } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from "react-native-webview/lib/WebViewTypes";
@@ -37,6 +37,7 @@ function playerHtml(videoId: string, startSeconds: number): string {
     var timer = null;
     var lastPosted = -1;
     var isFullscreen = false;
+    var isOnline = navigator.onLine !== false;
     function post(message) {
       if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
     }
@@ -45,6 +46,28 @@ function playerHtml(videoId: string, startSeconds: number): string {
       if (next === isFullscreen) return;
       isFullscreen = next;
       post({ type: 'fullscreen', isFullscreen: next });
+    }
+    function reportConnectivity(nextOnline) {
+      var next = !!nextOnline;
+      isOnline = next;
+      post({ type: 'connectivity', isOnline: next });
+    }
+    function stopProgressTimer() {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+    }
+    function startProgressTimer() {
+      if (timer) return;
+      timer = setInterval(reportProgress, 1000);
+    }
+    function disposePlayer() {
+      stopProgressTimer();
+      try {
+        if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
+        if (player && typeof player.destroy === 'function') player.destroy();
+      } catch (error) {}
+      player = null;
     }
     function detectFullscreen() {
       reportFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
@@ -89,11 +112,12 @@ function playerHtml(videoId: string, startSeconds: number): string {
           onReady: function() {
             var duration = Number(player.getDuration()) || 0;
             post({ type: 'ready', duration: duration });
-            if (timer) clearInterval(timer);
-            timer = setInterval(reportProgress, 1000);
+            reportConnectivity(navigator.onLine !== false);
           },
           onStateChange: function(event) {
             reportProgress();
+            if (event.data === 1) startProgressTimer();
+            else stopProgressTimer();
             post({ type: 'state', state: event.data });
           },
           onError: function(event) {
@@ -107,6 +131,11 @@ function playerHtml(videoId: string, startSeconds: number): string {
     document.addEventListener('webkitfullscreenchange', detectFullscreen);
     document.addEventListener('webkitbeginfullscreen', function() { reportFullscreen(true); }, true);
     document.addEventListener('webkitendfullscreen', function() { reportFullscreen(false); }, true);
+    window.addEventListener('online', function() { reportConnectivity(true); });
+    window.addEventListener('offline', function() { reportConnectivity(false); });
+    window.addEventListener('pagehide', disposePlayer);
+    window.addEventListener('beforeunload', disposePlayer);
+    reportConnectivity(navigator.onLine !== false);
     var tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
     tag.onerror = function() { post({ type: 'shellError' }); };
@@ -126,7 +155,7 @@ function youtubeError(code?: number): YouTubePlayerError {
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
-  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange },
+  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange, onConnectivityChange },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
@@ -153,6 +182,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         state?: number;
         code?: number;
         isFullscreen?: boolean;
+        isOnline?: boolean;
       };
       if (data.type === "ready") {
         onReady(data.duration ?? 0);
@@ -176,11 +206,21 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         onFullscreenChange(data.isFullscreen);
         return;
       }
+      if (data.type === "connectivity" && typeof data.isOnline === "boolean") {
+        onConnectivityChange(data.isOnline);
+        return;
+      }
       if (data.type === "shellError") onError({ message: "YouTube could not be reached. Check your connection and retry." });
     } catch {
       onError({ message: "The player returned an unreadable response." });
     }
-  }, [onEnded, onError, onFullscreenChange, onProgress, onReady, onStateChange]);
+  }, [onConnectivityChange, onEnded, onError, onFullscreenChange, onProgress, onReady, onStateChange]);
+
+  useEffect(() => {
+    return () => {
+      webViewRef.current?.injectJavaScript("try{disposePlayer();}catch(error){};true;");
+    };
+  }, []);
 
   const handleWebViewError = useCallback((_event: WebViewErrorEvent): void => {
     onError({ message: "YouTube could not be reached. Check your connection and retry." });
@@ -192,11 +232,16 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
 
   const shouldStart = useCallback((request: ShouldStartLoadRequest): boolean => {
     const url = request.url;
-    const isTrustedPlayerUrl = url.startsWith("https://www.youtube.com/")
-      || url.startsWith("https://www.youtube-nocookie.com/");
-    if (url === "about:blank" || url.startsWith(PLAYER_ORIGIN)) return true;
-    if (request.isTopFrame === false && isTrustedPlayerUrl) return true;
-    if (/^https?:\/\//.test(url)) void Linking.openURL(url).catch(() => {});
+    if (url === "about:blank") return true;
+    try {
+      const parsed = new URL(url);
+      const isFrameOrigin = parsed.origin === PLAYER_ORIGIN;
+      const isTrustedYouTube = parsed.protocol === "https:"
+        && (parsed.hostname === "www.youtube.com" || parsed.hostname === "www.youtube-nocookie.com");
+      if (isFrameOrigin) return true;
+      if (request.isTopFrame === false && isTrustedYouTube) return true;
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") void Linking.openURL(url).catch(() => {});
+    } catch {}
     return false;
   }, []);
 

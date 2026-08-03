@@ -1,15 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { Check, Plus } from "lucide-react-native";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Check, Plus, RotateCcw } from "lucide-react-native";
+import { useCallback } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
 import { palette, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
 import { getChannel, getChannelVideos } from "@/services/youtube";
+import type { Video } from "@/types";
 
 export default function ChannelScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
 
@@ -34,7 +38,7 @@ export default function ChannelScreen() {
     : undefined;
   const following = id ? isChannelFollowed(id) : false;
 
-  const toggleFollow = async () => {
+  const toggleFollow = useCallback(async (): Promise<void> => {
     if (!channel) return;
     if (following) {
       await unfollowChannel(channel.id);
@@ -42,78 +46,105 @@ export default function ChannelScreen() {
     }
     if (!requirePurchase()) return;
     await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
-  };
+  }, [channel, followChannel, following, requirePurchase, unfollowChannel]);
 
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+  const retryUploads = useCallback((): void => {
+    void videosQuery.refetch();
+  }, [videosQuery]);
+
+  const header = (
+    <>
       <View style={styles.header}>
         <View style={styles.avatar}>
           {channel?.thumbnailUrl ? (
-            <Image source={{ uri: channel.thumbnailUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+            <Image
+              source={{ uri: channel.thumbnailUrl }}
+              style={styles.avatarImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={channel.id}
+            />
           ) : null}
         </View>
         <Text style={type.caption}>Channel</Text>
-        <Text style={[type.title, { marginTop: spacing.sm }]}>{channel?.title ?? "—"}</Text>
+        <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? "—"}</Text>
         {channel?.description ? (
-          <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 360 }]} numberOfLines={4}>
-            {channel.description}
-          </Text>
+          <Text style={styles.description} numberOfLines={4}>{channel.description}</Text>
         ) : null}
 
         {channel ? (
-          <Pressable onPress={toggleFollow} style={[styles.followBtn, following && styles.followBtnActive]} testID="follow-channel">
-            {following ? (
-              <>
-                <Check size={15} color={palette.accent} strokeWidth={1.8} />
-                <Text style={[styles.followText, { color: palette.accent }]}>Following</Text>
-              </>
-            ) : (
-              <>
-                <Plus size={15} color={palette.wall} strokeWidth={1.8} />
-                <Text style={[styles.followText, { color: palette.wall }]}>Follow channel</Text>
-              </>
-            )}
+          <Pressable
+            onPress={toggleFollow}
+            style={({ pressed }) => [styles.followBtn, following && styles.followBtnActive, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: following }}
+            accessibilityLabel={following ? `Unfollow ${channel.title}` : `Follow ${channel.title}`}
+            testID="follow-channel"
+          >
+            {following ? <Check size={15} color={palette.accent} strokeWidth={1.8} /> : <Plus size={15} color={palette.wall} strokeWidth={1.8} />}
+            <Text style={[styles.followText, { color: following ? palette.accent : palette.wall }]}>{following ? "Following" : "Follow channel"}</Text>
           </Pressable>
         ) : null}
       </View>
-
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
+      <View style={styles.videoHeading}>
         <Text style={type.caption}>Videos</Text>
-        <View style={{ marginTop: spacing.md }}>
-          {videosQuery.isLoading ? (
-            <Text style={type.bodySoft}>Loading verified uploads…</Text>
-          ) : videos.length > 0 ? (
-            videos.map((video) => <VideoCard key={video.id} video={video} variant="wide" />)
-          ) : videosQuery.data?.status === "empty" ? (
-            <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
-          ) : (
-            <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "The saved creator is still on your shelf. Try again later."} />
-          )}
-        </View>
       </View>
-    </ScrollView>
+    </>
+  );
+
+  const empty = videosQuery.isLoading ? (
+    <View style={styles.loadingState} accessible accessibilityRole="progressbar" accessibilityLabel="Loading verified uploads">
+      <ActivityIndicator color={palette.accent} />
+      <Text style={styles.loadingText}>Loading verified uploads…</Text>
+    </View>
+  ) : videosQuery.data?.status === "empty" ? (
+    <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
+  ) : (
+    <View>
+      <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "The saved creator is still on your shelf. Check your connection and try again."} />
+      <Pressable onPress={retryUploads} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
+        <RotateCcw size={16} color={palette.accent} />
+        <Text style={styles.retryText}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <FlatList<Video>
+      data={videos}
+      keyExtractor={(video) => video.id}
+      renderItem={({ item }) => <VideoCard video={item} variant="wide" />}
+      ListHeaderComponent={header}
+      ListEmptyComponent={empty}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}
+      showsVerticalScrollIndicator={false}
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      updateCellsBatchingPeriod={50}
+      windowSize={7}
+      removeClippedSubviews
+      refreshing={videosQuery.isRefetching}
+      onRefresh={retryUploads}
+      style={styles.list}
+    />
   );
 }
 
 const styles = StyleSheet.create({
+  list: { flex: 1, backgroundColor: palette.wall },
+  content: { flexGrow: 1 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  avatar: {
-    width: 72,
-    height: 72,
-    backgroundColor: palette.surfaceDeep,
-    marginBottom: spacing.lg,
-    overflow: "hidden",
-  },
-  followBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    alignSelf: "flex-start",
-    marginTop: spacing.lg,
-    backgroundColor: palette.ink,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 12,
-  },
+  avatar: { width: 72, height: 72, backgroundColor: palette.surfaceDeep, marginBottom: spacing.lg, overflow: "hidden" },
+  avatarImage: { width: "100%", height: "100%" },
+  channelName: { marginTop: spacing.sm },
+  description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
+  followBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.ink, paddingHorizontal: spacing.lg, justifyContent: "center" },
   followBtnActive: { backgroundColor: palette.surface },
   followText: { fontFamily: "Georgia", fontSize: 14 },
+  videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
+  loadingState: { minHeight: 180, paddingHorizontal: spacing.lg, alignItems: "center", justifyContent: "center" },
+  loadingText: { ...type.bodySoft, marginTop: spacing.md },
+  retryButton: { minHeight: 44, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
+  retryText: { ...type.label, color: palette.accent },
+  pressed: { opacity: 0.6 },
 });

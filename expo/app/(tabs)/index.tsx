@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { Image } from "expo-image";
 import { Link2, Play } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -62,7 +62,7 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: palette.wall }}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: 120 }}
+      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={{ paddingHorizontal: spacing.lg }}>
@@ -115,15 +115,18 @@ export default function HomeScreen() {
           <View style={styles.sectionLabel}>
             <Text style={type.caption}>Continue Watching</Text>
           </View>
-          <ScrollView
+          <FlatList
             horizontal
+            data={resumeVideos}
+            keyExtractor={(item) => item.video.id}
+            renderItem={({ item }) => <VideoCard video={item.video} variant="compact" progressSeconds={item.progress} />}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.lg }}
-          >
-            {resumeVideos.map(({ video, progress }) => (
-              <VideoCard key={video.id} video={video} variant="compact" progressSeconds={progress} />
-            ))}
-          </ScrollView>
+            initialNumToRender={3}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews
+          />
         </View>
       )}
 
@@ -165,25 +168,31 @@ export default function HomeScreen() {
               <Text style={type.caption}>Your Channels</Text>
             </View>
           </View>
-          <ScrollView
+          <FlatList
             horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}
-          >
-            {followedChannels.map((channel) => (
+            data={followedChannels}
+            keyExtractor={(channel) => channel.id}
+            renderItem={({ item: channel }) => (
               <Pressable
-                key={channel.id}
-                style={styles.channelTile}
+                style={({ pressed }) => [styles.channelTile, pressed && styles.pressed]}
                 onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${channel.title} channel`}
                 testID={`channel-${channel.id}`}
               >
                 <View style={styles.channelAvatar}>
-                  {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : null}
+                  {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" recyclingKey={channel.id} /> : null}
                 </View>
                 <Text style={styles.channelName} numberOfLines={2}>{channel.title}</Text>
               </Pressable>
-            ))}
-          </ScrollView>
+            )}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}
+            initialNumToRender={4}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            removeClippedSubviews
+          />
         </>
       ) : null}
 
@@ -235,5 +244,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: spacing.sm,
   },
+  avatarImage: { width: "100%", height: "100%" },
   channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
+  pressed: { opacity: 0.6 },
 });

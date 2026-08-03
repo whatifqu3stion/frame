@@ -1,6 +1,7 @@
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useRef } from "react";
+import { memo, useCallback, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { palette, spacing, type } from "@/constants/theme";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
@@ -30,7 +31,7 @@ function DurationBadge({ seconds }: { seconds: number }) {
   );
 }
 
-export default function VideoCard({ video, variant = "full", progressSeconds }: Props) {
+function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const navigationLocked = useRef<boolean>(false);
   const progressFraction = progressSeconds && video.durationSeconds
     ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds))
@@ -38,9 +39,10 @@ export default function VideoCard({ video, variant = "full", progressSeconds }: 
   const accessibilityLabel = `Play ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}`;
   const dateLabel = formatRelativeDate(video.publishedAt);
 
-  const onPress = () => {
+  const onPress = useCallback((): void => {
     if (navigationLocked.current) return;
     navigationLocked.current = true;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     router.push({
       pathname: "/watch/[id]",
       params: {
@@ -54,13 +56,13 @@ export default function VideoCard({ video, variant = "full", progressSeconds }: 
       },
     });
     setTimeout(() => { navigationLocked.current = false; }, 800);
-  };
+  }, [video]);
 
   if (variant === "compact") {
     return (
       <Pressable onPress={onPress} style={styles.compactRoot} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
         <View style={styles.compactThumbWrap}>
-          <Image source={{ uri: video.thumbnailUrl }} style={styles.compactThumb} contentFit="cover" transition={200} />
+          <Image source={{ uri: video.thumbnailUrl }} style={styles.compactThumb} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} transition={120} />
           <DurationBadge seconds={video.durationSeconds} />
           <ProgressBar fraction={progressFraction} />
         </View>
@@ -77,7 +79,7 @@ export default function VideoCard({ video, variant = "full", progressSeconds }: 
     return (
       <Pressable onPress={onPress} style={styles.wideRoot} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
         <View style={styles.wideThumbWrap}>
-          <Image source={{ uri: video.thumbnailUrl }} style={styles.wideThumb} contentFit="cover" transition={200} />
+          <Image source={{ uri: video.thumbnailUrl }} style={styles.wideThumb} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} transition={120} />
           <DurationBadge seconds={video.durationSeconds} />
           <ProgressBar fraction={progressFraction} />
         </View>
@@ -93,7 +95,7 @@ export default function VideoCard({ video, variant = "full", progressSeconds }: 
   return (
     <Pressable onPress={onPress} style={styles.fullRoot} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
       <View style={styles.fullThumbWrap}>
-        <Image source={{ uri: video.thumbnailUrl }} style={styles.fullThumb} contentFit="cover" transition={250} />
+        <Image source={{ uri: video.thumbnailUrl }} style={styles.fullThumb} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} transition={160} />
         <DurationBadge seconds={video.durationSeconds} />
         <ProgressBar fraction={progressFraction} />
       </View>
@@ -105,6 +107,8 @@ export default function VideoCard({ video, variant = "full", progressSeconds }: 
     </Pressable>
   );
 }
+
+export default memo(VideoCard);
 
 const styles = StyleSheet.create({
   fullRoot: { width: "100%", marginBottom: spacing.xl },

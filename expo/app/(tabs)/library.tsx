@@ -1,8 +1,9 @@
-import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
+import { router } from "expo-router";
 import { Link2, ListPlus, Pencil, Play, Trash2 } from "lucide-react-native";
-import { useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
@@ -13,6 +14,7 @@ import { useApp } from "@/providers/AppProvider";
 import type { Video } from "@/types";
 
 type Tab = "saved" | "later" | "resume" | "queues" | "channels";
+type LibraryVideoItem = { video: Video; progressSeconds?: number };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "saved", label: "Saved" },
@@ -41,179 +43,192 @@ export default function LibraryScreen() {
   const [queueName, setQueueName] = useState<string>("");
   const [addChannelOpen, setAddChannelOpen] = useState<boolean>(false);
 
-  const openCreateQueue = () => {
+  const videoItems = useMemo<LibraryVideoItem[]>(() => {
+    if (tab === "saved") return savedVideos.map((video) => ({ video }));
+    if (tab === "later") return watchLater.map((video) => ({ video }));
+    if (tab !== "resume") return [];
+
+    return resumeList.flatMap((resume): LibraryVideoItem[] => {
+      const video = savedVideos.find((candidate) => candidate.id === resume.videoId)
+        ?? watchLater.find((candidate) => candidate.id === resume.videoId)
+        ?? (resume.title ? {
+          id: resume.videoId,
+          title: resume.title,
+          channelTitle: resume.channelTitle ?? "",
+          channelId: "",
+          thumbnailUrl: resume.thumbnailUrl ?? `https://i.ytimg.com/vi/${resume.videoId}/hqdefault.jpg`,
+          publishedAt: "",
+          durationSeconds: resume.durationSeconds ?? 0,
+        } : null);
+      return video ? [{ video, progressSeconds: resume.timestampSeconds }] : [];
+    });
+  }, [resumeList, savedVideos, tab, watchLater]);
+
+  const chooseTab = useCallback((nextTab: Tab): void => {
+    void Haptics.selectionAsync().catch(() => {});
+    setTab(nextTab);
+  }, []);
+
+  const openCreateQueue = useCallback((): void => {
     if (!requirePurchase()) return;
     setQueueName("");
     setQueueModal({ mode: "create" });
-  };
+  }, [requirePurchase]);
 
-  const openRenameQueue = (id: string, current: string) => {
+  const openRenameQueue = useCallback((id: string, current: string): void => {
     setQueueName(current);
     setQueueModal({ mode: "rename", id });
-  };
+  }, []);
 
-  const submitQueue = async () => {
+  const submitQueue = useCallback(async (): Promise<void> => {
     if (!queueName.trim() || !queueModal) return;
-    if (queueModal.mode === "create") {
-      await createQueue(queueName);
-    } else if (queueModal.id) {
-      await renameQueue(queueModal.id, queueName);
-    }
+    if (queueModal.mode === "create") await createQueue(queueName);
+    else if (queueModal.id) await renameQueue(queueModal.id, queueName);
     setQueueName("");
     setQueueModal(null);
-  };
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [createQueue, queueModal, queueName, renameQueue]);
 
-  const confirmDeleteQueue = (id: string, name: string) => {
+  const confirmDeleteQueue = useCallback((id: string, name: string): void => {
     Alert.alert("Delete queue?", `“${name}” will be removed.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => removeQueue(id) },
+      { text: "Delete", style: "destructive", onPress: () => { void removeQueue(id); } },
     ]);
-  };
+  }, [removeQueue]);
 
-  const confirmUnfollow = (id: string, name: string) => {
+  const confirmUnfollow = useCallback((id: string, name: string): void => {
     Alert.alert("Unfollow channel?", `“${name}” will be removed from your shelf.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Unfollow", style: "destructive", onPress: () => unfollowChannel(id) },
+      { text: "Unfollow", style: "destructive", onPress: () => { void unfollowChannel(id); } },
     ]);
-  };
+  }, [unfollowChannel]);
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: palette.wall }}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: 120 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={{ paddingHorizontal: spacing.lg }}>
+  const header = (
+    <>
+      <View style={styles.pageHeader}>
         <ScreenHeader eyebrow="Library" title={"Your\nshelf."} subtitle="Only what you chose to keep." />
       </View>
-
-      <Pressable onPress={() => router.push("/session")} style={styles.sessionRow} testID="library-session">
-        <Play size={15} color={palette.accent} strokeWidth={1.8} fill={palette.accent} />
-        <Text style={[type.label, { color: palette.accent }]}>Start a session from your library</Text>
-      </Pressable>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabsRow}
+      <Pressable
+        onPress={() => router.push("/session")}
+        style={({ pressed }) => [styles.sessionRow, pressed && styles.pressed]}
+        accessibilityRole="button"
+        testID="library-session"
       >
-        {TABS.map((t) => (
-          <Pressable key={t.id} onPress={() => setTab(t.id)} style={styles.tabButton} testID={`library-tab-${t.id}`}>
-            <Text style={[styles.tabLabel, tab === t.id && styles.tabLabelActive]}>{t.label}</Text>
-            {tab === t.id && <View style={styles.tabUnderline} />}
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
-        {tab === "saved" && (
-          savedVideos.length === 0 ? (
-            <EmptyState title="Nothing saved" body="Save a video while watching and it lives here, forever." />
-          ) : (
-            savedVideos.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
-          )
-        )}
-
-        {tab === "later" && (
-          watchLater.length === 0 ? (
-            <EmptyState title="Watch Later is empty" body="Tap “Later” while watching to set something aside for a calmer moment." />
-          ) : (
-            watchLater.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
-          )
-        )}
-
-        {tab === "resume" && (
-          resumeList.length === 0 ? (
-            <EmptyState title="No half-watched videos" body="Frame remembers where you stopped." />
-          ) : (
-            resumeList.map((r) => {
-              const v: Video | null = savedVideos.find((s) => s.id === r.videoId)
-                ?? watchLater.find((s) => s.id === r.videoId)
-                ?? (r.title ? {
-                  id: r.videoId,
-                  title: r.title ?? "",
-                  channelTitle: r.channelTitle ?? "",
-                  channelId: "",
-                  thumbnailUrl: r.thumbnailUrl ?? "",
-                  publishedAt: "",
-                  durationSeconds: r.durationSeconds ?? 0,
-                } : null);
-              if (!v) return null;
-              return <VideoCard key={r.videoId} video={v} variant="wide" progressSeconds={r.timestampSeconds} />;
-            })
-          )
-        )}
-
-        {tab === "queues" && (
-          <>
-            <Pressable onPress={openCreateQueue} style={styles.newQueueRow} testID="new-queue">
-              <ListPlus size={18} color={palette.accent} strokeWidth={1.6} />
-              <Text style={[type.label, { color: palette.accent }]}>New queue</Text>
+        <Play size={15} color={palette.accent} strokeWidth={1.8} fill={palette.accent} />
+        <Text style={styles.accentLabel}>Start a session from your library</Text>
+      </Pressable>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
+        {TABS.map((item) => {
+          const selected = tab === item.id;
+          return (
+            <Pressable
+              key={item.id}
+              onPress={() => chooseTab(item.id)}
+              style={styles.tabButton}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              testID={`library-tab-${item.id}`}
+            >
+              <Text style={[styles.tabLabel, selected && styles.tabLabelActive]}>{item.label}</Text>
+              {selected ? <View style={styles.tabUnderline} /> : null}
             </Pressable>
-            {queues.length === 0 ? (
-              <EmptyState title="No queues" body="Create a sequence of videos for an evening." />
-            ) : (
-              queues.map((q) => (
-                <View key={q.id} style={styles.queueCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={type.caption}>{q.orderedVideoIds.length} videos</Text>
-                    <Text style={[type.heading, { marginTop: spacing.xs }]}>{q.name}</Text>
-                  </View>
-                  <Pressable onPress={() => openRenameQueue(q.id, q.name)} hitSlop={8} style={styles.queueAction}>
-                    <Pencil size={15} color={palette.inkMuted} strokeWidth={1.6} />
-                  </Pressable>
-                  <Pressable onPress={() => confirmDeleteQueue(q.id, q.name)} hitSlop={8} style={styles.queueAction}>
-                    <Trash2 size={15} color={palette.inkMuted} strokeWidth={1.6} />
-                  </Pressable>
-                </View>
-              ))
-            )}
-          </>
-        )}
+          );
+        })}
+      </ScrollView>
+    </>
+  );
 
-        {tab === "channels" && (
-          <Pressable onPress={() => setAddChannelOpen(true)} style={styles.newQueueRow} testID="library-add-channel">
-            <Link2 size={18} color={palette.accent} strokeWidth={1.6} />
-            <Text style={[type.label, { color: palette.accent }]}>Add a channel by link</Text>
+  const videoEmpty = tab === "saved" ? (
+    <EmptyState title="Nothing saved" body="Save a video while watching and it lives here, forever." />
+  ) : tab === "later" ? (
+    <EmptyState title="Watch Later is empty" body="Tap “Later” while watching to set something aside for a calmer moment." />
+  ) : (
+    <EmptyState title="No half-watched videos" body="Frame remembers where you stopped." />
+  );
+
+  const queueContent = (
+    <View>
+      <Pressable onPress={openCreateQueue} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="new-queue">
+        <ListPlus size={18} color={palette.accent} strokeWidth={1.6} />
+        <Text style={styles.accentLabel}>New queue</Text>
+      </Pressable>
+      {queues.length === 0 ? <EmptyState title="No queues" body="Create a sequence of videos for an evening." /> : queues.map((queue) => (
+        <View key={queue.id} style={styles.queueCard}>
+          <View style={styles.flex}>
+            <Text style={type.caption}>{queue.orderedVideoIds.length} videos</Text>
+            <Text style={styles.itemHeading}>{queue.name}</Text>
+          </View>
+          <Pressable onPress={() => openRenameQueue(queue.id, queue.name)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={`Rename ${queue.name}`}>
+            <Pencil size={17} color={palette.inkMuted} strokeWidth={1.6} />
           </Pressable>
-        )}
+          <Pressable onPress={() => confirmDeleteQueue(queue.id, queue.name)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={`Delete ${queue.name}`}>
+            <Trash2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  );
 
-        {tab === "channels" && (
-          followedChannels.length === 0 ? (
-            <EmptyState title="No followed channels" body="Paste a channel or video link above, or follow channels while you watch." />
-          ) : (
-            followedChannels.map((c) => (
-              <Pressable
-                key={c.id}
-                onPress={() => router.push({ pathname: "/channel/[id]", params: { id: c.id } })}
-                style={styles.channelRow}
-                testID={`followed-${c.id}`}
-              >
-                <View style={styles.channelAvatar}>
-                  {c.thumbnailUrl ? (
-                    <Image source={{ uri: c.thumbnailUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
-                  ) : null}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={type.heading} numberOfLines={1}>{c.title}</Text>
-                  {c.description ? (
-                    <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]} numberOfLines={1}>{c.description}</Text>
-                  ) : null}
-                </View>
-                <Pressable onPress={() => confirmUnfollow(c.id, c.title)} hitSlop={8} style={styles.queueAction}>
-                  <Trash2 size={15} color={palette.inkMuted} strokeWidth={1.6} />
-                </Pressable>
-              </Pressable>
-            ))
-          )
+  const channelContent = (
+    <View>
+      <Pressable onPress={() => setAddChannelOpen(true)} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="library-add-channel">
+        <Link2 size={18} color={palette.accent} strokeWidth={1.6} />
+        <Text style={styles.accentLabel}>Add a channel by link</Text>
+      </Pressable>
+      {followedChannels.length === 0 ? <EmptyState title="No followed channels" body="Paste a channel or video link above, or follow channels while you watch." /> : followedChannels.map((channel) => (
+        <View key={channel.id} style={styles.channelRow}>
+          <Pressable
+            onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })}
+            style={({ pressed }) => [styles.channelMain, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${channel.title} channel`}
+            testID={`followed-${channel.id}`}
+          >
+            <View style={styles.channelAvatar}>
+              {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" recyclingKey={channel.id} /> : null}
+            </View>
+            <View style={styles.flex}>
+              <Text style={type.heading} numberOfLines={1}>{channel.title}</Text>
+              {channel.description ? <Text style={styles.channelDescription} numberOfLines={1}>{channel.description}</Text> : null}
+            </View>
+          </Pressable>
+          <Pressable onPress={() => confirmUnfollow(channel.id, channel.title)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={`Unfollow ${channel.title}`}>
+            <Trash2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  );
+
+  const emptyContent = tab === "queues" ? queueContent : tab === "channels" ? channelContent : videoEmpty;
+
+  return (
+    <>
+      <FlatList<LibraryVideoItem>
+        data={videoItems}
+        keyExtractor={(item) => item.video.id}
+        renderItem={({ item }) => (
+          <View style={styles.videoItem}>
+            <VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} />
+          </View>
         )}
-      </View>
+        ListHeaderComponent={header}
+        ListEmptyComponent={<View style={styles.emptyContent}>{emptyContent}</View>}
+        contentContainerStyle={[styles.listContent, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }]}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={7}
+        maxToRenderPerBatch={7}
+        updateCellsBatchingPeriod={50}
+        windowSize={7}
+        removeClippedSubviews
+        style={styles.list}
+      />
 
       <Modal visible={queueModal !== null} animationType="fade" transparent onRequestClose={() => setQueueModal(null)}>
-        <Pressable onPress={() => setQueueModal(null)} style={styles.modalBackdrop}>
-          <Pressable onPress={(e) => e.stopPropagation()} style={styles.modalCard}>
+        <Pressable onPress={() => setQueueModal(null)} style={[styles.modalBackdrop, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
+          <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalCard}>
             <Text style={type.caption}>{queueModal?.mode === "rename" ? "Rename queue" : "New queue"}</Text>
-            <Text style={[type.heading, { marginTop: spacing.xs }]}>Name it</Text>
+            <Text style={styles.itemHeading}>Name it</Text>
             <TextInput
               value={queueName}
               onChangeText={setQueueName}
@@ -221,10 +236,11 @@ export default function LibraryScreen() {
               placeholder="Evening at home"
               placeholderTextColor={palette.inkMuted}
               style={styles.modalInput}
-              onSubmitEditing={submitQueue}
+              onSubmitEditing={() => { void submitQueue(); }}
               returnKeyType="done"
+              accessibilityLabel="Queue name"
             />
-            <Pressable onPress={submitQueue} style={styles.modalButton}>
+            <Pressable onPress={() => { void submitQueue(); }} style={({ pressed }) => [styles.modalButton, pressed && styles.pressed]} accessibilityRole="button">
               <Text style={styles.modalButtonText}>{queueModal?.mode === "rename" ? "Save" : "Create"}</Text>
             </Pressable>
           </Pressable>
@@ -232,80 +248,37 @@ export default function LibraryScreen() {
       </Modal>
 
       <AddChannelModal visible={addChannelOpen} onClose={() => setAddChannelOpen(false)} />
-    </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  sessionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: palette.surface,
-  },
-  tabsRow: {
-    flexDirection: "row",
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    gap: spacing.xl,
-  },
-  tabButton: { paddingVertical: spacing.xs },
-  tabLabel: {
-    ...type.caption,
-    fontSize: 11,
-    color: palette.inkMuted,
-  },
+  list: { flex: 1, backgroundColor: palette.wall },
+  listContent: { flexGrow: 1 },
+  pageHeader: { paddingHorizontal: spacing.lg },
+  flex: { flex: 1 },
+  sessionRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.lg, paddingHorizontal: spacing.md, backgroundColor: palette.surface },
+  accentLabel: { ...type.label, color: palette.accent },
+  tabsRow: { paddingHorizontal: spacing.lg, marginTop: spacing.lg, gap: spacing.xl },
+  tabButton: { minHeight: 44, justifyContent: "center" },
+  tabLabel: { ...type.caption, fontSize: 11, color: palette.inkMuted },
   tabLabelActive: { color: palette.ink },
   tabUnderline: { height: 2, backgroundColor: palette.accent, marginTop: spacing.xs },
-  newQueueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.md,
-  },
-  queueCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: palette.surface,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  queueAction: { padding: spacing.xs },
-  channelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: palette.surface,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  channelAvatar: {
-    width: 52,
-    height: 52,
-    backgroundColor: palette.surfaceDeep,
-    overflow: "hidden",
-  },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(26,28,26,0.4)", justifyContent: "center", padding: spacing.lg },
+  videoItem: { paddingHorizontal: spacing.lg },
+  emptyContent: { paddingHorizontal: spacing.lg },
+  newRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
+  queueCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, padding: spacing.md, marginBottom: spacing.md },
+  itemHeading: { ...type.heading, marginTop: spacing.xs },
+  iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  channelRow: { minHeight: 76, flexDirection: "row", alignItems: "center", backgroundColor: palette.surface, marginBottom: spacing.md, paddingRight: spacing.xs },
+  channelMain: { minHeight: 76, flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md },
+  channelAvatar: { width: 52, height: 52, backgroundColor: palette.surfaceDeep, overflow: "hidden" },
+  avatarImage: { width: "100%", height: "100%" },
+  channelDescription: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(26,28,26,0.4)", justifyContent: "center", paddingHorizontal: spacing.lg },
   modalCard: { backgroundColor: palette.wall, padding: spacing.lg },
-  modalInput: {
-    ...type.body,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: palette.surface,
-    paddingHorizontal: spacing.md,
-    fontSize: 16,
-  },
-  modalButton: {
-    marginTop: spacing.lg,
-    backgroundColor: palette.ink,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
+  modalInput: { ...type.body, marginTop: spacing.lg, minHeight: 52, backgroundColor: palette.surface, paddingHorizontal: spacing.md, fontSize: 16 },
+  modalButton: { minHeight: 48, marginTop: spacing.lg, backgroundColor: palette.ink, alignItems: "center", justifyContent: "center" },
   modalButtonText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
+  pressed: { opacity: 0.6 },
 });

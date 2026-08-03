@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -120,6 +121,9 @@ export default function WatchScreen() {
   const [playerKey, setPlayerKey] = useState<number>(0);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
+  const [isAppActive, setIsAppActive] = useState<boolean>(AppState.currentState === "active");
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(video?.durationSeconds ?? 0);
@@ -140,6 +144,10 @@ export default function WatchScreen() {
   const landscapePlayerWidth = Math.min(landscapeAvailableWidth, (landscapePlayerHeight * 16) / 9);
   const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
   const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
+
+  const haptic = useCallback((style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light): void => {
+    void Haptics.impactAsync(style).catch(() => {});
+  }, []);
 
   const setAction = useCallback((action: PendingAction): void => {
     pendingActionRef.current = action;
@@ -219,23 +227,28 @@ export default function WatchScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    setIsScreenFocused(true);
     void setOrientationRequest("watch", ScreenOrientation.OrientationLock.DEFAULT);
     return () => {
+      pauseAndPersist();
+      setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
+      setPlayerReady(false);
+      setIsScreenFocused(false);
       void clearOrientationRequest("fullscreen");
       void clearOrientationRequest("watch");
     };
-  }, []));
-
-  useFocusEffect(useCallback(() => {
-    return () => pauseAndPersist();
   }, [pauseAndPersist]));
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") {
+      const nextActive = state === "active";
+      if (!nextActive) {
         if (isFullscreenRef.current) leaveFullscreen();
         pauseAndPersist();
+        setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
+        setPlayerReady(false);
       }
+      setIsAppActive(nextActive);
     });
     return () => subscription.remove();
   }, [leaveFullscreen, pauseAndPersist]);
@@ -251,13 +264,13 @@ export default function WatchScreen() {
   }, [persist, playbackState, playerReady]);
 
   useEffect(() => {
-    if (!resumeReady || playerReady || playerError) return;
+    if (!resumeReady || playerReady || playerError || !isScreenFocused || !isAppActive) return;
     const timeout = setTimeout(() => {
-      setPlayerError({ message: "The player is taking too long to respond. Check your connection and retry." });
+      setPlayerError({ message: isOnline === false ? "You’re offline. Reconnect, then retry this video." : "The player is taking too long to respond. Check your connection and retry." });
       setAction(null);
     }, PLAYER_TIMEOUT_MS);
     return () => clearTimeout(timeout);
-  }, [playerError, playerReady, playerKey, resumeReady, setAction]);
+  }, [isAppActive, isOnline, isScreenFocused, playerError, playerReady, playerKey, resumeReady, setAction]);
 
   useEffect(() => {
     if (playerError) void AccessibilityInfo.announceForAccessibility(`Couldn’t play this video. ${playerError.message}`);
@@ -280,6 +293,10 @@ export default function WatchScreen() {
     setPlaybackState(state);
     if (state === "paused") void persist();
   }, [persist]);
+
+  const handleConnectivityChange = useCallback((nextOnline: boolean): void => {
+    setIsOnline(nextOnline);
+  }, []);
 
   const handleFullscreenChange = useCallback((nextFullscreen: boolean): void => {
     isFullscreenRef.current = nextFullscreen;
@@ -318,6 +335,7 @@ export default function WatchScreen() {
 
   const retryPlayer = useCallback((): void => {
     if (!beginAction("retry")) return;
+    haptic();
     if (isFullscreenRef.current) leaveFullscreen();
     didEndRef.current = false;
     const retryAt = Math.max(0, Math.floor(currentTimeRef.current));
@@ -326,15 +344,17 @@ export default function WatchScreen() {
     setPlayerError(null);
     setPlaybackState("unstarted");
     setPlayerKey((value) => value + 1);
-  }, [beginAction, leaveFullscreen]);
+  }, [beginAction, haptic, leaveFullscreen]);
 
   const closePlayer = useCallback((): void => {
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
+    haptic();
     if (isFullscreenRef.current) leaveFullscreen();
     pauseAndPersist();
-    router.back();
-  }, [leaveFullscreen, pauseAndPersist]);
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)");
+  }, [haptic, leaveFullscreen, pauseAndPersist]);
 
   const playNext = useCallback((): void => {
     if (!nextSessionId) {
@@ -343,6 +363,7 @@ export default function WatchScreen() {
     }
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
+    haptic();
     pauseAndPersist();
     setResumeReady(false);
     setPlayerReady(false);
@@ -351,23 +372,25 @@ export default function WatchScreen() {
       pathname: "/watch/[id]",
       params: { id: nextSessionId, session: sessionIds.join(","), i: String(sessionIndex + 1) },
     });
-  }, [closePlayer, nextSessionId, pauseAndPersist, sessionIds, sessionIndex]);
+  }, [closePlayer, haptic, nextSessionId, pauseAndPersist, sessionIds, sessionIndex]);
 
   const rewatch = useCallback((): void => {
     if (!beginAction("rewatch")) return;
+    haptic(Haptics.ImpactFeedbackStyle.Medium);
     didEndRef.current = false;
     currentTimeRef.current = 0;
     setPlaybackState("playing");
     playerRef.current?.seekTo(0);
     playerRef.current?.play();
     setAction(null);
-  }, [beginAction, setAction]);
+  }, [beginAction, haptic, setAction]);
 
   const openInYouTube = useCallback((): void => {
+    haptic();
     void Linking.openURL(`https://www.youtube.com/watch?v=${id}`).catch(() => {
       void AccessibilityInfo.announceForAccessibility("Couldn’t open YouTube.");
     });
-  }, [id]);
+  }, [haptic, id]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
@@ -393,15 +416,17 @@ export default function WatchScreen() {
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
         await saveVideo(normalizedVideo);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       } else {
         await unsaveVideo(video.id);
+        haptic();
       }
     } catch {
       void AccessibilityInfo.announceForAccessibility("Couldn’t update saved videos. Please try again.");
     } finally {
       setAction(null);
     }
-  }, [beginAction, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
+  }, [beginAction, haptic, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
 
   const toggleWatchLater = useCallback(async (): Promise<void> => {
     if (!video || !beginAction("later")) return;
@@ -411,15 +436,17 @@ export default function WatchScreen() {
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
         await addToWatchLater(normalizedVideo);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       } else {
         await removeFromWatchLater(video.id);
+        haptic();
       }
     } catch {
       void AccessibilityInfo.announceForAccessibility("Couldn’t update Watch Later. Please try again.");
     } finally {
       setAction(null);
     }
-  }, [addToWatchLater, beginAction, inWatchLater, removeFromWatchLater, requirePurchase, setAction, video]);
+  }, [addToWatchLater, beginAction, haptic, inWatchLater, removeFromWatchLater, requirePurchase, setAction, video]);
 
   if (!video) {
     return (
@@ -438,12 +465,13 @@ export default function WatchScreen() {
   const durationLabel = formatDuration(firstPositiveDuration(durationRef.current, video.durationSeconds));
   const detailLabel = [dateLabel, durationLabel === "—" ? "" : durationLabel].filter(Boolean).join(" · ");
   const showEnded = playbackState === "ended";
-  const showPlayer = resumeReady && playerReady && !playerError && !showEnded;
+  const shouldMountPlayer = resumeReady && isScreenFocused && isAppActive && !showEnded;
+  const showPlayer = shouldMountPlayer && playerReady && !playerError;
   const playerBusy = pendingAction === "retry";
 
   const stage = (
     <View style={styles.playerStage}>
-      {resumeReady ? (
+      {shouldMountPlayer ? (
         <View
           style={[styles.playerEmbed, !showPlayer && styles.playerEmbedHidden]}
           pointerEvents={showPlayer ? "auto" : "none"}
@@ -461,6 +489,7 @@ export default function WatchScreen() {
             onEnded={handleEnded}
             onError={handlePlayerError}
             onFullscreenChange={handleFullscreenChange}
+            onConnectivityChange={handleConnectivityChange}
           />
         </View>
       ) : null}
@@ -468,14 +497,14 @@ export default function WatchScreen() {
       {!playerReady && !playerError ? (
         <View style={styles.stateSurface} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
           <ActivityIndicator color={palette.wall} />
-          <Text style={styles.playerStatusText}>{resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
+          <Text style={styles.playerStatusText}>{isOnline === false ? "You’re offline" : resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
         </View>
       ) : null}
 
       {playerError ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="assertive">
           <Text style={styles.errorTitle} accessibilityRole="alert">Couldn’t play this video</Text>
-          <Text style={styles.errorBody}>{playerError.message}</Text>
+          <Text style={styles.errorBody}>{isOnline === false ? "You’re offline. Reconnect, then retry this video." : playerError.message}</Text>
           <View style={styles.stateActions}>
             <Pressable
               onPress={retryPlayer}
@@ -547,7 +576,7 @@ export default function WatchScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="dark" hidden={isFullscreen} />
+      <StatusBar style="light" hidden={isFullscreen} />
       <View style={[styles.watchChrome, { paddingTop: insets.top }]}>
         <Pressable
           onPress={closePlayer}
@@ -556,10 +585,10 @@ export default function WatchScreen() {
           accessibilityLabel="Close video"
           testID="watch-back"
         >
-          <ChevronLeft color={palette.ink} size={22} />
+          <ChevronLeft color={palette.wall} size={22} />
           <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
-        {isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
+        {isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
       </View>
 
       <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>
@@ -568,7 +597,7 @@ export default function WatchScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
         {video.channelTitle ? <Text style={type.caption}>{video.channelTitle}</Text> : null}
-        <Text style={[type.title, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
+        <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
         {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
 
         <View style={styles.actionRow} accessibilityRole="toolbar">
@@ -581,8 +610,8 @@ export default function WatchScreen() {
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
-            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accent} /> : <Bookmark size={17} color={isSaved ? palette.accent : palette.ink} strokeWidth={1.6} fill={isSaved ? palette.accent : "transparent"} />}
-            <Text style={[type.label, isSaved && { color: palette.accent }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
+            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} />}
+            <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
           <Pressable
             onPress={toggleWatchLater}
@@ -593,8 +622,8 @@ export default function WatchScreen() {
             accessibilityLabel={inWatchLater ? "Remove from Watch Later" : "Add to Watch Later"}
             testID="action-watchlater"
           >
-            {pendingAction === "later" ? <ActivityIndicator size="small" color={palette.accent} /> : <Clock size={17} color={inWatchLater ? palette.accent : palette.ink} strokeWidth={1.6} />}
-            <Text style={[type.label, inWatchLater && { color: palette.accent }]}>{pendingAction === "later" ? "Updating…" : inWatchLater ? "Added" : "Later"}</Text>
+            {pendingAction === "later" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Clock size={17} color={inWatchLater ? palette.accentSoft : palette.wall} strokeWidth={1.6} />}
+            <Text style={[type.label, styles.actionLabel, inWatchLater && { color: palette.accentSoft }]}>{pendingAction === "later" ? "Updating…" : inWatchLater ? "Added" : "Later"}</Text>
           </Pressable>
         </View>
 
@@ -613,7 +642,7 @@ export default function WatchScreen() {
             accessibilityLabel={`View ${video.channelTitle || "video"} channel`}
           >
             <Text style={type.caption}>Channel</Text>
-            <Text style={[type.heading, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
+            <Text style={[type.heading, styles.channelTitle, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
             <Text style={[type.caption, styles.channelLinkLabel]}>View channel →</Text>
           </Pressable>
         ) : null}
@@ -623,10 +652,10 @@ export default function WatchScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.wall },
+  screen: { flex: 1, backgroundColor: "#080808" },
   watchChrome: {
     minHeight: 52,
-    backgroundColor: palette.wall,
+    backgroundColor: "#080808",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -640,8 +669,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
-  closeLabel: { ...type.label, color: palette.ink },
-  fullscreenStatus: { ...type.caption, marginRight: spacing.sm },
+  closeLabel: { ...type.label, color: palette.wall },
+  fullscreenStatus: { ...type.caption, color: palette.wall, marginRight: spacing.sm },
   portraitPlayerArea: { width: "100%", backgroundColor: "#000", alignItems: "center" },
   playerStage: { width: "100%", height: "100%", backgroundColor: "#000", overflow: "hidden" },
   playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
@@ -669,14 +698,17 @@ const styles = StyleSheet.create({
   landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
   landscapeClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(250,249,246,0.26)", backgroundColor: "rgba(250,249,246,0.08)" },
   landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
-  content: { padding: spacing.lg },
-  detailLabel: { marginTop: spacing.md, color: palette.inkMuted },
+  content: { padding: spacing.lg, backgroundColor: "#080808" },
+  videoTitle: { color: palette.wall },
+  detailLabel: { marginTop: spacing.md, color: "rgba(250,249,246,0.62)" },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
-  actionButton: { minHeight: 48, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: palette.surface },
+  actionButton: { minHeight: 48, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: "#171815" },
+  actionLabel: { color: palette.wall },
   notes: { marginTop: spacing.xl },
-  description: { marginTop: spacing.sm, color: palette.inkSoft },
-  channelLink: { marginTop: spacing.xxl, padding: spacing.lg, backgroundColor: palette.surface, minHeight: 44 },
-  channelLinkLabel: { color: palette.accent, marginTop: spacing.md },
+  description: { marginTop: spacing.sm, color: "rgba(250,249,246,0.76)" },
+  channelLink: { marginTop: spacing.xxl, padding: spacing.lg, backgroundColor: "#171815", minHeight: 44 },
+  channelTitle: { color: palette.wall },
+  channelLinkLabel: { color: palette.accentSoft, marginTop: spacing.md },
   unavailableScreen: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", paddingHorizontal: spacing.lg },
   unavailableBody: { marginTop: spacing.sm, color: palette.inkMuted },
   primaryLightButton: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", marginTop: spacing.lg },
