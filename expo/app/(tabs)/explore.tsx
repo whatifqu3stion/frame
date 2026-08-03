@@ -10,13 +10,16 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
-import { palette, spacing, type } from "@/constants/theme";
+import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { getTopicVideos } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { interests, followedChannels } = useApp();
   const [active, setActive] = useState<string | null>(interests[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
@@ -54,7 +57,7 @@ export default function ExploreScreen() {
         accessibilityRole="button"
         testID="explore-add-channel"
       >
-        <View style={styles.addIcon}><Plus size={16} color={palette.wall} strokeWidth={2} /></View>
+        <View style={styles.addIcon}><Plus size={16} color={palette.onDark} strokeWidth={2} /></View>
         <View style={styles.flex}>
           <Text style={type.label}>Add a channel by link</Text>
           <Text style={styles.addSubtitle}>Paste a channel or video URL.</Text>
@@ -172,38 +175,40 @@ export default function ExploreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: palette.wall },
-  listContent: { flexGrow: 1, paddingHorizontal: spacing.lg },
-  pageHeader: { marginBottom: spacing.md },
-  flex: { flex: 1 },
-  sectionLabel: { marginBottom: spacing.md },
-  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  addRow: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, padding: spacing.md, backgroundColor: palette.surface },
-  addIcon: { width: 36, height: 36, backgroundColor: palette.ink, justifyContent: "center", alignItems: "center" },
-  addSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
-  channelSection: { marginTop: spacing.xl, marginHorizontal: -spacing.lg },
-  horizontalContent: { paddingHorizontal: spacing.lg },
-  textAction: { minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" },
-  accentCaption: { ...type.caption, color: palette.accent },
-  channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
-  channelAvatar: { width: 88, height: 88, backgroundColor: palette.surfaceDeep, overflow: "hidden", marginBottom: spacing.sm },
-  avatarImage: { width: "100%", height: "100%" },
-  channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
-  noTopics: { marginTop: spacing.xl },
-  linkRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, marginTop: -spacing.md, alignSelf: "flex-start" },
-  accentLabel: { ...type.label, color: palette.accent },
-  collectionsHeader: { marginTop: spacing.xl },
-  chipsContent: { paddingVertical: spacing.sm },
-  chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, backgroundColor: palette.surface, marginRight: spacing.sm },
-  chipActive: { backgroundColor: palette.ink },
-  chipEmoji: { fontSize: 14, color: palette.accent },
-  chipLabel: { ...type.label, fontSize: 13 },
-  lightText: { color: palette.wall },
-  topicHeading: { marginTop: spacing.lg, marginBottom: spacing.md },
-  topicTitle: { ...type.heading, fontSize: 18 },
-  loadingState: { minHeight: 180, alignItems: "center", justifyContent: "center" },
-  loadingText: { ...type.bodySoft, marginTop: spacing.md },
-  retryButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: -spacing.lg, alignSelf: "flex-start" },
-  pressed: { opacity: 0.6 },
-});
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+    list: { flex: 1, backgroundColor: palette.wall },
+    listContent: { flexGrow: 1, paddingHorizontal: spacing.page },
+    pageHeader: { marginBottom: spacing.md },
+    flex: { flex: 1 },
+    sectionLabel: { marginBottom: spacing.md },
+    sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    addRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    addIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: palette.accentDeep, justifyContent: "center", alignItems: "center" },
+    addSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
+    channelSection: { marginTop: spacing.xl, marginHorizontal: -spacing.page },
+    horizontalContent: { paddingHorizontal: spacing.page },
+    textAction: { minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" },
+    accentCaption: { ...type.caption, color: palette.accent },
+    channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
+    channelAvatar: { width: 88, height: 88, borderRadius: radii.card, backgroundColor: palette.surfaceDeep, overflow: "hidden", marginBottom: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    avatarImage: { width: "100%", height: "100%" },
+    channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
+    noTopics: { marginTop: spacing.xl },
+    linkRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, marginTop: -spacing.md, alignSelf: "flex-start" },
+    accentLabel: { ...type.label, color: palette.accent },
+    collectionsHeader: { marginTop: spacing.xl },
+    chipsContent: { paddingVertical: spacing.sm },
+    chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, backgroundColor: palette.surface, marginRight: spacing.sm, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    chipActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
+    chipEmoji: { fontSize: 14, color: palette.accent },
+    chipLabel: { ...type.label, fontSize: 13 },
+    lightText: { color: palette.onDark },
+    topicHeading: { marginTop: spacing.lg, marginBottom: spacing.md },
+    topicTitle: { ...type.heading, fontSize: 20 },
+    loadingState: { minHeight: 180, alignItems: "center", justifyContent: "center" },
+    loadingText: { ...type.bodySoft, marginTop: spacing.md },
+    retryButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: -spacing.lg, alignSelf: "flex-start" },
+    pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  });
+}

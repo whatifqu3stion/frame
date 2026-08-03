@@ -9,7 +9,8 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import type { Video } from "@/types";
 
@@ -26,6 +27,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
     savedVideos,
     watchLater,
@@ -124,13 +127,12 @@ export default function LibraryScreen() {
             <Pressable
               key={item.id}
               onPress={() => chooseTab(item.id)}
-              style={styles.tabButton}
+              style={[styles.tabButton, selected && styles.tabButtonActive]}
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               testID={`library-tab-${item.id}`}
             >
               <Text style={[styles.tabLabel, selected && styles.tabLabelActive]}>{item.label}</Text>
-              {selected ? <View style={styles.tabUnderline} /> : null}
             </Pressable>
           );
         })}
@@ -252,33 +254,35 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: palette.wall },
-  listContent: { flexGrow: 1 },
-  pageHeader: { paddingHorizontal: spacing.lg },
-  flex: { flex: 1 },
-  sessionRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.lg, paddingHorizontal: spacing.md, backgroundColor: palette.surface },
-  accentLabel: { ...type.label, color: palette.accent },
-  tabsRow: { paddingHorizontal: spacing.lg, marginTop: spacing.lg, gap: spacing.xl },
-  tabButton: { minHeight: 44, justifyContent: "center" },
-  tabLabel: { ...type.caption, fontSize: 11, color: palette.inkMuted },
-  tabLabelActive: { color: palette.ink },
-  tabUnderline: { height: 2, backgroundColor: palette.accent, marginTop: spacing.xs },
-  videoItem: { paddingHorizontal: spacing.lg },
-  emptyContent: { paddingHorizontal: spacing.lg },
-  newRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
-  queueCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, padding: spacing.md, marginBottom: spacing.md },
-  itemHeading: { ...type.heading, marginTop: spacing.xs },
-  iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  channelRow: { minHeight: 76, flexDirection: "row", alignItems: "center", backgroundColor: palette.surface, marginBottom: spacing.md, paddingRight: spacing.xs },
-  channelMain: { minHeight: 76, flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md },
-  channelAvatar: { width: 52, height: 52, backgroundColor: palette.surfaceDeep, overflow: "hidden" },
-  avatarImage: { width: "100%", height: "100%" },
-  channelDescription: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(26,28,26,0.4)", justifyContent: "center", paddingHorizontal: spacing.lg },
-  modalCard: { backgroundColor: palette.wall, padding: spacing.lg },
-  modalInput: { ...type.body, marginTop: spacing.lg, minHeight: 52, backgroundColor: palette.surface, paddingHorizontal: spacing.md, fontSize: 16 },
-  modalButton: { minHeight: 48, marginTop: spacing.lg, backgroundColor: palette.ink, alignItems: "center", justifyContent: "center" },
-  modalButtonText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
-  pressed: { opacity: 0.6 },
-});
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+    list: { flex: 1, backgroundColor: palette.wall },
+    listContent: { flexGrow: 1 },
+    pageHeader: { paddingHorizontal: spacing.page },
+    flex: { flex: 1 },
+    sessionRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.page, marginTop: spacing.lg, paddingHorizontal: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    accentLabel: { ...type.label, color: palette.accent },
+    tabsRow: { paddingHorizontal: spacing.page, marginTop: spacing.lg, gap: spacing.sm, paddingBottom: spacing.sm },
+    tabButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface },
+    tabButtonActive: { backgroundColor: palette.accentDeep },
+    tabLabel: { ...type.caption, fontSize: 10, color: palette.inkMuted },
+    tabLabelActive: { color: palette.onDark },
+    videoItem: { paddingHorizontal: spacing.page },
+    emptyContent: { paddingHorizontal: spacing.page },
+    newRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
+    queueCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    itemHeading: { ...type.heading, marginTop: spacing.xs },
+    iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
+    channelRow: { minHeight: 80, flexDirection: "row", alignItems: "center", backgroundColor: palette.surface, marginBottom: spacing.md, paddingRight: spacing.xs, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    channelMain: { minHeight: 80, flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md },
+    channelAvatar: { width: 52, height: 52, borderRadius: radii.control, backgroundColor: palette.surfaceDeep, overflow: "hidden" },
+    avatarImage: { width: "100%", height: "100%" },
+    channelDescription: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted },
+    modalBackdrop: { flex: 1, backgroundColor: palette.overlay, justifyContent: "center", paddingHorizontal: spacing.lg },
+    modalCard: { ...softShadow, backgroundColor: palette.surfaceHigh, padding: spacing.lg, borderRadius: radii.large, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    modalInput: { ...type.body, marginTop: spacing.lg, minHeight: 52, backgroundColor: palette.surface, paddingHorizontal: spacing.md, fontSize: 16, borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    modalButton: { minHeight: 50, marginTop: spacing.lg, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center" },
+    modalButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+    pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  });
+}

@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
-import { palette, spacing, type } from "@/constants/theme";
+import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
@@ -692,10 +692,10 @@ export default function WatchScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#080808" },
+  screen: { flex: 1, backgroundColor: watchPalette.wall },
   watchChrome: {
     minHeight: 52,
-    backgroundColor: "#080808",
+    backgroundColor: watchPalette.wall,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -711,13 +711,13 @@ const styles = StyleSheet.create({
   },
   closeLabel: { ...type.label, color: palette.wall },
   fullscreenStatus: { ...type.caption, color: palette.wall, marginRight: spacing.sm },
-  portraitPlayerArea: { width: "100%", backgroundColor: "#000", alignItems: "center" },
-  playerStage: { width: "100%", height: "100%", backgroundColor: "#000", overflow: "hidden" },
-  playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
+  portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center", shadowColor: watchPalette.accent, shadowOpacity: 0.12, shadowRadius: 28, shadowOffset: { width: 0, height: 12 } },
+  playerStage: { width: "100%", height: "100%", backgroundColor: watchPalette.stage, overflow: "hidden" },
+  playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: watchPalette.stage },
   playerEmbedHidden: { opacity: 0 },
   stateSurface: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#080808",
+    backgroundColor: watchPalette.wall,
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.lg,
@@ -726,27 +726,27 @@ const styles = StyleSheet.create({
   errorTitle: { ...type.heading, color: palette.wall, textAlign: "center" },
   errorBody: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", textAlign: "center", marginTop: spacing.sm, maxWidth: 360 },
   stateActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
-  darkOutlineButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: "rgba(250,249,246,0.45)", paddingHorizontal: spacing.md },
+  darkOutlineButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: watchPalette.border, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: watchPalette.surface },
   darkButtonText: { ...type.label, color: palette.wall },
-  skipButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: palette.wall, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  skipButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radii.control },
   skipButtonText: { ...type.label, color: palette.ink },
   endEyebrow: { ...type.caption, color: "rgba(250,249,246,0.7)" },
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
-  lightStateButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: palette.wall, paddingHorizontal: spacing.lg },
+  lightStateButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.lg, borderRadius: radii.control },
   lightButtonText: { ...type.label, color: palette.ink },
-  landscapeScreen: { flex: 1, backgroundColor: "#000", flexDirection: "row" },
+  landscapeScreen: { flex: 1, backgroundColor: watchPalette.stage, flexDirection: "row" },
   landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
-  landscapeClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(250,249,246,0.26)", backgroundColor: "rgba(250,249,246,0.08)" },
+  landscapeClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: watchPalette.border, backgroundColor: watchPalette.surface, borderRadius: radii.control },
   landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
-  content: { padding: spacing.lg, backgroundColor: "#080808" },
+  content: { padding: spacing.page, backgroundColor: watchPalette.wall },
   videoTitle: { color: palette.wall },
   detailLabel: { marginTop: spacing.md, color: "rgba(250,249,246,0.62)" },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
-  actionButton: { minHeight: 48, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: "#171815" },
+  actionButton: { minHeight: 50, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth, borderColor: watchPalette.border },
   actionLabel: { color: palette.wall },
   notes: { marginTop: spacing.xl },
   description: { marginTop: spacing.sm, color: "rgba(250,249,246,0.76)" },
-  channelLink: { marginTop: spacing.xxl, padding: spacing.lg, backgroundColor: "#171815", minHeight: 44 },
+  channelLink: { marginTop: spacing.xxl, padding: spacing.lg, backgroundColor: watchPalette.surface, minHeight: 44, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: watchPalette.border },
   channelTitle: { color: palette.wall },
   channelLinkLabel: { color: palette.accentSoft, marginTop: spacing.md },
   unavailableScreen: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", paddingHorizontal: spacing.lg },

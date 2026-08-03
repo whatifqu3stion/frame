@@ -7,13 +7,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { extractYouTubeId } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { resumeList, savedVideos, watchLater, followedChannels } = useApp();
   const [watchLink, setWatchLink] = useState<string>("");
   const [watchLinkError, setWatchLinkError] = useState<string | null>(null);
@@ -98,7 +101,7 @@ export default function HomeScreen() {
 
       <Pressable
         onPress={() => router.push("/session")}
-        style={styles.sessionBanner}
+        style={({ pressed }) => [styles.sessionBanner, pressed && styles.pressed]}
         testID="start-session"
       >
         <View style={{ flex: 1 }}>
@@ -106,7 +109,7 @@ export default function HomeScreen() {
           <Text style={styles.sessionTitle}>Start a session</Text>
         </View>
         <View style={styles.sessionPlay}>
-          <Play size={16} color={palette.ink} strokeWidth={1.8} fill={palette.ink} />
+          <Play size={16} color={palette.accentDeep} strokeWidth={1.8} fill={palette.accentDeep} />
         </View>
       </Pressable>
 
@@ -210,41 +213,23 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  sectionLabel: { marginBottom: spacing.md, paddingHorizontal: 0 },
-  quickWatch: { marginHorizontal: spacing.lg, marginTop: spacing.lg, padding: spacing.md, backgroundColor: palette.surface },
-  quickWatchRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, minHeight: 46, borderTopWidth: 1, borderTopColor: palette.border },
-  quickWatchInput: { ...type.body, flex: 1, paddingVertical: spacing.sm, fontSize: 14 },
-  quickWatchButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, backgroundColor: palette.ink },
-  quickWatchButtonText: { ...type.label, color: palette.wall },
-  quickWatchError: { ...type.bodySoft, color: "#8C3A2E", marginTop: spacing.sm },
-  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
-  sessionBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    backgroundColor: palette.ink,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-  },
-  sessionTitle: { fontFamily: "Georgia", fontSize: 22, color: palette.wall, marginTop: spacing.xs },
-  sessionPlay: {
-    width: 44,
-    height: 44,
-    backgroundColor: palette.wall,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
-  channelAvatar: {
-    width: 88,
-    height: 88,
-    backgroundColor: palette.surfaceDeep,
-    overflow: "hidden",
-    marginBottom: spacing.sm,
-  },
-  avatarImage: { width: "100%", height: "100%" },
-  channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
-  pressed: { opacity: 0.6 },
-});
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+    sectionLabel: { marginBottom: spacing.md, paddingHorizontal: 0 },
+    quickWatch: { marginHorizontal: spacing.page, marginTop: spacing.lg, padding: spacing.lg, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    quickWatchRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, minHeight: 50, paddingLeft: spacing.md, backgroundColor: palette.surfaceHigh, borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    quickWatchInput: { ...type.body, flex: 1, paddingVertical: spacing.sm, fontSize: 14 },
+    quickWatchButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.md, backgroundColor: palette.accentDeep, borderRadius: radii.small, marginRight: 2 },
+    quickWatchButtonText: { ...type.label, color: palette.onDark },
+    quickWatchError: { ...type.bodySoft, color: palette.danger, marginTop: spacing.sm },
+    sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
+    sessionBanner: { flexDirection: "row", alignItems: "center", marginHorizontal: spacing.page, marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radii.card },
+    sessionTitle: { fontFamily: fonts.serif, fontSize: 22, color: palette.onDark, marginTop: spacing.xs },
+    sessionPlay: { width: 44, height: 44, borderRadius: 14, backgroundColor: palette.onDark, justifyContent: "center", alignItems: "center" },
+    channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
+    channelAvatar: { width: 88, height: 88, borderRadius: radii.card, backgroundColor: palette.surfaceDeep, overflow: "hidden", marginBottom: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    avatarImage: { width: "100%", height: "100%" },
+    channelName: { ...type.label, fontSize: 12, lineHeight: 16 },
+    pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  });
+}

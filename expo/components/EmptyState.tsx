@@ -1,33 +1,31 @@
+import { Circle } from "lucide-react-native";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "@/constants/theme";
+import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 
-type Props = {
-  symbol?: string;
-  title: string;
-  body?: string;
-};
+type Props = { symbol?: string; title: string; body?: string };
 
-export default function EmptyState({ symbol = "◯", title, body }: Props) {
+export default function EmptyState({ symbol, title, body }: Props) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={styles.root}>
-      <Text style={styles.symbol}>{symbol}</Text>
+      <View style={styles.symbolWrap}>
+        {symbol ? <Text style={styles.symbol}>{symbol}</Text> : <Circle size={22} color={palette.accent} strokeWidth={1.3} />}
+      </View>
       <Text style={styles.title}>{title}</Text>
       {body ? <Text style={styles.body}>{body}</Text> : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.md,
-    alignItems: "flex-start",
-  },
-  symbol: {
-    fontSize: 32,
-    color: palette.accent,
-    marginBottom: spacing.lg,
-  },
-  title: { ...type.heading, fontSize: 22, marginBottom: spacing.sm },
-  body: { ...type.bodySoft, maxWidth: 280 },
-});
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+    root: { marginVertical: spacing.md, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, alignItems: "flex-start", backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    symbolWrap: { width: 48, height: 48, borderRadius: radii.card, alignItems: "center", justifyContent: "center", backgroundColor: palette.surfaceDeep, marginBottom: spacing.lg },
+    symbol: { fontSize: 24, color: palette.accent },
+    title: { ...type.heading, fontSize: 22, marginBottom: spacing.sm },
+    body: { ...type.bodySoft, maxWidth: 290 },
+  });
+}

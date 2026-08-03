@@ -1,11 +1,14 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Check, ListPlus } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
 export default function AddToQueueModal() {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { queues, addToQueue, createQueue } = useApp();
   const [creating, setCreating] = useState<boolean>(false);
@@ -76,13 +79,17 @@ export default function AddToQueueModal() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
     padding: spacing.md,
     backgroundColor: palette.surface,
     marginBottom: spacing.sm,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
   newRow: {
     flexDirection: "row",
@@ -98,12 +105,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     backgroundColor: palette.surface,
+    borderRadius: radii.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
   createBtn: {
     marginTop: spacing.md,
-    backgroundColor: palette.ink,
+    backgroundColor: palette.accentDeep,
     paddingVertical: 14,
     alignItems: "center",
+    borderRadius: radii.control,
+    minHeight: 48,
+    justifyContent: "center",
   },
-  createText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
-});
+  createText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+  });
+}

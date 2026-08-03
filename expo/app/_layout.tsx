@@ -1,15 +1,19 @@
+import { HankenGrotesk_400Regular, HankenGrotesk_500Medium, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
+import { LibreCaslonText_400Regular, LibreCaslonText_700Bold } from "@expo-google-fonts/libre-caslon-text";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { View } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { AppProvider, useApp } from "@/providers/AppProvider";
-import { palette } from "@/constants/theme";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
+import { fonts } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
+import { AppProvider, useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
-import * as ScreenOrientation from "expo-screen-orientation";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,9 +23,10 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { ready, prefs } = useApp();
+  const { palette } = useFrameTheme();
   const router = useRouter();
   const segments = useSegments();
-  const hasNavigated = React.useRef(false);
+  const hasNavigated = React.useRef<boolean>(false);
 
   useEffect(() => {
     void setOrientationRequest("app", ScreenOrientation.OrientationLock.PORTRAIT_UP);
@@ -48,7 +53,7 @@ function AppContent() {
         headerStyle: { backgroundColor: palette.wall },
         headerTintColor: palette.ink,
         headerShadowVisible: false,
-        headerTitleStyle: { fontFamily: "Georgia", fontSize: 17 },
+        headerTitleStyle: { fontFamily: fonts.serif, fontSize: 17 },
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -63,23 +68,40 @@ function AppContent() {
   );
 }
 
-export default function RootLayout() {
+function ThemedApp() {
   const segments = useSegments();
+  const { isDark, palette } = useFrameTheme();
   const isWatching = segments[0] === "watch";
 
+  return (
+    <View style={{ flex: 1, backgroundColor: isWatching ? "#100E0D" : palette.wall }}>
+      <StatusBar style={isWatching || isDark ? "light" : "dark"} />
+      <AppContent />
+      <PaywallSheet />
+    </View>
+  );
+}
+
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    HankenGrotesk_400Regular,
+    HankenGrotesk_500Medium,
+    HankenGrotesk_600SemiBold,
+    LibreCaslonText_400Regular,
+    LibreCaslonText_700Bold,
+  });
+
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
+  }, [fontError, fontsLoaded]);
+
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AppProvider>
-          <View style={{ flex: 1, backgroundColor: palette.wall }}>
-            <StatusBar style={isWatching ? "light" : "dark"} />
-            <AppContent />
-            <PaywallSheet />
-          </View>
+          <ThemedApp />
         </AppProvider>
       </QueryClientProvider>
     </ErrorBoundary>

@@ -2,18 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { getChannel, getChannelVideos } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function ChannelScreen() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
 
@@ -81,8 +84,8 @@ export default function ChannelScreen() {
             accessibilityLabel={following ? `Unfollow ${channel.title}` : `Follow ${channel.title}`}
             testID="follow-channel"
           >
-            {following ? <Check size={15} color={palette.accent} strokeWidth={1.8} /> : <Plus size={15} color={palette.wall} strokeWidth={1.8} />}
-            <Text style={[styles.followText, { color: following ? palette.accent : palette.wall }]}>{following ? "Following" : "Follow channel"}</Text>
+            {following ? <Check size={15} color={palette.accent} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
+            <Text style={[styles.followText, { color: following ? palette.accent : palette.onDark }]}>{following ? "Following" : "Follow channel"}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -130,21 +133,23 @@ export default function ChannelScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   list: { flex: 1, backgroundColor: palette.wall },
   content: { flexGrow: 1 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  avatar: { width: 72, height: 72, backgroundColor: palette.surfaceDeep, marginBottom: spacing.lg, overflow: "hidden" },
+  avatar: { width: 72, height: 72, borderRadius: radii.card, backgroundColor: palette.surfaceDeep, marginBottom: spacing.lg, overflow: "hidden" },
   avatarImage: { width: "100%", height: "100%" },
   channelName: { marginTop: spacing.sm },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
-  followBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.ink, paddingHorizontal: spacing.lg, justifyContent: "center" },
+  followBtn: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
   followBtnActive: { backgroundColor: palette.surface },
-  followText: { fontFamily: "Georgia", fontSize: 14 },
+  followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
   loadingState: { minHeight: 180, paddingHorizontal: spacing.lg, alignItems: "center", justifyContent: "center" },
   loadingText: { ...type.bodySoft, marginTop: spacing.md },
   retryButton: { minHeight: 44, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
   retryText: { ...type.label, color: palette.accent },
-  pressed: { opacity: 0.6 },
-});
+  pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  });
+}

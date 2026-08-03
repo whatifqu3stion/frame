@@ -1,16 +1,19 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, FileText, Link2, Lock, LogOut, RefreshCw, RotateCcw, Shield, Trash2, UserCircle2 } from "lucide-react-native";
-import { useState } from "react";
+import { ChevronRight, FileText, Link2, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import ScreenHeader from "@/components/ScreenHeader";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
     interests,
     toggleInterest,
@@ -27,6 +30,8 @@ export default function SettingsScreen() {
     signOutGoogle,
     refreshSubscriptions,
     followedChannels,
+    prefs,
+    setTheme,
   } = useApp();
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
@@ -71,12 +76,25 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: palette.wall }}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: 120 }}
+      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={{ paddingHorizontal: spacing.lg }}>
         <ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} />
       </View>
+
+      <Section label="Appearance" hint="Light by default. The video room always stays dark and focused.">
+        <View style={styles.appearanceRow} accessibilityRole="radiogroup">
+          <Pressable onPress={() => { void setTheme("warm"); }} style={[styles.appearanceChoice, prefs.theme === "warm" && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: prefs.theme === "warm" }}>
+            <Sun size={18} color={prefs.theme === "warm" ? palette.onDark : palette.inkMuted} strokeWidth={1.7} />
+            <Text style={[styles.appearanceLabel, prefs.theme === "warm" && styles.appearanceLabelActive]}>Bone</Text>
+          </Pressable>
+          <Pressable onPress={() => { void setTheme("ink"); }} style={[styles.appearanceChoice, prefs.theme === "ink" && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: prefs.theme === "ink" }}>
+            <Moon size={18} color={prefs.theme === "ink" ? palette.onDark : palette.inkMuted} strokeWidth={1.7} />
+            <Text style={[styles.appearanceLabel, prefs.theme === "ink" && styles.appearanceLabelActive]}>Smoked umber</Text>
+          </Pressable>
+        </View>
+      </Section>
 
       <Section label="Account" hint="Optional. Bring in the channels you already follow.">
         {googleConnected ? (
@@ -110,7 +128,7 @@ export default function SettingsScreen() {
         ) : (
           <Pressable onPress={onConnect} style={styles.cta} disabled={accountBusy || importing} testID="connect-google">
             {accountBusy || importing ? (
-              <ActivityIndicator color={palette.wall} />
+              <ActivityIndicator color={palette.onDark} />
             ) : (
               <>
                 <Text style={styles.ctaTitle}>Sign in with Google</Text>
@@ -146,7 +164,7 @@ export default function SettingsScreen() {
           </Pressable>
         )}
         {subscriptionStatusError ? (
-          <Text style={[type.bodySoft, { color: "#8C3A2E", marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
+          <Text style={[type.bodySoft, { color: palette.danger, marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
         ) : null}
         <Pressable onPress={() => setPaywallOpen(true)} style={styles.linkRow} testID="settings-restore-purchases">
           <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
@@ -165,8 +183,8 @@ export default function SettingsScreen() {
                 style={[styles.interestChip, active && styles.interestChipActive]}
                 testID={`interest-${i.id}`}
               >
-                <Text style={[styles.interestEmoji, active && { color: palette.wall }]}>{i.emoji}</Text>
-                <Text style={[styles.interestLabel, active && { color: palette.wall }]}>{i.name}</Text>
+                <Text style={[styles.interestEmoji, active && { color: palette.onDark }]}>{i.emoji}</Text>
+                <Text style={[styles.interestLabel, active && { color: palette.onDark }]}>{i.name}</Text>
               </Pressable>
             );
           })}
@@ -195,9 +213,9 @@ export default function SettingsScreen() {
 
       <Section label="Data">
         <Pressable onPress={onWipe} style={styles.dangerRow} testID="wipe-data">
-          <Trash2 size={16} color="#8C3A2E" strokeWidth={1.6} />
+          <Trash2 size={16} color={palette.danger} strokeWidth={1.6} />
           <View style={{ flex: 1 }}>
-            <Text style={[type.label, { color: "#8C3A2E" }]}>Delete all on-device data</Text>
+            <Text style={[type.label, { color: palette.danger }]}>Delete all on-device data</Text>
             <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
               Library, follows, queues, resume, preferences, searches, and Google credentials. Store purchase records remain with your store account.
             </Text>
@@ -223,6 +241,8 @@ export default function SettingsScreen() {
 }
 
 function Section({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={styles.section}>
       <Text style={type.caption}>{label}</Text>
@@ -233,6 +253,8 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
 }
 
 function Row({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={styles.simpleRow}>
       {icon}
@@ -244,19 +266,26 @@ function Row({ icon, title, subtitle }: { icon: React.ReactNode; title: string; 
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   section: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
   },
+  appearanceRow: { flexDirection: "row", gap: spacing.sm },
+  appearanceChoice: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+  appearanceChoiceActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
+  appearanceLabel: { ...type.label, color: palette.inkMuted },
+  appearanceLabelActive: { color: palette.onDark },
   cta: {
-    backgroundColor: palette.ink,
+    backgroundColor: palette.accentDeep,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    borderRadius: radii.card,
   },
-  ctaTitle: { color: palette.wall, fontFamily: "Georgia", fontSize: 22 },
-  ctaSub: { color: "rgba(250,249,246,0.7)", fontSize: 13, marginTop: spacing.xs },
+  ctaTitle: { color: palette.onDark, fontFamily: fonts.serif, fontSize: 21 },
+  ctaSub: { color: palette.onDarkSoft, fontFamily: fonts.sans, fontSize: 13, marginTop: spacing.xs },
   linkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, marginTop: spacing.sm },
   accountRow: {
     flexDirection: "row",
@@ -264,6 +293,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: palette.surface,
     padding: spacing.lg,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
   accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   accountBtn: {
@@ -273,6 +305,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: 12,
     backgroundColor: palette.surface,
+    borderRadius: radii.control,
   },
   interestsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   interestChip: {
@@ -282,8 +315,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: palette.surface,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
+    minHeight: 44,
   },
-  interestChipActive: { backgroundColor: palette.ink },
+  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
   interestEmoji: { color: palette.accent, fontSize: 14 },
   interestLabel: { ...type.label, fontSize: 13 },
   dangerRow: {
@@ -292,6 +329,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: palette.surface,
     padding: spacing.lg,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
   simpleRow: {
     flexDirection: "row",
@@ -299,5 +339,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: palette.surface,
     padding: spacing.lg,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
-});
+  });
+}

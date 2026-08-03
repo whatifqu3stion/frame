@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "@/constants/theme";
+import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 
 const SECTIONS: { title: string; body: string }[] = [
   {
@@ -29,6 +31,8 @@ const SECTIONS: { title: string; body: string }[] = [
 ];
 
 export default function TermsScreen() {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
@@ -45,7 +49,8 @@ export default function TermsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.wall },
   content: { padding: spacing.lg, paddingBottom: spacing.xxxl, maxWidth: 680, width: "100%", alignSelf: "center" },
   title: { ...type.title, marginTop: spacing.sm },
@@ -54,4 +59,5 @@ const styles = StyleSheet.create({
   section: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.border },
   heading: { ...type.heading, fontSize: 19 },
   body: { ...type.bodySoft, color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 23 },
-});
+  });
+}

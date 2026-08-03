@@ -1,7 +1,7 @@
 import { ListVideo } from "lucide-react-native";
 import { memo, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "@/constants/theme";
+import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { formatDuration, type VideoChapter } from "@/services/youtube";
 
 function formatChapterTime(seconds: number): string {
@@ -62,13 +62,13 @@ function VideoChapters({ chapters, currentSeconds, onJump, disabled = false }: V
 export default memo(VideoChapters);
 
 const styles = StyleSheet.create({
-  section: { marginTop: spacing.xl, padding: spacing.md, backgroundColor: "#121310" },
+  section: { marginTop: spacing.xl, padding: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: watchPalette.border },
   headingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   heading: { ...type.heading, color: palette.wall, fontSize: 18, lineHeight: 24 },
   note: { ...type.caption, color: "rgba(250,249,246,0.52)", marginTop: spacing.xs },
   list: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(250,249,246,0.15)" },
   row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(250,249,246,0.12)" },
-  activeRow: { backgroundColor: "rgba(168,145,107,0.16)" },
+  activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
   time: { width: 48, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
   activeTime: { color: "#D9C39B" },
   title: { ...type.label, flex: 1, color: "rgba(250,249,246,0.82)" },

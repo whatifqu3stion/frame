@@ -5,13 +5,16 @@ import { useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
   const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { savedVideos, watchLater, isPremium, requirePurchase } = useApp();
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -104,7 +107,7 @@ export default function SessionBuilder() {
             <Text style={styles.total}>{formatDuration(totalSeconds)} total</Text>
           </View>
           <Pressable onPress={begin} style={({ pressed }) => [styles.beginBtn, pressed && styles.pressed]} accessibilityRole="button" testID="begin-session">
-            <Play size={16} color={palette.wall} strokeWidth={1.8} fill={palette.wall} />
+            <Play size={16} color={palette.onDark} strokeWidth={1.8} fill={palette.onDark} />
             <Text style={styles.beginText}>Begin</Text>
           </Pressable>
         </View>
@@ -113,7 +116,8 @@ export default function SessionBuilder() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.wall },
   content: { flexGrow: 1, paddingHorizontal: spacing.lg },
   header: { paddingBottom: spacing.xl },
@@ -121,17 +125,18 @@ const styles = StyleSheet.create({
   title: { ...type.title, marginTop: spacing.xs },
   subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 320 },
   flex: { flex: 1 },
-  row: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
-  indexBox: { width: 32, height: 32, backgroundColor: palette.surface, justifyContent: "center", alignItems: "center" },
-  indexBoxOn: { backgroundColor: palette.ink },
-  indexText: { color: palette.wall, fontFamily: "Georgia", fontSize: 14 },
+  row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.borderSoft },
+  indexBox: { width: 34, height: 34, borderRadius: radii.control, backgroundColor: palette.surface, justifyContent: "center", alignItems: "center" },
+  indexBoxOn: { backgroundColor: palette.accentDeep },
+  indexText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
   rowDisabled: { opacity: 0.45 },
   rowTitle: { ...type.heading, fontSize: 16, lineHeight: 20, marginTop: 2 },
   selectedTitle: { color: palette.accent },
   duration: { ...type.caption, color: palette.inkMuted },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surface },
+  footer: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surfaceHigh, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
   total: { ...type.heading, marginTop: 2 },
-  beginBtn: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.ink, paddingHorizontal: spacing.xl, justifyContent: "center" },
-  beginText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
-  pressed: { opacity: 0.6 },
-});
+  beginBtn: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.xl, justifyContent: "center", borderRadius: radii.control },
+  beginText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  });
+}

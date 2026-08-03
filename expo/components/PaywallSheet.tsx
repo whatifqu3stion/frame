@@ -16,7 +16,8 @@ import {
 import type { PurchasesPackage } from "react-native-purchases";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/providers/AppProvider";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import {
   getPremiumOffering,
   getPurchaseErrorMessage,
@@ -49,6 +50,8 @@ function packageDetail(aPackage: PurchasesPackage): string {
 
 export default function PaywallSheet() {
   const { paywallOpen, setPaywallOpen, isPremium } = useApp();
+  const { isDark, palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [selectedIdentifier, setSelectedIdentifier] = useState<string>("$rc_annual");
@@ -145,7 +148,7 @@ export default function PaywallSheet() {
   if (!paywallOpen) return null;
 
   const Backdrop = Platform.OS === "web" ? View : BlurView;
-  const backdropProps = Platform.OS === "web" ? {} : { intensity: 40, tint: "light" as const };
+  const backdropProps = Platform.OS === "web" ? {} : { intensity: 40, tint: isDark ? "dark" as const : "light" as const };
   const plansUnavailable = isWebPreview || !isRevenueCatConfigured || offeringQuery.isError || (!offeringQuery.isLoading && packages.length === 0);
 
   return (
@@ -233,7 +236,7 @@ export default function PaywallSheet() {
               testID="paywall-buy"
             >
               {purchaseMutation.isPending ? (
-                <ActivityIndicator color={palette.wall} />
+                <ActivityIndicator color={palette.onDark} />
               ) : (
                 <Text style={styles.buyText}>{isPremium ? "Premium is active" : "Continue with Premium"}</Text>
               )}
@@ -286,14 +289,17 @@ export default function PaywallSheet() {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { backgroundColor: "rgba(250,249,246,0.72)" },
-  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(26,28,26,0.35)" },
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+  backdrop: { backgroundColor: palette.borderSoft },
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: palette.overlay },
   sheet: {
     maxHeight: "94%",
     backgroundColor: palette.wall,
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.lg,
+    borderTopLeftRadius: radii.large,
+    borderTopRightRadius: radii.large,
   },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
@@ -309,6 +315,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     backgroundColor: palette.surface,
+    borderRadius: radii.card,
   },
   planCard: {
     minHeight: 76,
@@ -319,8 +326,9 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     backgroundColor: palette.surface,
     padding: spacing.md,
+    borderRadius: radii.card,
   },
-  planCardSelected: { borderColor: palette.accent, backgroundColor: "#F0ECE4" },
+  planCardSelected: { borderColor: palette.accent, backgroundColor: palette.surfaceDeep },
   radio: {
     width: 20,
     height: 20,
@@ -335,22 +343,24 @@ const styles = StyleSheet.create({
   planTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   planTitle: { ...type.heading, fontSize: 18, lineHeight: 23 },
   planDetail: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
-  feedback: { ...type.bodySoft, color: "#8C3A2E", marginTop: spacing.md, textAlign: "center" },
+  feedback: { ...type.bodySoft, color: palette.danger, marginTop: spacing.md, textAlign: "center" },
   buyButton: {
     minHeight: 56,
-    backgroundColor: palette.ink,
+    backgroundColor: palette.accentDeep,
     marginTop: spacing.lg,
     paddingVertical: 17,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: radii.control,
   },
   buttonDisabled: { opacity: 0.45 },
   buttonPressed: { opacity: 0.82 },
-  buyText: { color: palette.wall, fontFamily: "Georgia", fontSize: 16, letterSpacing: 0.3 },
+  buyText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 16, letterSpacing: 0.1 },
   restoreButton: { minHeight: 44, alignSelf: "center", alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
   legalLinks: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm },
   legalLink: { ...type.caption, color: palette.accent, textDecorationLine: "underline" },
   legalDivider: { ...type.caption, color: palette.inkMuted },
   legal: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
   previewNotice: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
-});
+  });
+}

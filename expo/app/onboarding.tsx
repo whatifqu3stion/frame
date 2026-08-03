@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { palette, spacing, type } from "@/constants/theme";
+import { fonts, palette, radii, spacing, type } from "@/constants/theme";
 import { useApp } from "@/providers/AppProvider";
 import { searchVideos } from "@/services/youtube";
 import type { Video } from "@/types";
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   dots: { flexDirection: "row", gap: 6 },
-  dot: { width: 16, height: 2, backgroundColor: palette.surfaceDeep },
+  dot: { width: 18, height: 3, borderRadius: 2, backgroundColor: palette.surfaceDeep },
   dotActive: { backgroundColor: palette.accent },
   step: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, flex: 1 },
   bigTitle: { ...type.display, fontSize: 44, lineHeight: 50, marginTop: spacing.xl },
@@ -383,6 +383,7 @@ const styles = StyleSheet.create({
     height: 70,
     borderWidth: 1.5,
     borderColor: palette.accent,
+    borderRadius: radii.large,
   },
   bigChoice: {
     flexDirection: "row",
@@ -391,8 +392,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.ink,
     padding: spacing.lg,
     marginTop: spacing.xl,
+    borderRadius: radii.card,
   },
-  choiceTitle: { color: palette.wall, fontFamily: "Georgia", fontSize: 19 },
+  choiceTitle: { color: palette.wall, fontFamily: fonts.serif, fontSize: 19 },
   choiceBody: { color: "rgba(250,249,246,0.7)", fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.xl },
   dividerLine: { flex: 1, height: 1, backgroundColor: palette.surfaceDeep },
@@ -404,6 +406,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     marginTop: spacing.sm,
+    borderRadius: radii.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
   },
   input: { flex: 1, ...type.body, padding: 0, fontSize: 15 },
   searchHeader: {
@@ -427,6 +432,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     justifyContent: "center",
     alignItems: "center",
+    borderRadius: radii.control,
   },
   addChipDone: { backgroundColor: palette.surfaceDeep },
   chipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl },
@@ -437,6 +443,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: palette.surface,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
+    minHeight: 44,
   },
   interestChipActive: { backgroundColor: palette.ink },
   interestEmoji: { color: palette.accent, fontSize: 14 },
@@ -452,6 +462,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.ink,
     paddingHorizontal: spacing.xl,
     paddingVertical: 14,
+    borderRadius: radii.control,
+    minHeight: 48,
+    justifyContent: "center",
   },
-  nextText: { color: palette.wall, fontFamily: "Georgia", fontSize: 15 },
+  nextText: { color: palette.wall, fontFamily: fonts.sansSemibold, fontSize: 15 },
 });

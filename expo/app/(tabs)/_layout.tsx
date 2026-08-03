@@ -1,61 +1,29 @@
 import { Tabs } from "expo-router";
 import { Compass, Home, Library, Settings } from "lucide-react-native";
-import React from "react";
 import { Platform } from "react-native";
-import { palette, fonts } from "@/constants/theme";
+import { fonts } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function TabLayout() {
+  const { palette } = useFrameTheme();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.ink,
+        tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.inkMuted,
         tabBarShowLabel: true,
-        tabBarLabelStyle: {
-          fontFamily: fonts.sans,
-          fontSize: 10,
-          letterSpacing: 1.4,
-          textTransform: "uppercase",
-          fontWeight: "600",
-        },
-        tabBarStyle: {
-          backgroundColor: palette.wall,
-          borderTopWidth: 0,
-          elevation: 0,
-          height: Platform.OS === "ios" ? 84 : 64,
-          paddingTop: 8,
-        },
+        tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 10, letterSpacing: 1.15, textTransform: "uppercase" },
+        tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3 },
+        tabBarStyle: { backgroundColor: palette.surfaceHigh, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.borderSoft, elevation: 0, height: Platform.OS === "ios" ? 86 : 68, paddingTop: 9 },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => <Home size={20} color={color} strokeWidth={1.6} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: "Explore",
-          tabBarIcon: ({ color }) => <Compass size={20} color={color} strokeWidth={1.6} />,
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: "Library",
-          tabBarIcon: ({ color }) => <Library size={20} color={color} strokeWidth={1.6} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          tabBarIcon: ({ color }) => <Settings size={20} color={color} strokeWidth={1.6} />,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Home size={20} color={color} strokeWidth={1.7} /> }} />
+      <Tabs.Screen name="explore" options={{ title: "Explore", tabBarIcon: ({ color }) => <Compass size={20} color={color} strokeWidth={1.7} /> }} />
+      <Tabs.Screen name="library" options={{ title: "Library", tabBarIcon: ({ color }) => <Library size={20} color={color} strokeWidth={1.7} /> }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarIcon: ({ color }) => <Settings size={20} color={color} strokeWidth={1.7} /> }} />
     </Tabs>
   );
 }
+
+import { StyleSheet } from "react-native";

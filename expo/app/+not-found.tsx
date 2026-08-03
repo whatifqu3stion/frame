@@ -1,8 +1,12 @@
 import { Link, Stack } from "expo-router";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type } from "@/constants/theme";
+import { spacing, type FramePalette } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function NotFoundScreen() {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <>
       <Stack.Screen options={{ title: "" }} />
@@ -20,7 +24,9 @@ export default function NotFoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: spacing.lg, paddingTop: spacing.xxl, backgroundColor: palette.wall },
-  link: { marginTop: spacing.xl },
-});
+function createStyles(palette: FramePalette) {
+  return StyleSheet.create({
+    container: { flex: 1, padding: spacing.lg, paddingTop: spacing.xxl, backgroundColor: palette.wall },
+    link: { marginTop: spacing.xl },
+  });
+}
