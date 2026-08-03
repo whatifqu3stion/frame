@@ -5,12 +5,16 @@ export type FramePalette = {
   surface: string;
   surfaceDeep: string;
   surfaceHigh: string;
+  surfaceDim: string;
+  surfaceBright: string;
   ink: string;
   inkSoft: string;
   inkMuted: string;
   accent: string;
   accentDeep: string;
   accentSoft: string;
+  active: string;
+  activeSoft: string;
   rose: string;
   clay: string;
   sage: string;
@@ -25,68 +29,76 @@ export type FramePalette = {
 };
 
 export const lightPalette: FramePalette = {
-  wall: "#F7F3EB",
-  surface: "#EFE9DE",
-  surfaceDeep: "#E4DDD1",
-  surfaceHigh: "#FBF8F2",
-  ink: "#29241F",
-  inkSoft: "#514A43",
-  inkMuted: "#81786E",
-  accent: "#8A604B",
-  accentDeep: "#654333",
-  accentSoft: "#C89D82",
-  rose: "#C7A2A1",
-  clay: "#B87658",
-  sage: "#84917C",
-  success: "#66775F",
-  danger: "#9B493C",
-  border: "rgba(84, 67, 54, 0.16)",
-  borderSoft: "rgba(84, 67, 54, 0.09)",
-  overlay: "rgba(37, 29, 24, 0.54)",
-  shadow: "rgba(54, 39, 29, 0.12)",
-  onDark: "#F7F1E7",
-  onDarkSoft: "rgba(247, 241, 231, 0.72)",
+  wall: "#FCF9F8",
+  surface: "#F6F3F2",
+  surfaceDeep: "#EBE8E7",
+  surfaceHigh: "#F9F6F5",
+  surfaceDim: "#DCD9D9",
+  surfaceBright: "#FEFCFB",
+  ink: "#2C2825",
+  inkSoft: "#736C66",
+  inkMuted: "#8D8681",
+  accent: "#736C66",
+  accentDeep: "#2C2825",
+  accentSoft: "#DCD9D9",
+  active: "#5E7F91",
+  activeSoft: "rgba(94, 127, 145, 0.16)",
+  rose: "#BAA1A0",
+  clay: "#A9755E",
+  sage: "#4A544A",
+  success: "#4A544A",
+  danger: "#943F36",
+  border: "rgba(115, 108, 102, 0.18)",
+  borderSoft: "rgba(115, 108, 102, 0.10)",
+  overlay: "rgba(44, 40, 37, 0.54)",
+  shadow: "rgba(44, 40, 37, 0.10)",
+  onDark: "#F4F0ED",
+  onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
 
 export const darkPalette: FramePalette = {
-  wall: "#141210",
-  surface: "#201D1A",
-  surfaceDeep: "#2B2723",
-  surfaceHigh: "#34302C",
-  ink: "#E9E2D8",
-  inkSoft: "#C1B8AE",
-  inkMuted: "#928981",
-  accent: "#D09A7A",
-  accentDeep: "#744A38",
-  accentSoft: "#B98870",
-  rose: "#B88F90",
-  clay: "#C78061",
-  sage: "#95A08D",
-  success: "#98A98F",
-  danger: "#DA8174",
-  border: "rgba(234, 224, 214, 0.15)",
-  borderSoft: "rgba(234, 224, 214, 0.08)",
-  overlay: "rgba(8, 7, 6, 0.72)",
-  shadow: "rgba(0, 0, 0, 0.28)",
-  onDark: "#F7F1E7",
-  onDarkSoft: "rgba(247, 241, 231, 0.72)",
+  wall: "#141312",
+  surface: "#1C1B1A",
+  surfaceDeep: "#201F1E",
+  surfaceHigh: "#282625",
+  surfaceDim: "#10100F",
+  surfaceBright: "#252422",
+  ink: "#F4F0ED",
+  inkSoft: "#A88E7D",
+  inkMuted: "#847A73",
+  accent: "#A88E7D",
+  accentDeep: "#695247",
+  accentSoft: "#C9B2A4",
+  active: "#78A1B6",
+  activeSoft: "rgba(120, 161, 182, 0.18)",
+  rose: "#B69090",
+  clay: "#B87D61",
+  sage: "#4A544A",
+  success: "#809580",
+  danger: "#D98276",
+  border: "rgba(244, 240, 237, 0.14)",
+  borderSoft: "rgba(244, 240, 237, 0.08)",
+  overlay: "rgba(7, 7, 6, 0.74)",
+  shadow: "rgba(0, 0, 0, 0.30)",
+  onDark: "#F4F0ED",
+  onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
 
 /** Warm light mode remains the compatibility default for static utility screens. */
 export const palette = lightPalette;
 
 export const watchPalette = {
-  wall: "#100E0D",
-  stage: "#080706",
-  surface: "#1C1917",
-  surfaceHigh: "#28231F",
-  ink: "#F2ECE3",
-  inkSoft: "rgba(242, 236, 227, 0.76)",
-  inkMuted: "rgba(242, 236, 227, 0.55)",
-  accent: "#D0A082",
-  accentSoft: "#C9AB91",
-  border: "rgba(242, 236, 227, 0.14)",
-  glow: "rgba(184, 118, 88, 0.16)",
+  wall: "#141312",
+  stage: "#0D0C0C",
+  surface: "#1C1B1A",
+  surfaceHigh: "#201F1E",
+  ink: "#F4F0ED",
+  inkSoft: "rgba(244, 240, 237, 0.76)",
+  inkMuted: "rgba(244, 240, 237, 0.55)",
+  accent: "#A88E7D",
+  accentSoft: "#C9B2A4",
+  border: "rgba(244, 240, 237, 0.14)",
+  glow: "rgba(168, 142, 125, 0.16)",
 } as const;
 
 export const fonts = {

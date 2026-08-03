@@ -10,7 +10,7 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
-import { fonts } from "@/constants/theme";
+import { fonts, watchPalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { AppProvider, useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
@@ -74,7 +74,7 @@ function ThemedApp() {
   const isWatching = segments[0] === "watch";
 
   return (
-    <View style={{ flex: 1, backgroundColor: isWatching ? "#100E0D" : palette.wall }}>
+    <View style={{ flex: 1, backgroundColor: isWatching ? watchPalette.wall : palette.wall }}>
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
       <AppContent />
       <PaywallSheet />

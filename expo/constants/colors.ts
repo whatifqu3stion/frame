@@ -4,15 +4,15 @@ export default {
   light: {
     text: lightPalette.ink,
     background: lightPalette.wall,
-    tint: lightPalette.accent,
+    tint: lightPalette.active,
     tabIconDefault: lightPalette.inkMuted,
-    tabIconSelected: lightPalette.accent,
+    tabIconSelected: lightPalette.active,
   },
   dark: {
     text: darkPalette.ink,
     background: darkPalette.wall,
-    tint: darkPalette.accent,
+    tint: darkPalette.active,
     tabIconDefault: darkPalette.inkMuted,
-    tabIconSelected: darkPalette.accent,
+    tabIconSelected: darkPalette.active,
   },
 };

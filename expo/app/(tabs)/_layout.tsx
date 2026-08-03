@@ -10,7 +10,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.accent,
+        tabBarActiveTintColor: palette.active,
         tabBarInactiveTintColor: palette.inkMuted,
         tabBarShowLabel: true,
         tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 10, letterSpacing: 1.15, textTransform: "uppercase" },

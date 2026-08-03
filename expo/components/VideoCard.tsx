@@ -87,7 +87,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     durationBadge: { position: "absolute", right: spacing.sm, bottom: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(20,18,16,0.82)", borderRadius: 6 },
     durationText: { color: "#F7F1E7", fontFamily: "HankenGrotesk_600SemiBold", fontSize: 10, letterSpacing: 0.8 },
     progressTrack: { position: "absolute", left: 8, right: 8, bottom: 6, height: 3, borderRadius: radii.pill, backgroundColor: "rgba(247,241,231,0.3)", overflow: "hidden" },
-    progressFill: { height: "100%", borderRadius: radii.pill, backgroundColor: palette.clay },
+    progressFill: { height: "100%", borderRadius: radii.pill, backgroundColor: palette.active },
     pressed: { opacity: 0.76, transform: [{ scale: 0.987 }] },
   });
 }
