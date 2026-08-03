@@ -152,6 +152,12 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
   return videos.length > 0 ? json(200, "success", videos) : json(200, "empty", [], "No verified, playable videos were found.");
 }
 
+async function handleVideo(videoId: string, env: Env): Promise<Response> {
+  if (!VIDEO_ID.test(videoId)) return json(400, "failed", undefined, "A valid YouTube video id is required.");
+  const video = (await fetchVideos([videoId], env))[0] ?? null;
+  return video ? json(200, "success", video) : json(404, "empty", null, "That video is not publicly playable in Frame.");
+}
+
 async function handleChannel(channelId: string, env: Env): Promise<Response> {
   if (!CHANNEL_ID.test(channelId)) return json(400, "failed", undefined, "A valid YouTube channel id is required.");
   const channel = await fetchChannel(channelId, env);
@@ -232,6 +238,8 @@ export default {
     try {
       if (url.pathname === "/youtube/search" && request.method === "GET") return await handleSearch(url, env);
       if (url.pathname === "/youtube/resolve" && request.method === "POST") return await handleResolve(request, env);
+      const videoMatch = /^\/youtube\/videos\/([A-Za-z0-9_-]{11})$/.exec(url.pathname);
+      if (videoMatch?.[1] && request.method === "GET") return await handleVideo(videoMatch[1], env);
       const videosMatch = /^\/youtube\/channels\/(UC[A-Za-z0-9_-]{22})\/videos$/.exec(url.pathname);
       if (videosMatch?.[1] && request.method === "GET") return await handleChannelVideos(videosMatch[1], env);
       const channelMatch = /^\/youtube\/channels\/(UC[A-Za-z0-9_-]{22})$/.exec(url.pathname);

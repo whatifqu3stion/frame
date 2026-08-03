@@ -1,6 +1,12 @@
 import type { Channel, ServiceFailureKind, ServiceResult, Video } from "@/types";
 
 const FUNCTIONS_URL = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL?.replace(/\/$/, "") ?? "";
+const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+export type VideoChapter = {
+  title: string;
+  startSeconds: number;
+};
 
 type BackendEnvelope<T> = {
   status: "success" | "empty" | "partial" | ServiceFailureKind;
@@ -65,6 +71,14 @@ export async function getChannelVideos(channelId: string): Promise<ServiceResult
   return requestBackend<Video[]>(`/youtube/channels/${encodeURIComponent(channelId)}/videos`);
 }
 
+/** Loads verified metadata for one playable YouTube video, including its creator-provided description. */
+export async function getVideo(videoId: string): Promise<ServiceResult<Video | null>> {
+  if (!VIDEO_ID_PATTERN.test(videoId)) {
+    return { status: "failed", message: "A valid YouTube video id is required." };
+  }
+  return requestBackend<Video | null>(`/youtube/videos/${encodeURIComponent(videoId)}`);
+}
+
 /** Loads one real YouTube channel by its stable id. */
 export async function getChannel(channelId: string): Promise<ServiceResult<Channel>> {
   return requestBackend<Channel>(`/youtube/channels/${encodeURIComponent(channelId)}`);
@@ -124,6 +138,38 @@ export function extractYouTubeId(input: string): string | null {
     if (match?.[1]) return match[1];
   }
   return null;
+}
+
+/**
+ * Parses creator-provided timestamp lines into navigable chapters.
+ * Chapters are shown only when they follow YouTube's familiar structure: three or more
+ * ascending entries beginning at 0:00, with no title or timestamp invented by Frame.
+ */
+export function parseVideoChapters(description: string | undefined, durationSeconds = 0): VideoChapter[] {
+  const rows = (description ?? "").split(/\r?\n/);
+  const chapters: VideoChapter[] = [];
+  const seenStarts = new Set<number>();
+  const linePattern = /^\s*(?:(\d{1,2}):)?([0-5]?\d):([0-5]\d)(?:\s*[-–—|:]\s*|\s+)(.+?)\s*$/;
+
+  for (const row of rows) {
+    const match = linePattern.exec(row);
+    if (!match) continue;
+    const hours = Number(match[1] ?? 0);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3]);
+    const startSeconds = hours * 3600 + minutes * 60 + seconds;
+    const title = match[4]?.trim().replace(/\s+/g, " ") ?? "";
+    if (!title || title.length > 120 || seenStarts.has(startSeconds)) continue;
+    if (durationSeconds > 0 && startSeconds >= durationSeconds) continue;
+    const previousStart = chapters[chapters.length - 1]?.startSeconds;
+    if (previousStart !== undefined && startSeconds <= previousStart) return [];
+    seenStarts.add(startSeconds);
+    chapters.push({ title, startSeconds });
+  }
+
+  const ordered = chapters.slice(0, 24);
+  if (ordered.length < 3 || ordered[0]?.startSeconds !== 0) return [];
+  return ordered;
 }
 
 export function formatDuration(seconds: number): string {

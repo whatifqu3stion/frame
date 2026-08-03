@@ -1,5 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
@@ -20,13 +21,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
 import { palette, spacing, type } from "@/constants/theme";
 import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
-import { formatDuration, formatRelativeDate } from "@/services/youtube";
+import { formatDuration, formatRelativeDate, getVideo, parseVideoChapters, type VideoChapter } from "@/services/youtube";
 import type { Video } from "@/types";
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
@@ -95,7 +97,7 @@ export default function WatchScreen() {
   const nextSessionId = sessionIds[sessionIndex + 1];
   const isSession = sessionIds.length > 0;
 
-  const video = useMemo<Video | undefined>(() => {
+  const baseVideo = useMemo<Video | undefined>(() => {
     const stored = savedVideos.find((candidate) => candidate.id === id)
       ?? watchLater.find((candidate) => candidate.id === id);
     if (stored) return stored;
@@ -113,6 +115,19 @@ export default function WatchScreen() {
     };
   }, [id, params.channelId, params.channelTitle, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
 
+  const metadataQuery = useQuery({
+    queryKey: ["video", id],
+    queryFn: () => getVideo(id),
+    enabled: VIDEO_ID_PATTERN.test(id),
+    staleTime: 5 * 60_000,
+  });
+  const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
+  const video = useMemo<Video | undefined>(() => {
+    if (!baseVideo) return undefined;
+    if (!verifiedVideo) return baseVideo;
+    return { ...baseVideo, ...verifiedVideo, description: verifiedVideo.description ?? baseVideo.description };
+  }, [baseVideo, verifiedVideo]);
+
   const [startAt, setStartAt] = useState<number>(0);
   const [resumeReady, setResumeReady] = useState<boolean>(false);
   const [playbackState, setPlaybackState] = useState<YouTubePlaybackState>("unstarted");
@@ -124,6 +139,9 @@ export default function WatchScreen() {
   const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
   const [isAppActive, setIsAppActive] = useState<boolean>(AppState.currentState === "active");
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [currentSeconds, setCurrentSeconds] = useState<number>(0);
+  const [playerDurationSeconds, setPlayerDurationSeconds] = useState<number>(video?.durationSeconds ?? 0);
+  const chapters = useMemo(() => parseVideoChapters(video?.description, firstPositiveDuration(playerDurationSeconds, video?.durationSeconds)), [playerDurationSeconds, video?.description, video?.durationSeconds]);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(video?.durationSeconds ?? 0);
@@ -169,6 +187,8 @@ export default function WatchScreen() {
     setStartAt(0);
     setAction(null);
     currentTimeRef.current = 0;
+    setCurrentSeconds(0);
+    setPlayerDurationSeconds(video?.durationSeconds ?? 0);
     durationRef.current = video?.durationSeconds ?? 0;
     didEndRef.current = false;
     navigationLockedRef.current = false;
@@ -185,6 +205,7 @@ export default function WatchScreen() {
         const safeTime = duration > 0 && savedTime >= duration - 10 ? 0 : savedTime;
         durationRef.current = duration;
         currentTimeRef.current = safeTime;
+        setCurrentSeconds(safeTime);
         setStartAt(safeTime);
         setResumeReady(true);
       })
@@ -278,16 +299,33 @@ export default function WatchScreen() {
 
   const handleReady = useCallback((durationSeconds: number): void => {
     if (__DEV__) console.log("[player] ready", { id, durationSeconds });
-    if (durationSeconds > 0) durationRef.current = durationSeconds;
+    if (durationSeconds > 0) {
+      durationRef.current = durationSeconds;
+      setPlayerDurationSeconds(durationSeconds);
+    }
     setPlayerReady(true);
     setPlayerError(null);
     setAction(null);
   }, [id, setAction]);
 
-  const handleProgress = useCallback((currentSeconds: number, durationSeconds: number): void => {
-    currentTimeRef.current = Math.max(0, currentSeconds);
-    if (durationSeconds > 0) durationRef.current = durationSeconds;
+  const handleProgress = useCallback((nextCurrentSeconds: number, durationSeconds: number): void => {
+    const safeCurrentSeconds = Math.max(0, nextCurrentSeconds);
+    currentTimeRef.current = safeCurrentSeconds;
+    setCurrentSeconds(safeCurrentSeconds);
+    if (durationSeconds > 0) {
+      durationRef.current = durationSeconds;
+      setPlayerDurationSeconds(durationSeconds);
+    }
   }, []);
+
+  const jumpToChapter = useCallback((chapter: VideoChapter): void => {
+    if (!playerReady || playerError) return;
+    currentTimeRef.current = chapter.startSeconds;
+    setCurrentSeconds(chapter.startSeconds);
+    playerRef.current?.seekTo(chapter.startSeconds);
+    void Haptics.selectionAsync().catch(() => {});
+    void AccessibilityInfo.announceForAccessibility(`Jumped to ${formatDuration(chapter.startSeconds)}. ${chapter.title}`);
+  }, [playerError, playerReady]);
 
   const handleStateChange = useCallback((state: YouTubePlaybackState): void => {
     setPlaybackState(state);
@@ -626,6 +664,8 @@ export default function WatchScreen() {
             <Text style={[type.label, styles.actionLabel, inWatchLater && { color: palette.accentSoft }]}>{pendingAction === "later" ? "Updating…" : inWatchLater ? "Added" : "Later"}</Text>
           </Pressable>
         </View>
+
+        {!showEnded ? <VideoChapters chapters={chapters} currentSeconds={currentSeconds} onJump={jumpToChapter} disabled={!showPlayer} /> : null}
 
         {video.description ? (
           <View style={styles.notes}>

@@ -1,3 +1,4 @@
+/** A verified YouTube video shown in Frame. */
 export type Video = {
   id: string;
   title: string;
