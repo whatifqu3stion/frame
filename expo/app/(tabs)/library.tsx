@@ -264,7 +264,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     accentLabel: { ...type.label, color: palette.accent },
     tabsRow: { paddingHorizontal: spacing.page, marginTop: spacing.lg, gap: spacing.sm, paddingBottom: spacing.sm },
     tabButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface },
-    tabButtonActive: { backgroundColor: palette.accentDeep },
+    tabButtonActive: { backgroundColor: palette.accentDeep, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
     tabLabel: { ...type.caption, fontSize: 10, color: palette.inkMuted },
     tabLabelActive: { color: palette.onDark },
     videoItem: { paddingHorizontal: spacing.page },

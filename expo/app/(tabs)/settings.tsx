@@ -1,18 +1,18 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, FileText, Link2, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { Check, ChevronRight, FileText, Link2, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import ScreenHeader from "@/components/ScreenHeader";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { palette, type } = useFrameTheme();
+  const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
     interests,
@@ -32,6 +32,7 @@ export default function SettingsScreen() {
     followedChannels,
     prefs,
     setTheme,
+    setAccent,
   } = useApp();
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
@@ -93,6 +94,29 @@ export default function SettingsScreen() {
             <Moon size={18} color={prefs.theme === "ink" ? palette.onDark : palette.inkMuted} strokeWidth={1.7} />
             <Text style={[styles.appearanceLabel, prefs.theme === "ink" && styles.appearanceLabelActive]}>Smoked umber</Text>
           </Pressable>
+        </View>
+      </Section>
+
+      <Section label="Accent" hint="Used for primary actions, selections, links, and progress.">
+        <View style={styles.accentRow} accessibilityRole="radiogroup">
+          {accentOptions.map((option) => {
+            const isSelected = prefs.accent === option.id;
+            const swatch = createPalette(isDark, option.id).accent;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => { void setAccent(option.id); }}
+                style={[styles.accentChoice, isSelected && styles.accentChoiceActive]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+              >
+                <View style={[styles.accentSwatch, { backgroundColor: swatch }]}>
+                  {isSelected ? <Check size={15} color={palette.onDark} strokeWidth={2.4} /> : null}
+                </View>
+                <Text style={styles.accentLabel}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </Section>
 
@@ -278,6 +302,11 @@ function createStyles(palette: FramePalette, type: FrameType) {
   appearanceChoiceActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
   appearanceLabel: { ...type.label, color: palette.inkMuted },
   appearanceLabelActive: { color: palette.onDark },
+  accentRow: { flexDirection: "row", gap: spacing.sm },
+  accentChoice: { minHeight: 96, flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.xs, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+  accentChoiceActive: { backgroundColor: palette.surfaceDeep, borderColor: palette.active },
+  accentSwatch: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  accentLabel: { ...type.label, color: palette.inkMuted, fontSize: 11, textAlign: "center" },
   cta: {
     backgroundColor: palette.accentDeep,
     padding: spacing.lg,
@@ -320,7 +349,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderColor: palette.borderSoft,
     minHeight: 44,
   },
-  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
+  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
   interestEmoji: { color: palette.accent, fontSize: 14 },
   interestLabel: { ...type.label, fontSize: 13 },
   dangerRow: {

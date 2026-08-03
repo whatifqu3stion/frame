@@ -65,7 +65,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, minHeight: 52, marginTop: spacing.lg, borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
     input: { flex: 1, ...type.body, paddingVertical: 0, fontSize: 15 },
     feedback: { ...type.label, marginTop: spacing.md },
-    button: { minHeight: 52, marginTop: spacing.lg, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center" },
+    button: { minHeight: 52, marginTop: spacing.lg, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
     buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
     pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   });

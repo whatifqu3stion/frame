@@ -44,9 +44,11 @@ export type InterestTopic = {
 };
 
 export type ThemeMode = "warm" | "ink";
+export type AccentMode = "blue" | "green" | "rose";
 
 export type UserPreferences = {
   theme: ThemeMode;
+  accent: AccentMode;
   hasCompletedOnboarding: boolean;
   googleEmail: string | null;
   googleConnectedAt: number | null;

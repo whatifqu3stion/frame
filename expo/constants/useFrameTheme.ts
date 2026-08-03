@@ -1,9 +1,11 @@
 import { useMemo } from "react";
-import { createType, darkPalette, lightPalette, type FramePalette, type FrameType } from "@/constants/theme";
+import { createPalette, createType, type FramePalette, type FrameType } from "@/constants/theme";
+import type { AccentMode } from "@/types";
 import { useApp } from "@/providers/AppProvider";
 
 export type FrameTheme = {
   isDark: boolean;
+  accent: AccentMode;
   palette: FramePalette;
   type: FrameType;
 };
@@ -12,7 +14,8 @@ export type FrameTheme = {
 export function useFrameTheme(): FrameTheme {
   const { prefs } = useApp();
   const isDark = prefs.theme === "ink";
-  const palette = isDark ? darkPalette : lightPalette;
+  const accent = prefs.accent;
+  const palette = useMemo<FramePalette>(() => createPalette(isDark, accent), [isDark, accent]);
   const type = useMemo<FrameType>(() => createType(palette), [palette]);
-  return { isDark, palette, type };
+  return { isDark, accent, palette, type };
 }

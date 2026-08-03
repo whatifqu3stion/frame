@@ -1,4 +1,5 @@
 import { Platform, type TextStyle, type ViewStyle } from "react-native";
+import type { AccentMode } from "@/types";
 
 export type FramePalette = {
   wall: string;
@@ -28,61 +29,46 @@ export type FramePalette = {
   onDarkSoft: string;
 };
 
-export const lightPalette: FramePalette = {
-  wall: "#FCF9F8",
-  surface: "#F6F3F2",
-  surfaceDeep: "#EBE8E7",
-  surfaceHigh: "#F9F6F5",
-  surfaceDim: "#DCD9D9",
-  surfaceBright: "#FEFCFB",
-  ink: "#2C2825",
-  inkSoft: "#736C66",
-  inkMuted: "#8D8681",
-  accent: "#736C66",
-  accentDeep: "#2C2825",
-  accentSoft: "#DCD9D9",
-  active: "#5E7F91",
-  activeSoft: "rgba(94, 127, 145, 0.16)",
-  rose: "#BAA1A0",
-  clay: "#A9755E",
-  sage: "#4A544A",
-  success: "#4A544A",
-  danger: "#943F36",
-  border: "rgba(115, 108, 102, 0.18)",
-  borderSoft: "rgba(115, 108, 102, 0.10)",
-  overlay: "rgba(44, 40, 37, 0.54)",
-  shadow: "rgba(44, 40, 37, 0.10)",
-  onDark: "#F4F0ED",
-  onDarkSoft: "rgba(244, 240, 237, 0.74)",
+type AccentTokens = Pick<FramePalette, "accent" | "accentDeep" | "accentSoft" | "active" | "activeSoft">;
+type PaletteBase = Omit<FramePalette, keyof AccentTokens>;
+
+const lightBase: PaletteBase = {
+  wall: "#FBF9F4", surface: "#F7F4ED", surfaceDeep: "#EEE9DF", surfaceHigh: "#FEFCF8", surfaceDim: "#E3DED4", surfaceBright: "#FFFEFB",
+  ink: "#2C2825", inkSoft: "#625B54", inkMuted: "#8A8177", rose: "#B88E95", clay: "#A9755E", sage: "#60725E", success: "#4A544A", danger: "#943F36",
+  border: "rgba(88, 76, 64, 0.16)", borderSoft: "rgba(88, 76, 64, 0.08)", overlay: "rgba(44, 40, 37, 0.48)", shadow: "rgba(54, 42, 32, 0.09)", onDark: "#FFFDF9", onDarkSoft: "rgba(255, 253, 249, 0.76)",
 };
 
-export const darkPalette: FramePalette = {
-  wall: "#141312",
-  surface: "#1C1B1A",
-  surfaceDeep: "#201F1E",
-  surfaceHigh: "#282625",
-  surfaceDim: "#10100F",
-  surfaceBright: "#252422",
-  ink: "#F4F0ED",
-  inkSoft: "#A88E7D",
-  inkMuted: "#847A73",
-  accent: "#A88E7D",
-  accentDeep: "#695247",
-  accentSoft: "#C9B2A4",
-  active: "#78A1B6",
-  activeSoft: "rgba(120, 161, 182, 0.18)",
-  rose: "#B69090",
-  clay: "#B87D61",
-  sage: "#4A544A",
-  success: "#809580",
-  danger: "#D98276",
-  border: "rgba(244, 240, 237, 0.14)",
-  borderSoft: "rgba(244, 240, 237, 0.08)",
-  overlay: "rgba(7, 7, 6, 0.74)",
-  shadow: "rgba(0, 0, 0, 0.30)",
-  onDark: "#F4F0ED",
-  onDarkSoft: "rgba(244, 240, 237, 0.74)",
+const darkBase: PaletteBase = {
+  wall: "#141312", surface: "#1C1B1A", surfaceDeep: "#201F1E", surfaceHigh: "#282625", surfaceDim: "#10100F", surfaceBright: "#252422",
+  ink: "#F4F0ED", inkSoft: "#C7C0BA", inkMuted: "#938B84", rose: "#B6909A", clay: "#B87D61", sage: "#4A544A", success: "#809580", danger: "#D98276",
+  border: "rgba(244, 240, 237, 0.14)", borderSoft: "rgba(244, 240, 237, 0.08)", overlay: "rgba(7, 7, 6, 0.74)", shadow: "rgba(0, 0, 0, 0.30)", onDark: "#F4F0ED", onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
+
+const accentTokens: Record<AccentMode, { light: AccentTokens; dark: AccentTokens }> = {
+  blue: {
+    light: { accent: "#4A7186", accentDeep: "#36596B", accentSoft: "#BFD2DB", active: "#4A7186", activeSoft: "rgba(74, 113, 134, 0.16)" },
+    dark: { accent: "#8FB7CA", accentDeep: "#4E788D", accentSoft: "#C7DEE7", active: "#8FB7CA", activeSoft: "rgba(143, 183, 202, 0.18)" },
+  },
+  green: {
+    light: { accent: "#526B55", accentDeep: "#3F5944", accentSoft: "#C4D2C2", active: "#526B55", activeSoft: "rgba(82, 107, 85, 0.16)" },
+    dark: { accent: "#9AB497", accentDeep: "#587554", accentSoft: "#C6D8C4", active: "#9AB497", activeSoft: "rgba(154, 180, 151, 0.18)" },
+  },
+  rose: {
+    light: { accent: "#9C626C", accentDeep: "#7B4752", accentSoft: "#E1C4C9", active: "#9C626C", activeSoft: "rgba(156, 98, 108, 0.15)" },
+    dark: { accent: "#D4A4AC", accentDeep: "#8B5963", accentSoft: "#E6C7CC", active: "#D4A4AC", activeSoft: "rgba(212, 164, 172, 0.18)" },
+  },
+};
+
+export const accentOptions: ReadonlyArray<{ id: AccentMode; label: string }> = [
+  { id: "blue", label: "Mineral blue" }, { id: "green", label: "Mineral green" }, { id: "rose", label: "Muted rose" },
+];
+
+export function createPalette(isDark: boolean, accent: AccentMode): FramePalette {
+  return { ...(isDark ? darkBase : lightBase), ...accentTokens[accent][isDark ? "dark" : "light"] };
+}
+
+export const lightPalette: FramePalette = createPalette(false, "blue");
+export const darkPalette: FramePalette = createPalette(true, "blue");
 
 /** Warm light mode remains the compatibility default for static utility screens. */
 export const palette = lightPalette;
@@ -95,10 +81,10 @@ export const watchPalette = {
   ink: "#F4F0ED",
   inkSoft: "rgba(244, 240, 237, 0.76)",
   inkMuted: "rgba(244, 240, 237, 0.55)",
-  accent: "#A88E7D",
-  accentSoft: "#C9B2A4",
+  accent: "#8FB7CA",
+  accentSoft: "#C7DEE7",
   border: "rgba(244, 240, 237, 0.14)",
-  glow: "rgba(168, 142, 125, 0.16)",
+  glow: "rgba(143, 183, 202, 0.16)",
 } as const;
 
 export const fonts = {

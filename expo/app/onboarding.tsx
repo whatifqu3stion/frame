@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Check, Link2, Plus, Search as SearchIcon } from "lucide-react-native";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -16,7 +17,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { fonts, palette, radii, spacing, type } from "@/constants/theme";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { searchVideos } from "@/services/youtube";
 import type { Video } from "@/types";
@@ -26,6 +28,8 @@ const LAST_STEP = 4;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
+  const { isDark, palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { interests, toggleInterest, finishOnboarding } = useApp();
   const scrollRef = useRef<ScrollView>(null);
   const [step, setStep] = useState<number>(0);
@@ -46,6 +50,12 @@ export default function Onboarding() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.wall }}>
+      <LinearGradient
+        colors={isDark ? ["#1D2022", palette.wall, "#121211"] : ["#FFFDF8", palette.wall, "#F5F0E7"]}
+        locations={[0, 0.52, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View style={[styles.topRow, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.dots}>
           {[0, 1, 2, 3, 4].map((i) => (
@@ -92,6 +102,8 @@ export default function Onboarding() {
 }
 
 function StepWelcome({ width }: { width: number }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={[styles.step, { width }]}>
       <Text style={[type.caption, { color: palette.accent }]}>Frame</Text>
@@ -107,6 +119,8 @@ function StepWelcome({ width }: { width: number }) {
 }
 
 function StepPhilosophy({ width }: { width: number }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const items = [
     { eyebrow: "No", title: "Recommendations." },
     { eyebrow: "No", title: "Autoplay." },
@@ -129,6 +143,8 @@ function StepPhilosophy({ width }: { width: number }) {
 }
 
 function StepBringChannels({ width }: { width: number }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
     googleConfigured,
     googleConnected,
@@ -310,6 +326,8 @@ function StepBringChannels({ width }: { width: number }) {
 }
 
 function StepInterests({ width, interests, onToggle }: { width: number; interests: string[]; onToggle: (id: string) => void }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={[styles.step, { width }]}>
       <Text style={[type.caption, { color: palette.accent }]}>Step four</Text>
@@ -340,6 +358,8 @@ function StepInterests({ width, interests, onToggle }: { width: number; interest
 }
 
 function StepCompletion({ width }: { width: number }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={[styles.step, { width }]}>
       <Text style={[type.caption, { color: palette.accent }]}>That&apos;s it</Text>
@@ -357,7 +377,8 @@ function StepCompletion({ width }: { width: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -389,13 +410,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: palette.ink,
+    backgroundColor: palette.accentDeep,
     padding: spacing.lg,
     marginTop: spacing.xl,
     borderRadius: radii.card,
   },
-  choiceTitle: { color: palette.wall, fontFamily: fonts.serif, fontSize: 19 },
-  choiceBody: { color: "rgba(250,249,246,0.7)", fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
+  choiceTitle: { color: palette.onDark, fontFamily: fonts.serif, fontSize: 19 },
+  choiceBody: { color: palette.onDarkSoft, fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.xl },
   dividerLine: { flex: 1, height: 1, backgroundColor: palette.surfaceDeep },
   inputRow: {
@@ -448,7 +469,7 @@ const styles = StyleSheet.create({
     borderColor: palette.borderSoft,
     minHeight: 44,
   },
-  interestChipActive: { backgroundColor: palette.ink },
+  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
   interestEmoji: { color: palette.accent, fontSize: 14 },
   interestLabel: { ...type.label, fontSize: 13 },
   bottomRow: {
@@ -459,12 +480,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   nextBtn: {
-    backgroundColor: palette.ink,
+    backgroundColor: palette.accentDeep,
     paddingHorizontal: spacing.xl,
     paddingVertical: 14,
     borderRadius: radii.control,
     minHeight: 48,
     justifyContent: "center",
   },
-  nextText: { color: palette.wall, fontFamily: fonts.sansSemibold, fontSize: 15 },
-});
+  nextText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+  });
+}

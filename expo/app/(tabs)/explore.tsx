@@ -200,7 +200,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     collectionsHeader: { marginTop: spacing.xl },
     chipsContent: { paddingVertical: spacing.sm },
     chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, backgroundColor: palette.surface, marginRight: spacing.sm, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-    chipActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
+    chipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
     chipEmoji: { fontSize: 14, color: palette.accent },
     chipLabel: { ...type.label, fontSize: 13 },
     lightText: { color: palette.onDark },

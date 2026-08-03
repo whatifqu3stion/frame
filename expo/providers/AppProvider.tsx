@@ -5,7 +5,7 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import type { AccentMode, AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
@@ -53,6 +53,7 @@ type GoogleCredential = {
 
 const defaultPrefs: UserPreferences = {
   theme: "warm",
+  accent: "blue",
   hasCompletedOnboarding: false,
   googleEmail: null,
   googleConnectedAt: null,
@@ -65,6 +66,7 @@ async function loadPrefs(): Promise<UserPreferences> {
     const parsed = JSON.parse(raw) as Partial<UserPreferences>;
     return {
       theme: parsed.theme === "ink" ? "ink" : "warm",
+      accent: parsed.accent === "green" || parsed.accent === "rose" ? parsed.accent : "blue",
       hasCompletedOnboarding: parsed.hasCompletedOnboarding === true,
       googleEmail: typeof parsed.googleEmail === "string" ? parsed.googleEmail : null,
       googleConnectedAt: typeof parsed.googleConnectedAt === "number" && Number.isFinite(parsed.googleConnectedAt)
@@ -224,6 +226,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, []);
 
   const setTheme = useCallback((mode: ThemeMode) => updatePrefs({ theme: mode }), [updatePrefs]);
+  const setAccent = useCallback((accent: AccentMode) => updatePrefs({ accent }), [updatePrefs]);
   const finishOnboarding = useCallback(() => updatePrefs({ hasCompletedOnboarding: true }), [updatePrefs]);
 
   const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
@@ -558,6 +561,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       paywallOpen,
       setPaywallOpen,
       setTheme,
+      setAccent,
       finishOnboarding,
       isPremium,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
@@ -606,6 +610,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       interests,
       paywallOpen,
       setTheme,
+      setAccent,
       finishOnboarding,
       isPremium,
       customerInfoQuery.isLoading,
