@@ -11,9 +11,8 @@ export const REVENUECAT_CUSTOMER_INFO_KEY = ["revenuecat", "customerInfo"] as co
 export const REVENUECAT_OFFERING_KEY = ["revenuecat", "offering"] as const;
 
 function getRevenueCatApiKey(): string | undefined {
-  if (__DEV__ || Platform.OS === "web") {
-    return process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
-  }
+  if (Platform.OS === "web") return undefined;
+  if (__DEV__) return process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
 
   return Platform.select({
     ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
@@ -79,20 +78,25 @@ export async function restorePremiumPurchases(): Promise<CustomerInfo> {
 }
 
 export type PurchaseErrorDetails = {
-  code?: string;
-  message?: string;
-  userCancelled?: boolean;
+  code?: unknown;
+  message?: unknown;
+  userCancelled?: unknown;
 };
+
+function normalizePurchaseErrorCode(code: unknown): string {
+  if (typeof code !== "string" && typeof code !== "number") return "";
+  return String(code).toUpperCase();
+}
 
 /** Maps RevenueCat errors to calm, user-facing purchase feedback. */
 export function getPurchaseErrorMessage(error: unknown): string | null {
-  const details = typeof error === "object" && error !== null
+  const details: PurchaseErrorDetails = typeof error === "object" && error !== null
     ? (error as PurchaseErrorDetails)
     : {};
 
-  if (details.userCancelled) return null;
+  if (details.userCancelled === true) return null;
 
-  const code = details.code?.toUpperCase() ?? "";
+  const code = normalizePurchaseErrorCode(details.code);
   if (code.includes("NETWORK") || code.includes("OFFLINE")) {
     return "You appear to be offline. Reconnect and try again.";
   }
