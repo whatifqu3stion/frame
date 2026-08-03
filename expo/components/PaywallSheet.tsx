@@ -94,8 +94,13 @@ export default function PaywallSheet() {
 
   const selectedPackage = packages.find((item) => item.identifier === selectedIdentifier) ?? null;
   const isBusy = purchaseMutation.isPending || restoreMutation.isPending;
+  const isWebPreview = Platform.OS === "web";
 
   const onPurchase = async (): Promise<void> => {
+    if (isWebPreview) {
+      setFeedback("Premium purchases are available in the iPhone and Android apps.");
+      return;
+    }
     if (isPremium) {
       setPaywallOpen(false);
       return;
@@ -120,6 +125,10 @@ export default function PaywallSheet() {
   };
 
   const onRestore = async (): Promise<void> => {
+    if (isWebPreview) {
+      setFeedback("Purchase restoration is available in the iPhone and Android apps.");
+      return;
+    }
     setFeedback(null);
     try {
       const customerInfo = await restoreMutation.mutateAsync();
@@ -137,7 +146,7 @@ export default function PaywallSheet() {
 
   const Backdrop = Platform.OS === "web" ? View : BlurView;
   const backdropProps = Platform.OS === "web" ? {} : { intensity: 40, tint: "light" as const };
-  const plansUnavailable = !isRevenueCatConfigured || offeringQuery.isError || (!offeringQuery.isLoading && packages.length === 0);
+  const plansUnavailable = isWebPreview || !isRevenueCatConfigured || offeringQuery.isError || (!offeringQuery.isLoading && packages.length === 0);
 
   return (
     <Modal visible animationType="slide" transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
@@ -232,7 +241,7 @@ export default function PaywallSheet() {
 
             <Pressable
               onPress={onRestore}
-              disabled={isBusy || !isRevenueCatConfigured}
+              disabled={isBusy || isWebPreview || !isRevenueCatConfigured}
               hitSlop={8}
               style={styles.restoreButton}
               accessibilityRole="button"

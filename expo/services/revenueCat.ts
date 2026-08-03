@@ -68,12 +68,18 @@ export async function getRevenueCatCustomerInfo(): Promise<CustomerInfo> {
 
 /** Purchases one of the packages in the current Frame Premium offering. */
 export async function purchasePremiumPackage(aPackage: PurchasesPackage): Promise<CustomerInfo> {
+  if (Platform.OS === "web" || !isRevenueCatConfigured) {
+    throw new Error("Premium purchases are available in the iPhone and Android apps.");
+  }
   const result = await Purchases.purchasePackage(aPackage);
   return result.customerInfo;
 }
 
 /** Restores purchases associated with the current store account. */
 export async function restorePremiumPurchases(): Promise<CustomerInfo> {
+  if (Platform.OS === "web" || !isRevenueCatConfigured) {
+    throw new Error("Purchase restoration is available in the iPhone and Android apps.");
+  }
   return Purchases.restorePurchases();
 }
 
