@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { Compass, Home, Library, Settings } from "lucide-react-native";
-import { Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
@@ -25,5 +25,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-import { StyleSheet } from "react-native";

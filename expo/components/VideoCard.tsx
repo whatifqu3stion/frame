@@ -1,10 +1,11 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+import { ThumbnailSkeleton } from "@/components/VideoSkeleton";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
 import type { Video } from "@/types";
 
@@ -14,9 +15,14 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const navigationLocked = useRef<boolean>(false);
+  const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
   const progressFraction = progressSeconds && video.durationSeconds ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds)) : 0;
   const accessibilityLabel = `Play ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}`;
   const dateLabel = formatRelativeDate(video.publishedAt);
+
+  useEffect(() => {
+    setIsThumbnailLoading(true);
+  }, [video.thumbnailUrl]);
 
   const onPress = useCallback((): void => {
     if (navigationLocked.current) return;
@@ -28,9 +34,20 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
     <View style={wrapStyle}>
-      <Image source={{ uri: video.thumbnailUrl }} style={imageStyle} contentFit="cover" cachePolicy="memory-disk" recyclingKey={video.id} transition={160} />
-      {video.durationSeconds > 0 ? <View style={styles.durationBadge}><Text style={styles.durationText}>{formatDuration(video.durationSeconds)}</Text></View> : null}
-      {progressFraction > 0 ? <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progressFraction * 100)} percent watched`}><View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} /></View> : null}
+      <Image
+        source={{ uri: video.thumbnailUrl }}
+        style={imageStyle}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={video.id}
+        transition={160}
+        onLoadStart={() => setIsThumbnailLoading(true)}
+        onLoad={() => setIsThumbnailLoading(false)}
+        onError={() => setIsThumbnailLoading(false)}
+      />
+      {isThumbnailLoading ? <ThumbnailSkeleton /> : null}
+      {!isThumbnailLoading && video.durationSeconds > 0 ? <View style={styles.durationBadge}><Text style={styles.durationText}>{formatDuration(video.durationSeconds)}</Text></View> : null}
+      {!isThumbnailLoading && progressFraction > 0 ? <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progressFraction * 100)} percent watched`}><View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} /></View> : null}
     </View>
   );
 

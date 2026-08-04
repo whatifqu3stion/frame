@@ -566,6 +566,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
       isPremium,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
       subscriptionStatusError: customerInfoQuery.isError,
+      libraryLoading: !ready
+        || savedQuery.isLoading
+        || resumeQuery.isLoading
+        || queuesQuery.isLoading
+        || watchLaterQuery.isLoading
+        || channelsQuery.isLoading,
       replaceInterests,
       toggleInterest,
       requirePurchase,
@@ -615,6 +621,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       isPremium,
       customerInfoQuery.isLoading,
       customerInfoQuery.isError,
+      savedQuery.isLoading,
+      resumeQuery.isLoading,
+      queuesQuery.isLoading,
+      watchLaterQuery.isLoading,
+      channelsQuery.isLoading,
       replaceInterests,
       toggleInterest,
       requirePurchase,

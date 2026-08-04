@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(250,249,246,0.12)" },
   activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
   time: { width: 48, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
-  activeTime: { color: "#D9C39B" },
+  activeTime: { color: watchPalette.accentSoft },
   title: { ...type.label, flex: 1, color: "rgba(250,249,246,0.82)" },
   activeTitle: { color: palette.wall },
   pressed: { opacity: 0.56 },

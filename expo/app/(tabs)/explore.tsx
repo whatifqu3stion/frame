@@ -4,12 +4,13 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import { ChevronRight, Plus, RotateCcw } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
+import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -57,7 +58,7 @@ export default function ExploreScreen() {
         accessibilityRole="button"
         testID="explore-add-channel"
       >
-        <View style={styles.addIcon}><Plus size={16} color={palette.onDark} strokeWidth={2} /></View>
+        <View style={styles.addIcon}><Plus size={16} color={palette.active} strokeWidth={2} /></View>
         <View style={styles.flex}>
           <Text style={type.label}>Add a channel by link</Text>
           <Text style={styles.addSubtitle}>Paste a channel or video URL.</Text>
@@ -120,8 +121,7 @@ export default function ExploreScreen() {
                   accessibilityState={{ selected: isActive }}
                   testID={`topic-${interest.id}`}
                 >
-                  <Text style={[styles.chipEmoji, isActive && styles.lightText]}>{interest.emoji}</Text>
-                  <Text style={[styles.chipLabel, isActive && styles.lightText]}>{interest.name}</Text>
+                  <Text style={[styles.chipLabel, isActive && styles.chipContentActive]}>{interest.name}</Text>
                 </Pressable>
               );
             })}
@@ -135,10 +135,7 @@ export default function ExploreScreen() {
   );
 
   const listEmpty = interests.length === 0 ? null : topicQuery.isLoading ? (
-    <View style={styles.loadingState} accessible accessibilityRole="progressbar" accessibilityLabel="Loading videos">
-      <ActivityIndicator color={palette.accent} />
-      <Text style={styles.loadingText}>Finding verified videos…</Text>
-    </View>
+    <VideoFeedSkeleton count={5} accessibilityLabel="Finding verified videos" />
   ) : topicQuery.data?.status === "empty" ? (
     <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
   ) : (
@@ -184,7 +181,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     sectionLabel: { marginBottom: spacing.md },
     sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     addRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-    addIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: palette.accentDeep, justifyContent: "center", alignItems: "center" },
+    addIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: palette.activeSoft, justifyContent: "center", alignItems: "center" },
     addSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
     channelSection: { marginTop: spacing.xl, marginHorizontal: -spacing.page },
     horizontalContent: { paddingHorizontal: spacing.page },
@@ -200,14 +197,11 @@ function createStyles(palette: FramePalette, type: FrameType) {
     collectionsHeader: { marginTop: spacing.xl },
     chipsContent: { paddingVertical: spacing.sm },
     chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, backgroundColor: palette.surface, marginRight: spacing.sm, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-    chipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
-    chipEmoji: { fontSize: 14, color: palette.accent },
+    chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
     chipLabel: { ...type.label, fontSize: 13 },
-    lightText: { color: palette.onDark },
+    chipContentActive: { color: palette.active },
     topicHeading: { marginTop: spacing.lg, marginBottom: spacing.md },
     topicTitle: { ...type.heading, fontSize: 20 },
-    loadingState: { minHeight: 180, alignItems: "center", justifyContent: "center" },
-    loadingText: { ...type.bodySoft, marginTop: spacing.md },
     retryButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: -spacing.lg, alignSelf: "flex-start" },
     pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });

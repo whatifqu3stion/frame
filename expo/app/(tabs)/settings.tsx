@@ -1,9 +1,8 @@
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Check, ChevronRight, FileText, Link2, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Bug, Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AddChannelModal from "@/components/AddChannelModal";
 import ScreenHeader from "@/components/ScreenHeader";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -34,7 +33,6 @@ export default function SettingsScreen() {
     setTheme,
     setAccent,
   } = useApp();
-  const [addOpen, setAddOpen] = useState<boolean>(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
 
   const onConnect = async () => {
@@ -84,14 +82,61 @@ export default function SettingsScreen() {
         <ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} />
       </View>
 
+      <Section label="Frame Premium">
+        {subscriptionStatusLoading ? (
+          <View style={styles.simpleRow}>
+            <ActivityIndicator size="small" color={palette.accent} />
+            <Text style={type.bodySoft}>Checking your subscription…</Text>
+          </View>
+        ) : isPremium ? (
+          <View style={styles.premiumActive}>
+            <View style={styles.premiumActiveMark}>
+              <Lock size={16} color={palette.active} strokeWidth={1.8} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>Premium active</Text>
+              <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>Your complete Frame library is unlocked.</Text>
+            </View>
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => setPaywallOpen(true)}
+            style={({ pressed }) => [styles.premiumHero, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityHint="Opens subscription options"
+            testID="open-premium"
+          >
+            <View style={styles.premiumHeroHeader}>
+              <View style={styles.premiumHeroMark}>
+                <Crown size={18} color={palette.accentDeep} strokeWidth={1.8} />
+              </View>
+              <Text style={styles.premiumEyebrow}>Make Frame yours</Text>
+            </View>
+            <Text style={styles.premiumTitle}>Build a library worth returning to.</Text>
+            <Text style={styles.premiumSubtitle}>Save videos, resume where you stopped, and create intentional sessions.</Text>
+            <View style={styles.premiumAction}>
+              <Text style={styles.premiumActionText}>View Premium plans</Text>
+              <ChevronRight size={17} color={palette.onDark} strokeWidth={1.8} />
+            </View>
+          </Pressable>
+        )}
+        {subscriptionStatusError ? (
+          <Text style={[type.bodySoft, { color: palette.danger, marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
+        ) : null}
+        <Pressable onPress={() => setPaywallOpen(true)} style={styles.linkRow} testID="settings-restore-purchases">
+          <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
+          <Text style={[type.caption, { color: palette.inkMuted }]}>Restore purchases</Text>
+        </Pressable>
+      </Section>
+
       <Section label="Appearance" hint="Light by default. The video room always stays dark and focused.">
         <View style={styles.appearanceRow} accessibilityRole="radiogroup">
           <Pressable onPress={() => { void setTheme("warm"); }} style={[styles.appearanceChoice, prefs.theme === "warm" && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: prefs.theme === "warm" }}>
-            <Sun size={18} color={prefs.theme === "warm" ? palette.onDark : palette.inkMuted} strokeWidth={1.7} />
+            <Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} strokeWidth={1.7} />
             <Text style={[styles.appearanceLabel, prefs.theme === "warm" && styles.appearanceLabelActive]}>Bone</Text>
           </Pressable>
           <Pressable onPress={() => { void setTheme("ink"); }} style={[styles.appearanceChoice, prefs.theme === "ink" && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: prefs.theme === "ink" }}>
-            <Moon size={18} color={prefs.theme === "ink" ? palette.onDark : palette.inkMuted} strokeWidth={1.7} />
+            <Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} strokeWidth={1.7} />
             <Text style={[styles.appearanceLabel, prefs.theme === "ink" && styles.appearanceLabelActive]}>Smoked umber</Text>
           </Pressable>
         </View>
@@ -150,50 +195,23 @@ export default function SettingsScreen() {
             </View>
           </>
         ) : (
-          <Pressable onPress={onConnect} style={styles.cta} disabled={accountBusy || importing} testID="connect-google">
+          <Pressable onPress={onConnect} style={styles.accountConnect} disabled={accountBusy || importing} testID="connect-google">
             {accountBusy || importing ? (
-              <ActivityIndicator color={palette.onDark} />
+              <ActivityIndicator color={palette.accent} />
             ) : (
               <>
-                <Text style={styles.ctaTitle}>Sign in with Google</Text>
-                <Text style={styles.ctaSub}>
-                  {googleConfigured ? "Import the channels you already follow." : "Needs setup — add your keys below to enable."}
-                </Text>
+                <UserCircle2 size={20} color={palette.accent} strokeWidth={1.7} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountConnectTitle}>Sign in with Google</Text>
+                  <Text style={styles.accountConnectSubtitle}>
+                    {googleConfigured ? "Import the channels you already follow." : "Account connection isn’t available in this build."}
+                  </Text>
+                </View>
+                <ChevronRight size={17} color={palette.inkMuted} strokeWidth={1.7} />
               </>
             )}
           </Pressable>
         )}
-        <Pressable onPress={() => setAddOpen(true)} style={styles.linkRow} testID="settings-add-channel">
-          <Link2 size={14} color={palette.accent} strokeWidth={1.8} />
-          <Text style={[type.label, { color: palette.accent }]}>Add a channel by link</Text>
-        </Pressable>
-      </Section>
-
-      <Section label="Frame Premium">
-        {subscriptionStatusLoading ? (
-          <View style={styles.simpleRow}>
-            <ActivityIndicator size="small" color={palette.accent} />
-            <Text style={type.bodySoft}>Checking your subscription…</Text>
-          </View>
-        ) : isPremium ? (
-          <Row
-            icon={<Lock size={16} color={palette.accent} strokeWidth={1.6} />}
-            title="Premium active"
-            subtitle="Saving, Watch Later, resume, and sessions are unlocked."
-          />
-        ) : (
-          <Pressable onPress={() => setPaywallOpen(true)} style={styles.cta} testID="open-premium">
-            <Text style={styles.ctaTitle}>Explore Frame Premium</Text>
-            <Text style={styles.ctaSub}>See the current plans and localized store prices.</Text>
-          </Pressable>
-        )}
-        {subscriptionStatusError ? (
-          <Text style={[type.bodySoft, { color: palette.danger, marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
-        ) : null}
-        <Pressable onPress={() => setPaywallOpen(true)} style={styles.linkRow} testID="settings-restore-purchases">
-          <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
-          <Text style={[type.caption, { color: palette.inkMuted }]}>Restore Purchases</Text>
-        </Pressable>
       </Section>
 
       <Section label="Interests" hint="Seeds the Explore tab.">
@@ -207,8 +225,7 @@ export default function SettingsScreen() {
                 style={[styles.interestChip, active && styles.interestChipActive]}
                 testID={`interest-${i.id}`}
               >
-                <Text style={[styles.interestEmoji, active && { color: palette.onDark }]}>{i.emoji}</Text>
-                <Text style={[styles.interestLabel, active && { color: palette.onDark }]}>{i.name}</Text>
+                <Text style={[styles.interestLabel, active && { color: palette.active }]}>{i.name}</Text>
               </Pressable>
             );
           })}
@@ -219,10 +236,8 @@ export default function SettingsScreen() {
         <View style={styles.simpleRow}>
           <Shield size={16} color={palette.accent} strokeWidth={1.6} />
           <View style={{ flex: 1 }}>
-            <Text style={type.label}>Local library, disclosed services</Text>
-            <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]}>
-              Your library stays on this device. YouTube handles playback and creator lookups; Google is optional; RevenueCat and your app store verify Premium.
-            </Text>
+            <Text style={type.label}>Private by design</Text>
+            <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]}>Your library and viewing progress stay on this device. Frame only shares information needed to play videos, connect an account, or manage Premium.</Text>
           </View>
         </View>
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link">
@@ -241,25 +256,24 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[type.label, { color: palette.danger }]}>Delete all on-device data</Text>
             <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
-              Library, follows, queues, resume, preferences, searches, and Google credentials. Store purchase records remain with your store account.
+              Library, follows, queues, progress, preferences, searches, and connected account credentials. Store purchase records remain with your store account.
             </Text>
           </View>
           <ChevronRight size={16} color={palette.inkMuted} />
         </Pressable>
       </Section>
 
-      {Platform.OS === "web" ? (
-        <Section label="Web preview">
-          <Text style={[type.bodySoft, { maxWidth: 340 }]}>This browser version is a temporary preview. Library changes may disappear when the page refreshes, and purchases are mobile-only.</Text>
-        </Section>
-      ) : null}
-
       <Section label="About">
         <Text style={[type.bodySoft, { maxWidth: 340 }]}>Frame is an intentional YouTube viewer. It keeps playback user-initiated and stops when your chosen video or finite session ends.</Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
+        {__DEV__ ? (
+          <Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-diagnostics">
+            <Bug size={14} color={palette.accent} strokeWidth={1.8} />
+            <Text style={[type.label, { color: palette.accent }]}>Development diagnostics</Text>
+          </Pressable>
+        ) : null}
       </Section>
 
-      <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />
     </ScrollView>
   );
 }
@@ -276,20 +290,6 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
   );
 }
 
-function Row({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
-  const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  return (
-    <View style={styles.simpleRow}>
-      {icon}
-      <View style={{ flex: 1 }}>
-        <Text style={type.label}>{title}</Text>
-        {subtitle ? <Text style={[type.bodySoft, { marginTop: 2, color: palette.inkMuted }]}>{subtitle}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
   section: {
@@ -299,22 +299,25 @@ function createStyles(palette: FramePalette, type: FrameType) {
   },
   appearanceRow: { flexDirection: "row", gap: spacing.sm },
   appearanceChoice: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-  appearanceChoiceActive: { backgroundColor: palette.accentDeep, borderColor: palette.accentDeep },
+  appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
   appearanceLabel: { ...type.label, color: palette.inkMuted },
-  appearanceLabelActive: { color: palette.onDark },
+  appearanceLabelActive: { color: palette.active },
   accentRow: { flexDirection: "row", gap: spacing.sm },
   accentChoice: { minHeight: 96, flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.xs, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-  accentChoiceActive: { backgroundColor: palette.surfaceDeep, borderColor: palette.active },
+  accentChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
   accentSwatch: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   accentLabel: { ...type.label, color: palette.inkMuted, fontSize: 11, textAlign: "center" },
-  cta: {
-    backgroundColor: palette.accentDeep,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderRadius: radii.card,
-  },
-  ctaTitle: { color: palette.onDark, fontFamily: fonts.serif, fontSize: 21 },
-  ctaSub: { color: palette.onDarkSoft, fontFamily: fonts.sans, fontSize: 13, marginTop: spacing.xs },
+  premiumHero: { backgroundColor: palette.accentDeep, padding: spacing.lg, borderRadius: radii.large },
+  premiumHeroHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  premiumHeroMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: palette.onDark, alignItems: "center", justifyContent: "center" },
+  premiumEyebrow: { ...type.caption, color: palette.onDarkSoft },
+  premiumTitle: { color: palette.onDark, fontFamily: fonts.serif, fontSize: 25, lineHeight: 31, marginTop: spacing.lg, maxWidth: 300 },
+  premiumSubtitle: { color: palette.onDarkSoft, fontFamily: fonts.sans, fontSize: 14, lineHeight: 20, marginTop: spacing.sm, maxWidth: 320 },
+  premiumAction: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.onDarkSoft },
+  premiumActionText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
+  premiumActive: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: palette.activeSoft, padding: spacing.lg, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
+  premiumActiveMark: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceHigh, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.84 },
   linkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, marginTop: spacing.sm },
   accountRow: {
     flexDirection: "row",
@@ -327,6 +330,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderColor: palette.borderSoft,
   },
   accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  accountConnect: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: palette.surface, padding: spacing.lg, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+  accountConnectTitle: { ...type.label, color: palette.ink },
+  accountConnectSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
   accountBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -349,8 +355,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderColor: palette.borderSoft,
     minHeight: 44,
   },
-  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
-  interestEmoji: { color: palette.accent, fontSize: 14 },
+  interestChipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
   interestLabel: { ...type.label, fontSize: 13 },
   dangerRow: {
     flexDirection: "row",

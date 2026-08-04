@@ -4,6 +4,15 @@ import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/** The current database has no formal migration ledger; SQLite reports user_version 0. */
+export const DATABASE_SCHEMA_VERSION = 0;
+
+export type DatabaseDiagnostics = {
+  storage: "sqlite" | "memory-web-preview";
+  version: number;
+  tables: string[];
+};
+
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (Platform.OS === "web") {
     throw new Error("SQLite unavailable on web");
@@ -79,6 +88,24 @@ const webStore = {
   watchLater: new Map<string, Video & { addedAt: number }>(),
   channels: new Map<string, FollowedChannel>(),
 };
+
+/** Reads non-sensitive database metadata without changing the schema. */
+export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
+  const expectedTables = ["followed_channels", "queues", "resume_positions", "saved_videos", "watch_later"];
+  if (Platform.OS === "web") {
+    return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
+  }
+  const db = await getDb();
+  const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
+  const tableRows = await db.getAllAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+  );
+  return {
+    storage: "sqlite",
+    version: versionRow?.user_version ?? DATABASE_SCHEMA_VERSION,
+    tables: tableRows.map((row) => row.name),
+  };
+}
 
 export async function listSavedVideos(): Promise<Video[]> {
   if (Platform.OS === "web") {

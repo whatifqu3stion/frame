@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
+import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -17,7 +18,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { resumeList, savedVideos, watchLater, followedChannels } = useApp();
+  const { resumeList, savedVideos, watchLater, followedChannels, libraryLoading } = useApp();
   const [watchLink, setWatchLink] = useState<string>("");
   const [watchLinkError, setWatchLinkError] = useState<string | null>(null);
 
@@ -105,11 +106,11 @@ export default function HomeScreen() {
         testID="start-session"
       >
         <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: palette.accentSoft }]}>Sit down for a while</Text>
+          <Text style={[type.caption, { color: palette.active }]}>Sit down for a while</Text>
           <Text style={styles.sessionTitle}>Start a session</Text>
         </View>
         <View style={styles.sessionPlay}>
-          <Play size={16} color={palette.accentDeep} strokeWidth={1.8} fill={palette.accentDeep} />
+          <Play size={16} color={palette.onDark} strokeWidth={1.8} fill={palette.onDark} />
         </View>
       </Pressable>
 
@@ -157,7 +158,9 @@ export default function HomeScreen() {
         <View style={styles.sectionLabel}>
           <Text style={type.caption}>From your library</Text>
         </View>
-        {hero ? (
+        {libraryLoading ? (
+          <VideoFeedSkeleton count={1} variant="full" accessibilityLabel="Loading your library" />
+        ) : hero ? (
           <VideoCard video={hero} variant="full" />
         ) : (
           <EmptyState title="Your frame is clear" body="Paste a YouTube link to watch freely, or add videos to your library with Premium." />
@@ -203,7 +206,9 @@ export default function HomeScreen() {
         <View style={styles.sectionLabel}>
           <Text style={type.caption}>More from your library</Text>
         </View>
-        {more.length === 0 ? (
+        {libraryLoading ? (
+          <VideoFeedSkeleton count={3} accessibilityLabel="Loading more from your library" />
+        ) : more.length === 0 ? (
           <EmptyState title="Nothing else queued" body="Your saved choices will appear here without unrelated filler." />
         ) : (
           more.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
@@ -223,9 +228,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     quickWatchButtonText: { ...type.label, color: palette.onDark },
     quickWatchError: { ...type.bodySoft, color: palette.danger, marginTop: spacing.sm },
     sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg },
-    sessionBanner: { flexDirection: "row", alignItems: "center", marginHorizontal: spacing.page, marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radii.card },
-    sessionTitle: { fontFamily: fonts.serif, fontSize: 22, color: palette.onDark, marginTop: spacing.xs },
-    sessionPlay: { width: 44, height: 44, borderRadius: 14, backgroundColor: palette.onDark, justifyContent: "center", alignItems: "center" },
+    sessionBanner: { flexDirection: "row", alignItems: "center", marginHorizontal: spacing.page, marginTop: spacing.lg, backgroundColor: palette.activeSoft, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
+    sessionTitle: { fontFamily: fonts.serif, fontSize: 22, color: palette.ink, marginTop: spacing.xs },
+    sessionPlay: { width: 44, height: 44, borderRadius: 14, backgroundColor: palette.active, justifyContent: "center", alignItems: "center" },
     channelTile: { width: 120, marginRight: spacing.lg, alignItems: "flex-start" },
     channelAvatar: { width: 88, height: 88, borderRadius: radii.card, backgroundColor: palette.surfaceDeep, overflow: "hidden", marginBottom: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
     avatarImage: { width: "100%", height: "100%" },

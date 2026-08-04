@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { APP_ENV } from "@/constants/config";
 import Purchases, {
   type CustomerInfo,
   type PurchasesOffering,
@@ -12,12 +13,12 @@ export const REVENUECAT_OFFERING_KEY = ["revenuecat", "offering"] as const;
 
 function getRevenueCatApiKey(): string | undefined {
   if (Platform.OS === "web") return undefined;
-  if (__DEV__) return process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
+  if (APP_ENV !== "production") return process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
 
   return Platform.select({
     ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
     android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
-    default: process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY,
+    default: undefined,
   });
 }
 

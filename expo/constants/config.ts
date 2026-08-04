@@ -1,28 +1,67 @@
 import { Platform } from "react-native";
 
+export type AppEnvironment = "development" | "staging" | "production";
+
+function resolveAppEnvironment(value: string | undefined): AppEnvironment {
+  if (value === "development" || value === "staging" || value === "production") return value;
+  return __DEV__ ? "development" : "production";
+}
+
+function valueForEnvironment(values: {
+  development?: string;
+  staging?: string;
+  production?: string;
+}): string | undefined {
+  return values[APP_ENV] || undefined;
+}
+
+/** Explicit runtime environment. Unset development builds stay isolated; release builds require production configuration. */
+export const APP_ENV: AppEnvironment = resolveAppEnvironment(process.env.EXPO_PUBLIC_APP_ENV);
+
 /**
- * Google OAuth client configuration, read from public env vars.
- * Until these are provided, Google sign-in shows a "needs setup" state and the
- * rest of Frame (manual channel-adding, curated lists, the search taste) works.
+ * Environment-scoped backend configuration. The legacy Rork functions URL is accepted
+ * only for development so a release cannot silently use the routine development backend.
  */
+export const BACKEND_BASE_URL = valueForEnvironment({
+  development: process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL_DEVELOPMENT ?? process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL,
+  staging: process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL_STAGING,
+  production: process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL_PRODUCTION,
+})?.replace(/\/$/, "") ?? "";
+
+/** Environment-scoped Google OAuth client configuration. OAuth client IDs are public. */
 export const GOOGLE_CONFIG = {
-  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS || undefined,
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID || undefined,
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB || undefined,
+  iosClientId: valueForEnvironment({
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS,
+    staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_STAGING,
+    production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_PRODUCTION,
+  }),
+  androidClientId: valueForEnvironment({
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID,
+    staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_STAGING,
+    production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_PRODUCTION,
+  }),
+  webClientId: valueForEnvironment({
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB,
+    staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_STAGING,
+    production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_PRODUCTION,
+  }),
+} as const;
+
+/** Stable local identity until a real profile model is introduced. */
+export const ACTIVE_PROFILE_ID = "local-device";
+
+export const FEATURE_FLAGS = {
+  localLibrary: true,
+  finiteSessions: true,
+  youtubeDiscovery: Boolean(BACKEND_BASE_URL),
+  googleImport: Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 
 export function isGoogleConfigured(): boolean {
-  return Boolean(
-    GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId,
-  );
+  return FEATURE_FLAGS.googleImport;
 }
 
-/**
- * Whether the CURRENT platform has the client ID it needs for Google auth.
- * `expo-auth-session` throws if the active platform's client ID is missing, so we
- * use this to keep the auth request dormant (rather than crashing) on platforms
- * whose key hasn't been provided yet. The result is constant for the session.
- */
+/** Returns whether the current platform has the OAuth client ID it requires. */
 export function isGooglePlatformConfigured(): boolean {
   if (Platform.OS === "ios") return Boolean(GOOGLE_CONFIG.iosClientId);
   if (Platform.OS === "android") return Boolean(GOOGLE_CONFIG.androidClientId);

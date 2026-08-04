@@ -5,28 +5,28 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 
 const SECTIONS: { title: string; body: string }[] = [
   {
-    title: "What stays on your device",
-    body: "Frame stores your saved videos, Watch Later items, queues, follows, resume positions, interests, preferences, and recent searches locally. Frame does not use viewing or completion history to personalize discovery.",
+    title: "Information kept on your device",
+    body: "Frame stores your saved videos, Watch Later items, queues, followed creators, viewing progress, interests, preferences, and recent searches on your device. Frame does not use this information for behavioral advertising or to build an endless personalized feed.",
   },
   {
-    title: "YouTube",
-    body: "When you play, search for, or resolve YouTube content, the requested video, creator, link, or search term is sent to YouTube through its player or Frame's protected metadata service. YouTube may process device and network information under Google's privacy terms.",
+    title: "When you use online features",
+    body: "Frame sends the search terms, links, and video or creator identifiers needed to find and play the content you request. YouTube may also receive standard device and network information when its player loads.",
   },
   {
-    title: "Optional Google connection",
-    body: "If you choose Google sign-in, Google provides your email and YouTube subscriptions. The access credential is kept in secure device storage. Disconnecting asks Google to revoke access before Frame removes the credential; imported creators remain as local follows.",
+    title: "Optional account connection",
+    body: "If you choose to connect your Google account, Frame receives your email address and YouTube subscriptions so it can import the creators you follow. Your sign-in credential is stored securely on your device and used only to import or refresh that list. Disconnecting removes the credential; imported creators remain in your local library.",
   },
   {
     title: "Premium purchases",
-    body: "RevenueCat and your App Store or Play Store account process subscription status, purchases, and restores. Frame receives entitlement status, not your full payment-card details. Store purchase records remain associated with your store account after local data is deleted.",
+    body: "Premium purchases and restores are handled by your app store and a subscription service. Frame receives the information needed to confirm whether Premium is active, but never receives your full payment-card details.",
   },
   {
-    title: "Deletion and web preview",
-    body: "Delete all on-device data from Settings to remove Frame's local library, preferences, searches, follows, and Google credential. The browser version is a temporary preview and its local library may disappear when the page refreshes.",
+    title: "Your controls",
+    body: "You can disconnect your account or delete all on-device Frame data from Settings. Deleting local data does not cancel a subscription or remove purchase records held by your app store.",
   },
   {
-    title: "Diagnostics and future digest",
-    body: "Frame does not currently use viewing history for ads or personalization. If privacy-preserving diagnostics or the weekly digest are introduced, Frame will disclose the exact data sent and provide the controls described in the product before enabling them.",
+    title: "Policy changes",
+    body: "If Frame changes how it handles personal information, this policy will be updated with a new effective date. Material changes will be explained before they take effect.",
   },
 ];
 
@@ -37,8 +37,8 @@ export default function PrivacyScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
       <Text style={styles.title}>Privacy Policy</Text>
-      <Text style={styles.updated}>Effective August 2, 2026</Text>
-      <Text style={styles.intro}>Frame is designed around a local library and intentional playback. Some features still require clearly disclosed third-party services.</Text>
+      <Text style={styles.updated}>Effective August 4, 2026</Text>
+      <Text style={styles.intro}>Frame is built around a private, on-device library. This policy explains what stays on your device, when information is shared to provide a feature, and the controls available to you.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.heading}>{section.title}</Text>

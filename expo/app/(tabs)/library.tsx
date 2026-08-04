@@ -9,6 +9,7 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
+import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -35,6 +36,7 @@ export default function LibraryScreen() {
     resumeList,
     queues,
     followedChannels,
+    libraryLoading,
     requirePurchase,
     createQueue,
     renameQueue,
@@ -202,7 +204,14 @@ export default function LibraryScreen() {
     </View>
   );
 
-  const emptyContent = tab === "queues" ? queueContent : tab === "channels" ? channelContent : videoEmpty;
+  const isVideoTab = tab === "saved" || tab === "later" || tab === "resume";
+  const emptyContent = isVideoTab && libraryLoading
+    ? <VideoFeedSkeleton count={5} accessibilityLabel="Loading your library" />
+    : tab === "queues"
+      ? queueContent
+      : tab === "channels"
+        ? channelContent
+        : videoEmpty;
 
   return (
     <>
@@ -264,9 +273,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     accentLabel: { ...type.label, color: palette.accent },
     tabsRow: { paddingHorizontal: spacing.page, marginTop: spacing.lg, gap: spacing.sm, paddingBottom: spacing.sm },
     tabButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface },
-    tabButtonActive: { backgroundColor: palette.accentDeep, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
+    tabButtonActive: { backgroundColor: palette.activeSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
     tabLabel: { ...type.caption, fontSize: 10, color: palette.inkMuted },
-    tabLabelActive: { color: palette.onDark },
+    tabLabelActive: { color: palette.active },
     videoItem: { paddingHorizontal: spacing.page },
     emptyContent: { paddingHorizontal: spacing.page },
     newRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },

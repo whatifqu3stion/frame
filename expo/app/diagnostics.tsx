@@ -1,0 +1,153 @@
+import { useQuery } from "@tanstack/react-query";
+import Constants from "expo-constants";
+import { Redirect } from "expo-router";
+import { useMemo } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  ACTIVE_PROFILE_ID,
+  APP_ENV,
+  BACKEND_BASE_URL,
+  FEATURE_FLAGS,
+  isGooglePlatformConfigured,
+} from "@/constants/config";
+import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { useFrameTheme } from "@/constants/useFrameTheme";
+import { DATABASE_SCHEMA_VERSION, getDatabaseDiagnostics, type DatabaseDiagnostics } from "@/db/database";
+import { useApp } from "@/providers/AppProvider";
+import { isRevenueCatConfigured } from "@/services/revenueCat";
+
+export default function DiagnosticsRoute() {
+  if (!__DEV__) return <Redirect href="/(tabs)/settings" />;
+  return <DiagnosticsScreen />;
+}
+
+function DiagnosticsScreen() {
+  const insets = useSafeAreaInsets();
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const { isPremium, subscriptionStatusError, subscriptionStatusLoading } = useApp();
+  const databaseQuery = useQuery<DatabaseDiagnostics>({
+    queryKey: ["diagnostics", "database"],
+    queryFn: getDatabaseDiagnostics,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const entitlementState = subscriptionStatusLoading
+    ? "checking"
+    : subscriptionStatusError
+      ? "unavailable"
+      : isPremium
+        ? "premium active"
+        : "not entitled";
+  const database = databaseQuery.data;
+  const flags = {
+    ...FEATURE_FLAGS,
+    googleCurrentPlatform: isGooglePlatformConfigured(),
+    revenueCat: isRevenueCatConfigured,
+  };
+
+  return (
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.intro}>
+        <Text style={type.caption}>Development only</Text>
+        <Text style={type.title}>Diagnostics</Text>
+        <Text style={type.bodySoft}>Configuration status only. Credentials and tokens are never shown.</Text>
+      </View>
+
+      <DiagnosticSection title="Runtime" styles={styles} type={type}>
+        <DiagnosticRow label="App version" value={Constants.expoConfig?.version ?? "unknown"} styles={styles} type={type} />
+        <DiagnosticRow label="Environment" value={APP_ENV} styles={styles} type={type} />
+        <DiagnosticRow label="Active profile ID" value={ACTIVE_PROFILE_ID} styles={styles} type={type} />
+        <DiagnosticRow label="Entitlement" value={entitlementState} styles={styles} type={type} />
+      </DiagnosticSection>
+
+      <DiagnosticSection title="Persistence" styles={styles} type={type}>
+        <DiagnosticRow
+          label="Database version"
+          value={database ? `${database.version}${database.version === 0 ? " (unversioned baseline)" : ""}` : `${DATABASE_SCHEMA_VERSION} (loading)`}
+          styles={styles}
+          type={type}
+        />
+        <DiagnosticRow label="Storage" value={database?.storage ?? (databaseQuery.isError ? "unavailable" : "loading")} styles={styles} type={type} />
+        <DiagnosticRow label="Tables" value={database?.tables.join(", ") ?? "loading"} styles={styles} type={type} />
+      </DiagnosticSection>
+
+      <DiagnosticSection title="Backend" styles={styles} type={type}>
+        <DiagnosticRow label="Base URL" value={BACKEND_BASE_URL || "not configured"} styles={styles} type={type} />
+      </DiagnosticSection>
+
+      <DiagnosticSection title="Feature flags" styles={styles} type={type}>
+        {Object.entries(flags).map(([label, enabled]) => (
+          <DiagnosticRow key={label} label={label} value={enabled ? "enabled" : "disabled"} styles={styles} type={type} />
+        ))}
+      </DiagnosticSection>
+    </ScrollView>
+  );
+}
+
+function DiagnosticSection({
+  title,
+  children,
+  styles,
+  type,
+}: {
+  title: string;
+  children: React.ReactNode;
+  styles: ReturnType<typeof createStyles>;
+  type: FrameType;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={type.caption}>{title}</Text>
+      <View style={styles.card}>{children}</View>
+    </View>
+  );
+}
+
+function DiagnosticRow({
+  label,
+  value,
+  styles,
+  type,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+  type: FrameType;
+}) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={[type.bodySoft, styles.value]} selectable>{value}</Text>
+    </View>
+  );
+}
+
+function createStyles(palette: FramePalette, type: FrameType) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: palette.wall },
+    intro: { paddingHorizontal: spacing.page, gap: spacing.sm },
+    section: { paddingHorizontal: spacing.page, marginTop: spacing.xl, gap: spacing.sm },
+    card: {
+      backgroundColor: palette.surface,
+      borderRadius: radii.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.borderSoft,
+      overflow: "hidden",
+    },
+    row: {
+      minHeight: 58,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: palette.borderSoft,
+      gap: spacing.xs,
+    },
+    label: { ...type.label, color: palette.ink },
+    value: { color: palette.inkMuted },
+  });
+}

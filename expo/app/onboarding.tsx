@@ -264,7 +264,7 @@ function StepBringChannels({ width }: { width: number }) {
         </Pressable>
       </View>
       {linkMsg ? (
-        <Text style={[type.label, { marginTop: spacing.sm, color: linkMsg.ok ? palette.accent : "#8C3A2E" }]}>{linkMsg.message}</Text>
+        <Text style={[type.label, { marginTop: spacing.sm, color: linkMsg.ok ? palette.success : palette.danger }]}>{linkMsg.message}</Text>
       ) : null}
 
       <View style={styles.searchHeader}>
@@ -309,13 +309,13 @@ function StepBringChannels({ width }: { width: number }) {
                     testID={`onboard-add-${v.id}`}
                     accessibilityLabel={added ? `${v.channelTitle} already followed` : `Follow ${v.channelTitle}`}
                   >
-                    {added ? <Check size={14} color={palette.accent} strokeWidth={2} /> : <Plus size={14} color={palette.ink} strokeWidth={2} />}
+                    {added ? <Check size={14} color={palette.active} strokeWidth={2} /> : <Plus size={14} color={palette.ink} strokeWidth={2} />}
                   </Pressable>
                 </View>
               );
             })
           ) : (
-            <Text style={[type.bodySoft, { color: searchQuery.data?.status === "empty" ? palette.inkMuted : "#8C3A2E" }]}>
+            <Text style={[type.bodySoft, { color: searchQuery.data?.status === "empty" ? palette.inkMuted : palette.danger }]}>
               {searchQuery.data?.message ?? "Search is unavailable right now."}
             </Text>
           )}
@@ -346,8 +346,7 @@ function StepInterests({ width, interests, onToggle }: { width: number; interest
                 style={[styles.interestChip, active && styles.interestChipActive]}
                 testID={`onboard-interest-${t.id}`}
               >
-                <Text style={[styles.interestEmoji, active && { color: palette.wall }]}>{t.emoji}</Text>
-                <Text style={[styles.interestLabel, active && { color: palette.wall }]}>{t.name}</Text>
+                <Text style={[styles.interestLabel, active && { color: palette.active }]}>{t.name}</Text>
               </Pressable>
             );
           })}
@@ -455,7 +454,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     alignItems: "center",
     borderRadius: radii.control,
   },
-  addChipDone: { backgroundColor: palette.surfaceDeep },
+  addChipDone: { backgroundColor: palette.activeSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
   chipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl },
   interestChip: {
     flexDirection: "row",
@@ -469,8 +468,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderColor: palette.borderSoft,
     minHeight: 44,
   },
-  interestChipActive: { backgroundColor: palette.accentDeep, borderColor: palette.active },
-  interestEmoji: { color: palette.accent, fontSize: 14 },
+  interestChipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
   interestLabel: { ...type.label, fontSize: 13 },
   bottomRow: {
     flexDirection: "row",

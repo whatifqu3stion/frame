@@ -1,6 +1,7 @@
+import { BACKEND_BASE_URL } from "@/constants/config";
 import type { Channel, ServiceFailureKind, ServiceResult, Video } from "@/types";
 
-const FUNCTIONS_URL = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL?.replace(/\/$/, "") ?? "";
+const FUNCTIONS_URL = BACKEND_BASE_URL;
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 export type VideoChapter = {

@@ -1,6 +1,24 @@
+type RuntimeEnvironment = "development" | "staging" | "production";
+
 type Env = {
+  FRAME_ENV?: string;
   YOUTUBE_API_KEY?: string;
+  YOUTUBE_API_KEY_DEVELOPMENT?: string;
+  YOUTUBE_API_KEY_STAGING?: string;
+  YOUTUBE_API_KEY_PRODUCTION?: string;
 };
+
+function runtimeEnvironment(value: string | undefined): RuntimeEnvironment {
+  if (value === "staging" || value === "production") return value;
+  return "development";
+}
+
+function youtubeApiKey(env: Env): string | undefined {
+  const environment = runtimeEnvironment(env.FRAME_ENV);
+  if (environment === "production") return env.YOUTUBE_API_KEY_PRODUCTION;
+  if (environment === "staging") return env.YOUTUBE_API_KEY_STAGING;
+  return env.YOUTUBE_API_KEY_DEVELOPMENT ?? env.YOUTUBE_API_KEY;
+}
 
 type ApiStatus = "success" | "empty" | "partial" | "offline" | "unauthorized" | "quota" | "unavailable" | "failed";
 
@@ -89,9 +107,10 @@ function videoFromItem(item: VideoItem): Record<string, unknown> | null {
 }
 
 async function youtubeJson<T>(path: string, env: Env): Promise<T> {
-  if (!env.YOUTUBE_API_KEY) throw new Error("YOUTUBE_NOT_CONFIGURED");
+  const apiKey = youtubeApiKey(env);
+  if (!apiKey) throw new Error("YOUTUBE_NOT_CONFIGURED");
   const separator = path.includes("?") ? "&" : "?";
-  const response = await fetch(`${YOUTUBE_BASE}${path}${separator}key=${encodeURIComponent(env.YOUTUBE_API_KEY)}`);
+  const response = await fetch(`${YOUTUBE_BASE}${path}${separator}key=${encodeURIComponent(apiKey)}`);
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     if (response.status === 403 && /quota|dailyLimitExceeded/i.test(body)) throw new Error("YOUTUBE_QUOTA");

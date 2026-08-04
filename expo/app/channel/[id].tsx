@@ -3,10 +3,11 @@ import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
+import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -84,8 +85,8 @@ export default function ChannelScreen() {
             accessibilityLabel={following ? `Unfollow ${channel.title}` : `Follow ${channel.title}`}
             testID="follow-channel"
           >
-            {following ? <Check size={15} color={palette.accent} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
-            <Text style={[styles.followText, { color: following ? palette.accent : palette.onDark }]}>{following ? "Following" : "Follow channel"}</Text>
+            {following ? <Check size={15} color={palette.active} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
+            <Text style={[styles.followText, { color: following ? palette.active : palette.onDark }]}>{following ? "Following" : "Follow channel"}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -96,10 +97,7 @@ export default function ChannelScreen() {
   );
 
   const empty = videosQuery.isLoading ? (
-    <View style={styles.loadingState} accessible accessibilityRole="progressbar" accessibilityLabel="Loading verified uploads">
-      <ActivityIndicator color={palette.accent} />
-      <Text style={styles.loadingText}>Loading verified uploads…</Text>
-    </View>
+    <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading verified uploads" />
   ) : videosQuery.data?.status === "empty" ? (
     <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
   ) : (
@@ -143,11 +141,10 @@ function createStyles(palette: FramePalette, type: FrameType) {
   channelName: { marginTop: spacing.sm },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
   followBtn: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
-  followBtnActive: { backgroundColor: palette.surface },
+  followBtnActive: { backgroundColor: palette.activeSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
   followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
-  loadingState: { minHeight: 180, paddingHorizontal: spacing.lg, alignItems: "center", justifyContent: "center" },
-  loadingText: { ...type.bodySoft, marginTop: spacing.md },
+  loadingFeed: { paddingHorizontal: spacing.lg },
   retryButton: { minHeight: 44, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
   retryText: { ...type.label, color: palette.accent },
   pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
