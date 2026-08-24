@@ -21,7 +21,7 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { interests, followedChannels } = useApp();
+  const { interests, followedChannels, premiumAccessState, requirePurchase } = useApp();
   const [active, setActive] = useState<string | null>(interests[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
 
@@ -29,7 +29,7 @@ export default function ExploreScreen() {
   const topicQuery = useQuery({
     queryKey: ["topic", activeTopic?.id],
     queryFn: () => getTopicVideos(activeTopic!.name),
-    enabled: !!activeTopic,
+    enabled: !!activeTopic && premiumAccessState === "active",
   });
   const videos = useMemo<Video[]>(() => {
     if (topicQuery.data?.status === "success" || topicQuery.data?.status === "partial") return topicQuery.data.data;
@@ -38,9 +38,15 @@ export default function ExploreScreen() {
   const topicMessage = topicQuery.data && "message" in topicQuery.data ? topicQuery.data.message : undefined;
 
   const chooseTopic = useCallback((id: string): void => {
+    if (!requirePurchase("discovery")) return;
     void Haptics.selectionAsync().catch(() => {});
     setActive(id);
-  }, []);
+  }, [requirePurchase]);
+
+  const openAddChannel = useCallback((): void => {
+    if (!requirePurchase("creators")) return;
+    setAddOpen(true);
+  }, [requirePurchase]);
 
   const retryTopic = useCallback((): void => {
     void topicQuery.refetch();
@@ -53,7 +59,7 @@ export default function ExploreScreen() {
       </View>
 
       <Pressable
-        onPress={() => setAddOpen(true)}
+        onPress={openAddChannel}
         style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
         accessibilityRole="button"
         testID="explore-add-channel"
@@ -134,7 +140,15 @@ export default function ExploreScreen() {
     </>
   );
 
-  const listEmpty = interests.length === 0 ? null : topicQuery.isLoading ? (
+  const listEmpty = premiumAccessState !== "active" ? (
+    <View style={styles.premiumGate}>
+      <EmptyState title="Explore is part of Premium" body="Choose the topics and creators you trust, without opening an endless feed." />
+      <Pressable onPress={() => requirePurchase("discovery")} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
+        <Text style={styles.accentLabel}>See Premium</Text>
+        <ChevronRight size={14} color={palette.accent} />
+      </Pressable>
+    </View>
+  ) : interests.length === 0 ? null : topicQuery.isLoading ? (
     <VideoFeedSkeleton count={5} accessibilityLabel="Finding verified videos" />
   ) : topicQuery.data?.status === "empty" ? (
     <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
@@ -202,6 +216,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     chipContentActive: { color: palette.active },
     topicHeading: { marginTop: spacing.lg, marginBottom: spacing.md },
     topicTitle: { ...type.heading, fontSize: 20 },
+    premiumGate: { paddingTop: spacing.lg },
     retryButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: -spacing.lg, alignSelf: "flex-start" },
     pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });

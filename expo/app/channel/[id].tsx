@@ -19,17 +19,17 @@ export default function ChannelScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, requirePurchase } = useApp();
+  const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, premiumAccessState, requirePurchase } = useApp();
 
   const channelQuery = useQuery({
     queryKey: ["channel", id],
     queryFn: () => getChannel(id!),
-    enabled: !!id,
+    enabled: !!id && premiumAccessState === "active",
   });
   const videosQuery = useQuery({
     queryKey: ["channel-videos", id],
     queryFn: () => getChannelVideos(id!),
-    enabled: !!id,
+    enabled: !!id && premiumAccessState === "active",
   });
 
   const savedChannel = followedChannels.find((candidate) => candidate.id === id);
@@ -48,7 +48,7 @@ export default function ChannelScreen() {
       await unfollowChannel(channel.id);
       return;
     }
-    if (!requirePurchase()) return;
+    if (!requirePurchase("creators")) return;
     await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
   }, [channel, followChannel, following, requirePurchase, unfollowChannel]);
 
@@ -96,7 +96,14 @@ export default function ChannelScreen() {
     </>
   );
 
-  const empty = videosQuery.isLoading ? (
+  const empty = premiumAccessState !== "active" ? (
+    <View style={styles.premiumGate}>
+      <EmptyState title="Creator shelves are part of Premium" body="Follow trusted channels and browse their recent verified uploads without a recommendation feed." />
+      <Pressable onPress={() => requirePurchase("creators")} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
+        <Text style={styles.retryText}>See Premium</Text>
+      </Pressable>
+    </View>
+  ) : videosQuery.isLoading ? (
     <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading verified uploads" />
   ) : videosQuery.data?.status === "empty" ? (
     <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
@@ -145,6 +152,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
   loadingFeed: { paddingHorizontal: spacing.lg },
+  premiumGate: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   retryButton: { minHeight: 44, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
   retryText: { ...type.label, color: palette.accent },
   pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },

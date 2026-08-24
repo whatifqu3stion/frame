@@ -70,8 +70,18 @@ export default function LibraryScreen() {
   }, []);
 
   const openNewSession = useCallback((): void => {
-    if (!requirePurchase()) return;
+    if (!requirePurchase("sessions")) return;
     router.push("/session");
+  }, [requirePurchase]);
+
+  const openAddChannel = useCallback((): void => {
+    if (!requirePurchase("creators")) return;
+    setAddChannelOpen(true);
+  }, [requirePurchase]);
+
+  const openSession = useCallback((id: string): void => {
+    if (!requirePurchase("sessions")) return;
+    router.push({ pathname: "/session/[id]", params: { id } });
   }, [requirePurchase]);
 
   const confirmUnfollow = useCallback((id: string, name: string): void => {
@@ -132,7 +142,7 @@ export default function LibraryScreen() {
       {sessions.length === 0 ? <EmptyState title="No named sessions" body="Create a reusable one-to-three-video plan for a quiet sitting." /> : sessions.map((session) => (
         <Pressable
           key={session.id}
-          onPress={() => router.push({ pathname: "/session/[id]", params: { id: session.id } })}
+          onPress={() => openSession(session.id)}
           style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel={`Open ${session.name}`}
@@ -149,7 +159,7 @@ export default function LibraryScreen() {
 
   const channelContent = (
     <View>
-      <Pressable onPress={() => setAddChannelOpen(true)} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="library-add-channel">
+      <Pressable onPress={openAddChannel} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="library-add-channel">
         <Link2 size={18} color={palette.accent} strokeWidth={1.6} />
         <Text style={styles.accentLabel}>Add a channel by link</Text>
       </Pressable>

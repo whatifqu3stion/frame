@@ -15,7 +15,7 @@ export default function AddToSessionModal() {
   const [name, setName] = useState<string>("");
 
   const onPick = async (sessionId: string) => {
-    if (!id || !requirePurchase()) return;
+    if (!id || !requirePurchase("sessions")) return;
     const session = sessions.find((candidate) => candidate.id === sessionId);
     if (!session || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= 3) return;
     await updateSessionVideos(sessionId, [...session.orderedVideoIds, id]);
@@ -23,7 +23,7 @@ export default function AddToSessionModal() {
   };
 
   const onCreate = async () => {
-    if (!name.trim() || !id || !requirePurchase()) return;
+    if (!name.trim() || !id || !requirePurchase("sessions")) return;
     await createSession(name, [id]);
     router.back();
   };

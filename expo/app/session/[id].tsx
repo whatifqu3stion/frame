@@ -26,7 +26,7 @@ export default function SavedSessionScreen() {
   const totalSeconds = session?.orderedVideoIds.reduce((sum, videoId) => sum + (videoMap.get(videoId)?.durationSeconds ?? 0), 0) ?? 0;
 
   const startAt = useCallback((index: number): void => {
-    if (!session || !requirePurchase()) return;
+    if (!session || !requirePurchase("sessions")) return;
     const videoId = session.orderedVideoIds[index];
     if (!videoMap.has(videoId)) {
       Alert.alert("Video unavailable", "This saved item is no longer in your local library. Remove it or add the video again.");
@@ -40,7 +40,7 @@ export default function SavedSessionScreen() {
   }, [requirePurchase, session, videoMap]);
 
   const move = useCallback(async (index: number, direction: -1 | 1): Promise<void> => {
-    if (!session || !requirePurchase()) return;
+    if (!session || !requirePurchase("sessions")) return;
     const target = index + direction;
     if (target < 0 || target >= session.orderedVideoIds.length) return;
     const next = [...session.orderedVideoIds];
@@ -50,20 +50,25 @@ export default function SavedSessionScreen() {
   }, [requirePurchase, session, updateSessionVideos]);
 
   const removeVideo = useCallback(async (videoId: string): Promise<void> => {
-    if (!session || !requirePurchase()) return;
+    if (!session || !requirePurchase("sessions")) return;
     await updateSessionVideos(session.id, session.orderedVideoIds.filter((candidate) => candidate !== videoId));
   }, [requirePurchase, session, updateSessionVideos]);
 
   const duplicate = useCallback(async (): Promise<void> => {
-    if (!session || !requirePurchase()) return;
+    if (!session || !requirePurchase("sessions")) return;
     const copy = await duplicateSession(session.id);
     if (!copy) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
   }, [duplicateSession, requirePurchase, session]);
 
+  const openEditor = useCallback((): void => {
+    if (!session || !requirePurchase("sessions")) return;
+    router.push({ pathname: "/session", params: { id: session.id } });
+  }, [requirePurchase, session]);
+
   const confirmDelete = useCallback((): void => {
-    if (!session || !requirePurchase()) return;
+    if (!session || !requirePurchase("sessions")) return;
     Alert.alert("Delete named session?", `“${session.name}” will be removed.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => { await removeSession(session.id); router.back(); } },
@@ -86,7 +91,7 @@ export default function SavedSessionScreen() {
       <Text style={styles.subtitle}>{session.orderedVideoIds.length} of 3 videos · {formatDuration(totalSeconds)} known runtime</Text>
 
       <View style={styles.actions}>
-        <Pressable onPress={() => router.push({ pathname: "/session", params: { id: session.id } })} style={styles.actionButton} accessibilityRole="button">
+        <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
           <Pencil size={16} color={palette.accent} /><Text style={styles.actionText}>Edit</Text>
         </Pressable>
         <Pressable onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">

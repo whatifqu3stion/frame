@@ -450,7 +450,7 @@ export default function WatchScreen() {
     if (!video || !beginAction("save")) return;
     try {
       if (!isSaved) {
-        if (!requirePurchase()) return;
+        if (!requirePurchase("save")) return;
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
         await saveVideo(normalizedVideo);
@@ -470,7 +470,7 @@ export default function WatchScreen() {
     if (!video || !beginAction("later")) return;
     try {
       if (!inWatchLater) {
-        if (!requirePurchase()) return;
+        if (!requirePurchase("watchLater")) return;
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
         await addToWatchLater(normalizedVideo);

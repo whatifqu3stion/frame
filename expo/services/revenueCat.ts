@@ -41,7 +41,7 @@ export async function getPremiumOffering(): Promise<PurchasesOffering> {
   }
 
   const offerings = await Purchases.getOfferings();
-  const offering = offerings.current ?? offerings.all[PREMIUM_OFFERING_ID];
+  const offering = offerings.all[PREMIUM_OFFERING_ID] ?? offerings.current;
   if (!offering) {
     throw new Error("Frame Premium is temporarily unavailable.");
   }

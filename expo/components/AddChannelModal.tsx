@@ -9,7 +9,7 @@ type Props = { visible: boolean; onClose: () => void };
 
 /** A calm sheet for adding a creator by pasting a YouTube channel or video link. */
 export default function AddChannelModal({ visible, onClose }: Props) {
-  const { addChannelByLink } = useApp();
+  const { addChannelByLink, requirePurchase } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [value, setValue] = useState<string>("");
@@ -18,7 +18,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
 
   const close = (): void => { setValue(""); setBusy(false); setFeedback(null); onClose(); };
   const submit = async (): Promise<void> => {
-    if (!value.trim() || busy) return;
+    if (!value.trim() || busy || !requirePurchase("creators")) return;
     setBusy(true); setFeedback(null);
     const result = await addChannelByLink(value.trim());
     setBusy(false); setFeedback(result);

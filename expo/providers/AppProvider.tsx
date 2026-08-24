@@ -48,6 +48,19 @@ const GOOGLE_TOKEN_KEY = "frame.google.token.v1";
 const MAX_RECENT_SEARCHES = 8;
 
 export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
+export type PremiumFeature = "library" | "save" | "watchLater" | "resume" | "interests" | "creators" | "import" | "sessions" | "discovery";
+
+const PREMIUM_FEATURE_MESSAGES: Record<PremiumFeature, string> = {
+  library: "Premium unlocks playback from your personal library.",
+  save: "Premium lets you save this video to your private library.",
+  watchLater: "Premium keeps a calm Watch Later list on this device.",
+  resume: "Premium remembers where you stopped across your library.",
+  interests: "Premium uses your chosen interests to build quiet Explore collections.",
+  creators: "Premium lets you follow trusted creators on your shelf.",
+  import: "Premium imports the YouTube channels you already follow.",
+  sessions: "Premium lets you create and edit reusable one-to-three-video sessions.",
+  discovery: "Premium unlocks interest-led browsing without an endless feed.",
+};
 
 type GoogleCredential = {
   accessToken: string;
@@ -156,6 +169,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [paywallOpen, setPaywallOpen] = useState<boolean>(false);
+  const [paywallMessage, setPaywallMessage] = useState<string>(PREMIUM_FEATURE_MESSAGES.library);
   const [googleCredential, setGoogleCredential] = useState<GoogleCredential | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
   const prefsRef = useRef<UserPreferences>(defaultPrefs);
@@ -232,7 +246,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const setAccent = useCallback((accent: AccentMode) => updatePrefs({ accent }), [updatePrefs]);
   const finishOnboarding = useCallback(() => updatePrefs({ hasCompletedOnboarding: true }), [updatePrefs]);
 
-  const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
+  const persistInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
     const generation = storageGenerationRef.current;
     interestsRef.current = items;
     setInterests(items);
@@ -242,19 +256,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     interestsWriteRef.current = write.catch(() => {});
     await write;
   }, []);
-
-  const toggleInterest = useCallback(
-    (id: string) => {
-      const interest = INTEREST_LIBRARY.find((item) => item.id === id);
-      if (!interest) return;
-      const current = interestsRef.current;
-      const next = current.some((item) => item.id === id)
-        ? current.filter((item) => item.id !== id)
-        : [...current, interest];
-      void replaceInterests(next);
-    },
-    [replaceInterests],
-  );
 
   const persistSearches = useCallback(async (items: string[]): Promise<void> => {
     const generation = storageGenerationRef.current;
@@ -299,21 +300,58 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
   }, [queryClient]);
 
-  const requirePurchase = useCallback((): boolean => {
+  const refreshPremiumAccess = useCallback(async (): Promise<void> => {
+    await customerInfoQuery.refetch();
+  }, [customerInfoQuery]);
+
+  const openPremium = useCallback((feature: PremiumFeature = "library"): void => {
+    setPaywallMessage(PREMIUM_FEATURE_MESSAGES[feature]);
+    setPaywallOpen(true);
+  }, []);
+
+  const requirePurchase = useCallback((feature: PremiumFeature = "library"): boolean => {
     if (premiumAccessState === "active") return true;
     if (premiumAccessState === "inactive") {
-      setPaywallOpen(true);
+      openPremium(feature);
       return false;
     }
-
-    const feedback = premiumAccessState === "checking"
-      ? { title: "Checking Premium", message: "Frame is still confirming your access. Try again in a moment." }
-      : premiumAccessState === "misconfigured"
-        ? { title: "Premium unavailable", message: "Premium is not configured for this beta build. Open Beta Support in Settings for details." }
-        : { title: "Couldn’t verify Premium", message: "Frame couldn’t confirm your access. Check your connection, then retry from Settings." };
-    Alert.alert(feedback.title, feedback.message);
+    if (premiumAccessState === "checking") {
+      Alert.alert("Checking Premium", "Frame is still confirming your access. Try again in a moment.");
+      return false;
+    }
+    if (premiumAccessState === "misconfigured") {
+      Alert.alert("Premium unavailable", "Premium is not configured for this beta build. Open Beta Support in Settings for the setup status.");
+      return false;
+    }
+    Alert.alert(
+      "Couldn’t verify Premium",
+      "Frame couldn’t confirm your access. Check your connection, then try once more.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Try again", onPress: () => { void refreshPremiumAccess(); } },
+      ],
+    );
     return false;
-  }, [premiumAccessState]);
+  }, [openPremium, premiumAccessState, refreshPremiumAccess]);
+
+  const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
+    if (!requirePurchase("interests")) return;
+    await persistInterests(items);
+  }, [persistInterests, requirePurchase]);
+
+  const toggleInterest = useCallback(
+    (id: string): void => {
+      if (!requirePurchase("interests")) return;
+      const interest = INTEREST_LIBRARY.find((item) => item.id === id);
+      if (!interest) return;
+      const current = interestsRef.current;
+      const next = current.some((item) => item.id === id)
+        ? current.filter((item) => item.id !== id)
+        : [...current, interest];
+      void persistInterests(next);
+    },
+    [persistInterests, requirePurchase],
+  );
 
   // Library queries
   const savedQuery = useQuery({
@@ -329,9 +367,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
+    if (premiumAccessState !== "active") return;
     await upsertResume(video, timestampSeconds);
     await queryClient.invalidateQueries({ queryKey: ["library", "resume"] });
-  }, [queryClient]);
+  }, [premiumAccessState, queryClient]);
 
   const clearVideoResume = useCallback(async (videoId: string): Promise<void> => {
     await clearResume(videoId);
@@ -376,23 +415,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const updateSessionVideos = useCallback(
     async (sessionId: string, videoIds: string[]): Promise<void> => {
+      if (!requirePurchase("sessions")) return;
       const existing = queuesQuery.data?.find((session) => session.id === sessionId);
       if (!existing) return;
       const uniqueIds = Array.from(new Set(videoIds)).slice(0, 3);
       await upsertQueue({ ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [queuesQuery.data, invalidateLibrary],
+    [queuesQuery.data, invalidateLibrary, requirePurchase],
   );
 
   const renameSession = useCallback(
     async (id: string, name: string): Promise<void> => {
+      if (!requirePurchase("sessions")) return;
       const existing = queuesQuery.data?.find((session) => session.id === id);
       if (!existing) return;
       await upsertQueue({ ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [queuesQuery.data, invalidateLibrary],
+    [queuesQuery.data, invalidateLibrary, requirePurchase],
   );
 
   const watchLaterMutation = useMutation({
@@ -424,7 +465,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const createSession = useCallback(
-    async (name: string, videoIds: string[] = []): Promise<VideoQueue> => {
+    async (name: string, videoIds: string[] = []): Promise<VideoQueue | null> => {
+      if (!requirePurchase("sessions")) return null;
       const session: VideoQueue = {
         id: `session_${Math.random().toString(36).slice(2, 10)}`,
         name: name.trim() || "Untitled session",
@@ -435,24 +477,26 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await invalidateLibrary();
       return session;
     },
-    [invalidateLibrary],
+    [invalidateLibrary, requirePurchase],
   );
 
   const duplicateSession = useCallback(
     async (id: string): Promise<VideoQueue | null> => {
+      if (!requirePurchase("sessions")) return null;
       const existing = queuesQuery.data?.find((session) => session.id === id);
       if (!existing) return null;
       return createSession(`${existing.name} copy`, existing.orderedVideoIds);
     },
-    [createSession, queuesQuery.data],
+    [createSession, queuesQuery.data, requirePurchase],
   );
 
   const removeSession = useCallback(
     async (id: string): Promise<void> => {
+      if (!requirePurchase("sessions")) return;
       await deleteQueue(id);
       await invalidateLibrary();
     },
-    [invalidateLibrary],
+    [invalidateLibrary, requirePurchase],
   );
 
   // --- Google account / subscription import ---
@@ -478,7 +522,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
-    if (!requirePurchase()) return { ok: false, message: "Following creators is part of Frame Premium." };
+    if (!requirePurchase("import")) return { ok: false, message: "Google import is part of Frame Premium." };
     if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
     if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
@@ -515,6 +559,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [promptGoogle, requirePurchase, updatePrefs, importSubscriptions]);
 
   const refreshSubscriptions = useCallback(async (): Promise<AddChannelResult> => {
+    if (!requirePurchase("import")) return { ok: false, message: "Google import is part of Frame Premium." };
     if (!googleCredential || googleCredential.expiresAt <= Date.now()) {
       setGoogleCredential(null);
       await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
@@ -522,7 +567,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return { ok: false, message: "Your Google connection expired. Sign in again to refresh." };
     }
     return importSubscriptions(googleCredential.accessToken);
-  }, [googleCredential, importSubscriptions, updatePrefs]);
+  }, [googleCredential, importSubscriptions, requirePurchase, updatePrefs]);
 
   const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (googleCredential) {
@@ -537,7 +582,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const addChannelByLink = useCallback(
     async (input: string): Promise<AddChannelResult> => {
-      if (!requirePurchase()) return { ok: false, message: "Following creators is part of Frame Premium." };
+      if (!requirePurchase("creators")) return { ok: false, message: "Following creators is part of Frame Premium." };
       const result = await resolveChannelFromLink(parseYouTubeLink(input));
       if (result.status !== "success") {
         return { ok: false, message: result.message ?? "That creator could not be verified." };
@@ -571,7 +616,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       prefs,
       interests,
       paywallOpen,
+      paywallMessage,
       setPaywallOpen,
+      openPremium,
       setTheme,
       setAccent,
       finishOnboarding,
@@ -579,6 +626,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       premiumAccessState,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
       subscriptionStatusError: customerInfoQuery.isError,
+      refreshPremiumAccess,
       libraryLoading: !ready
         || savedQuery.isLoading
         || resumeQuery.isLoading
@@ -608,11 +656,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
       isInWatchLater: (id: string) => (watchLaterQuery.data ?? []).some((v) => v.id === id),
       isChannelFollowed: (id: string) => (channelsQuery.data ?? []).some((c) => c.id === id),
       checkIsVideoSaved: (id: string) => dbIsVideoSaved(id),
-      saveVideo: (v: Video) => saveMutation.mutateAsync(v),
+      saveVideo: async (v: Video): Promise<void> => {
+        if (!requirePurchase("save")) return;
+        await saveMutation.mutateAsync(v);
+      },
       unsaveVideo: (id: string) => unsaveMutation.mutateAsync(id),
-      addToWatchLater: (v: Video) => watchLaterMutation.mutateAsync(v),
+      addToWatchLater: async (v: Video): Promise<void> => {
+        if (!requirePurchase("watchLater")) return;
+        await watchLaterMutation.mutateAsync(v);
+      },
       removeFromWatchLater: (id: string) => removeWatchLaterMutation.mutateAsync(id),
-      followChannel: (c: FollowedChannel) => followMutation.mutateAsync(c),
+      followChannel: async (c: FollowedChannel): Promise<void> => {
+        if (!requirePurchase("creators")) return;
+        await followMutation.mutateAsync(c);
+      },
       unfollowChannel: (id: string) => unfollowMutation.mutateAsync(id),
       createSession,
       duplicateSession,
@@ -628,6 +685,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       prefs,
       interests,
       paywallOpen,
+      paywallMessage,
+      openPremium,
       setTheme,
       setAccent,
       finishOnboarding,
@@ -635,6 +694,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       premiumAccessState,
       customerInfoQuery.isLoading,
       customerInfoQuery.isError,
+      refreshPremiumAccess,
       savedQuery.isLoading,
       resumeQuery.isLoading,
       queuesQuery.isLoading,

@@ -18,7 +18,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { resumeList, savedVideos, watchLater, followedChannels, libraryLoading } = useApp();
+  const { resumeList, savedVideos, watchLater, followedChannels, libraryLoading, requirePurchase } = useApp();
   const [watchLink, setWatchLink] = useState<string>("");
   const [watchLinkError, setWatchLinkError] = useState<string | null>(null);
 
@@ -101,7 +101,9 @@ export default function HomeScreen() {
       </View>
 
       <Pressable
-        onPress={() => router.push("/session")}
+        onPress={() => {
+          if (requirePurchase("sessions")) router.push("/session");
+        }}
         style={({ pressed }) => [styles.sessionBanner, pressed && styles.pressed]}
         testID="start-session"
       >

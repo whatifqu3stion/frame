@@ -17,10 +17,10 @@ export default function SettingsScreen() {
   const {
     interests,
     toggleInterest,
-    setPaywallOpen,
+    openPremium,
     isPremium,
-    subscriptionStatusLoading,
-    subscriptionStatusError,
+    premiumAccessState,
+    refreshPremiumAccess,
     wipeAllData,
     googleConfigured,
     googleConnected,
@@ -33,10 +33,12 @@ export default function SettingsScreen() {
     prefs,
     setTheme,
     setAccent,
+    requirePurchase,
   } = useApp();
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
 
   const onConnect = async () => {
+    if (!requirePurchase("import")) return;
     setAccountBusy(true);
     const result = await signInWithGoogle();
     setAccountBusy(false);
@@ -44,6 +46,7 @@ export default function SettingsScreen() {
   };
 
   const onRefresh = async () => {
+    if (!requirePurchase("import")) return;
     setAccountBusy(true);
     const result = await refreshSubscriptions();
     setAccountBusy(false);
@@ -84,10 +87,13 @@ export default function SettingsScreen() {
       </View>
 
       <Section label="Frame Premium">
-        {subscriptionStatusLoading ? (
+        {premiumAccessState === "checking" ? (
           <View style={styles.simpleRow}>
             <ActivityIndicator size="small" color={palette.accent} />
-            <Text style={type.bodySoft}>Checking your subscription…</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>Checking Premium</Text>
+              <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>Confirming access with the test subscription service.</Text>
+            </View>
           </View>
         ) : isPremium ? (
           <View style={styles.premiumActive}>
@@ -99,35 +105,50 @@ export default function SettingsScreen() {
               <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>Your complete Frame library is unlocked.</Text>
             </View>
           </View>
-        ) : (
+        ) : premiumAccessState === "inactive" ? (
           <Pressable
-            onPress={() => setPaywallOpen(true)}
+            onPress={() => openPremium("library")}
             style={({ pressed }) => [styles.premiumHero, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityHint="Opens subscription options"
+            accessibilityHint="Opens beta subscription options and restore"
             testID="open-premium"
           >
             <View style={styles.premiumHeroHeader}>
               <View style={styles.premiumHeroMark}>
                 <Crown size={18} color={palette.accentDeep} strokeWidth={1.8} />
               </View>
-              <Text style={styles.premiumEyebrow}>Make Frame yours</Text>
+              <Text style={styles.premiumEyebrow}>Premium inactive</Text>
             </View>
             <Text style={styles.premiumTitle}>Build a library worth returning to.</Text>
-            <Text style={styles.premiumSubtitle}>Save videos, resume where you stopped, and create intentional sessions.</Text>
+            <Text style={styles.premiumSubtitle}>Pasted-link playback stays free. Premium unlocks saves, resume, interests, creators, imports, and named sessions.</Text>
             <View style={styles.premiumAction}>
-              <Text style={styles.premiumActionText}>View Premium plans</Text>
+              <Text style={styles.premiumActionText}>View beta plans or restore</Text>
               <ChevronRight size={17} color={palette.onDark} strokeWidth={1.8} />
             </View>
           </Pressable>
+        ) : (
+          <View style={styles.simpleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>{premiumAccessState === "misconfigured" ? "Premium not configured" : "Premium status unavailable"}</Text>
+              <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
+                {premiumAccessState === "misconfigured" ? "This beta build cannot offer Premium yet." : "Frame could not verify access. Check your connection and retry."}
+              </Text>
+            </View>
+            <Pressable
+              onPress={premiumAccessState === "misconfigured" ? () => router.push("/diagnostics") : () => { void refreshPremiumAccess(); }}
+              style={styles.statusAction}
+              accessibilityRole="button"
+            >
+              <Text style={[type.label, { color: palette.accent }]}>{premiumAccessState === "misconfigured" ? "Beta Support" : "Try again"}</Text>
+            </Pressable>
+          </View>
         )}
-        {subscriptionStatusError ? (
-          <Text style={[type.bodySoft, { color: palette.danger, marginTop: spacing.sm }]}>Couldn’t verify your status. Open Premium to retry or restore.</Text>
+        {premiumAccessState === "inactive" || premiumAccessState === "active" ? (
+          <Pressable onPress={() => openPremium("library")} style={styles.linkRow} testID="settings-restore-purchases">
+            <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
+            <Text style={[type.caption, { color: palette.inkMuted }]}>Restore purchases</Text>
+          </Pressable>
         ) : null}
-        <Pressable onPress={() => setPaywallOpen(true)} style={styles.linkRow} testID="settings-restore-purchases">
-          <RotateCcw size={14} color={palette.inkMuted} strokeWidth={1.6} />
-          <Text style={[type.caption, { color: palette.inkMuted }]}>Restore purchases</Text>
-        </Pressable>
       </Section>
 
       <Section label="Appearance" hint="Light by default. The video room always stays dark and focused.">
@@ -320,6 +341,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   premiumActiveMark: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceHigh, alignItems: "center", justifyContent: "center" },
   pressed: { opacity: 0.84 },
   linkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, marginTop: spacing.sm },
+  statusAction: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
   accountRow: {
     flexDirection: "row",
     alignItems: "center",

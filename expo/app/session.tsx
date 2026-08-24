@@ -44,7 +44,7 @@ export default function SessionBuilder() {
   );
 
   const toggle = useCallback((videoId: string): void => {
-    if (!requirePurchase()) return;
+    if (!requirePurchase("sessions")) return;
     void Haptics.selectionAsync().catch(() => {});
     setSelected((previous) => {
       if (previous.includes(videoId)) return previous.filter((candidate) => candidate !== videoId);
@@ -54,7 +54,7 @@ export default function SessionBuilder() {
   }, [requirePurchase]);
 
   const persistSession = useCallback(async (): Promise<string | null> => {
-    if (!requirePurchase()) return null;
+    if (!requirePurchase("sessions")) return null;
     if (!name.trim()) {
       Alert.alert("Name this session", "Give this small plan a name you’ll recognize later.");
       return null;
@@ -72,7 +72,7 @@ export default function SessionBuilder() {
         return existingSession.id;
       }
       const created = await createSession(name, selected);
-      return created.id;
+      return created?.id ?? null;
     } finally {
       setIsSaving(false);
     }

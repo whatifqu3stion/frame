@@ -154,6 +154,7 @@ function StepBringChannels({ width }: { width: number }) {
     addChannelByLink,
     followChannel,
     isChannelFollowed,
+    requirePurchase,
   } = useApp();
 
   const [signInMsg, setSignInMsg] = useState<string | null>(null);
@@ -170,13 +171,14 @@ function StepBringChannels({ width }: { width: number }) {
   });
 
   const onSignIn = async () => {
+    if (!requirePurchase("import")) return;
     setSignInMsg(null);
     const result = await signInWithGoogle();
     setSignInMsg(result.message);
   };
 
   const onAddLink = async () => {
-    if (!link.trim() || linkBusy) return;
+    if (!link.trim() || linkBusy || !requirePurchase("creators")) return;
     setLinkBusy(true);
     setLinkMsg(null);
     const result = await addChannelByLink(link.trim());
@@ -186,6 +188,7 @@ function StepBringChannels({ width }: { width: number }) {
   };
 
   const runSearch = () => {
+    if (!requirePurchase("discovery")) return;
     const trimmed = term.trim();
     if (!trimmed) return;
     setSubmitted(trimmed);
@@ -193,7 +196,7 @@ function StepBringChannels({ width }: { width: number }) {
   };
 
   const addFromVideo = async (v: Video) => {
-    if (!v.channelId) return;
+    if (!v.channelId || !requirePurchase("creators")) return;
     await followChannel({ id: v.channelId, title: v.channelTitle || "Channel", thumbnailUrl: "", followedAt: Date.now(), source: "manual" });
   };
 
@@ -207,7 +210,7 @@ function StepBringChannels({ width }: { width: number }) {
       <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>Bring your{"\n"}channels.</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Start with voices you already trust. Creator lookups use YouTube; your follows stay in your local library.
+        Pasted-link playback is free. Premium adds creator imports, follows, interests, and every library tool.
       </Text>
 
       <Pressable
@@ -333,7 +336,7 @@ function StepInterests({ width, interests, onToggle }: { width: number; interest
       <Text style={[type.caption, { color: palette.accent }]}>Step four</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>What do you{"\n"}care about?</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Pick a few. These seed your Explore collections. You can change them later.
+        Premium uses these choices to seed Explore collections. You can change them later.
       </Text>
       <ScrollView style={{ marginTop: spacing.lg }} showsVerticalScrollIndicator={false}>
         <View style={styles.chipsGrid}>

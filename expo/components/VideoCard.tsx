@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+import { useApp } from "@/providers/AppProvider";
 import { ThumbnailSkeleton } from "@/components/VideoSkeleton";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
 import type { Video } from "@/types";
@@ -13,6 +14,7 @@ type Props = { video: Video; variant?: "full" | "compact" | "wide"; progressSeco
 
 function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const { palette, type } = useFrameTheme();
+  const { requirePurchase } = useApp();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const navigationLocked = useRef<boolean>(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
@@ -25,12 +27,12 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   }, [video.thumbnailUrl]);
 
   const onPress = useCallback((): void => {
-    if (navigationLocked.current) return;
+    if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     router.push({ pathname: "/watch/[id]", params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds) } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
-  }, [video]);
+  }, [requirePurchase, video]);
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
     <View style={wrapStyle}>

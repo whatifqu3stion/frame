@@ -16,6 +16,7 @@ import {
 import type { PurchasesPackage } from "react-native-purchases";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/providers/AppProvider";
+import { IS_CLOSED_BETA } from "@/constants/config";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import {
@@ -49,13 +50,14 @@ function packageDetail(aPackage: PurchasesPackage): string {
 }
 
 export default function PaywallSheet() {
-  const { paywallOpen, setPaywallOpen, isPremium } = useApp();
+  const { paywallOpen, paywallMessage, setPaywallOpen, isPremium } = useApp();
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [selectedIdentifier, setSelectedIdentifier] = useState<string>("$rc_annual");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackIsSuccess, setFeedbackIsSuccess] = useState<boolean>(false);
 
   const offeringQuery = useQuery({
     queryKey: REVENUECAT_OFFERING_KEY,
@@ -78,7 +80,10 @@ export default function PaywallSheet() {
   }, [packages, selectedIdentifier]);
 
   useEffect(() => {
-    if (paywallOpen) setFeedback(null);
+    if (paywallOpen) {
+      setFeedback(null);
+      setFeedbackIsSuccess(false);
+    }
   }, [paywallOpen]);
 
   const purchaseMutation = useMutation({
@@ -101,6 +106,7 @@ export default function PaywallSheet() {
 
   const onPurchase = async (): Promise<void> => {
     if (isWebPreview) {
+      setFeedbackIsSuccess(false);
       setFeedback("Premium purchases are available in the iPhone and Android apps.");
       return;
     }
@@ -109,39 +115,45 @@ export default function PaywallSheet() {
       return;
     }
     if (!selectedPackage) {
+      setFeedbackIsSuccess(false);
       setFeedback("Subscription options are unavailable right now. Please try again.");
       return;
     }
 
     setFeedback(null);
+    setFeedbackIsSuccess(false);
     try {
       const customerInfo = await purchaseMutation.mutateAsync(selectedPackage);
       if (hasPremiumEntitlement(customerInfo)) {
-        setPaywallOpen(false);
+        setFeedbackIsSuccess(true);
+        setFeedback("Premium is active. Your library and planning tools are unlocked.");
       } else {
         setFeedback("Your purchase is pending. Premium will activate when the store confirms it.");
       }
     } catch (error) {
       const message = getPurchaseErrorMessage(error);
-      if (message) setFeedback(message);
+      setFeedback(message ?? "Purchase cancelled. Nothing was charged.");
     }
   };
 
   const onRestore = async (): Promise<void> => {
     if (isWebPreview) {
+      setFeedbackIsSuccess(false);
       setFeedback("Purchase restoration is available in the iPhone and Android apps.");
       return;
     }
     setFeedback(null);
+    setFeedbackIsSuccess(false);
     try {
       const customerInfo = await restoreMutation.mutateAsync();
       if (hasPremiumEntitlement(customerInfo)) {
-        setPaywallOpen(false);
+        setFeedbackIsSuccess(true);
+        setFeedback("Restored successfully. Premium is active for this store account.");
       } else {
-        setFeedback("No active Frame Premium subscription was found for this store account.");
+        setFeedback("Restore finished, but no active Frame Premium subscription was found for this store account.");
       }
     } catch (error) {
-      setFeedback(getPurchaseErrorMessage(error) ?? "Restore cancelled.");
+      setFeedback(getPurchaseErrorMessage(error) ?? "Restore cancelled. No changes were made.");
     }
   };
 
@@ -158,7 +170,7 @@ export default function PaywallSheet() {
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
             <View style={styles.headerRow}>
-              <Text style={[type.caption, { color: palette.accent }]}>Frame Premium</Text>
+              <Text style={[type.caption, { color: palette.accent }]}>{IS_CLOSED_BETA ? "Frame Premium · beta test" : "Frame Premium"}</Text>
               <Pressable
                 onPress={() => setPaywallOpen(false)}
                 hitSlop={12}
@@ -172,9 +184,8 @@ export default function PaywallSheet() {
             </View>
 
             <Text style={styles.title}>Keep only what{"\n"}matters to you.</Text>
-            <Text style={styles.subtitle}>
-              Premium turns Frame into your quiet, on-device viewing library—without adding an endless feed.
-            </Text>
+            <Text style={styles.subtitle}>{paywallMessage}</Text>
+            <Text style={styles.freeNote}>Watching a valid pasted link is always free. Premium covers every library, organization, creator, and discovery feature.</Text>
 
             <View style={styles.features}>
               {FEATURES.map((feature) => (
@@ -222,7 +233,7 @@ export default function PaywallSheet() {
             {plansUnavailable ? (
               <Text style={styles.feedback}>Subscription options are unavailable. Check your connection and try again.</Text>
             ) : null}
-            {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+            {feedback ? <Text style={[styles.feedback, feedbackIsSuccess && styles.feedbackSuccess]}>{feedback}</Text> : null}
 
             <Pressable
               onPress={onPurchase}
@@ -305,6 +316,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
   title: { ...type.title, marginTop: spacing.md, fontSize: 32, lineHeight: 38 },
   subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 350 },
+  freeNote: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.sm, maxWidth: 360 },
   features: { marginTop: spacing.lg },
   featureRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.md },
   featureText: { ...type.body, flex: 1 },
@@ -344,6 +356,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   planTitle: { ...type.heading, fontSize: 18, lineHeight: 23 },
   planDetail: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
   feedback: { ...type.bodySoft, color: palette.danger, marginTop: spacing.md, textAlign: "center" },
+  feedbackSuccess: { color: palette.success },
   buyButton: {
     minHeight: 56,
     backgroundColor: palette.accentDeep,
