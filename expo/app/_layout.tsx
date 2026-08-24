@@ -62,9 +62,10 @@ function AppContent() {
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
       <Stack.Screen name="terms" options={{ title: "Terms" }} />
-      <Stack.Screen name="diagnostics" options={{ title: "Diagnostics" }} />
-      <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to Queue" }} />
-      <Stack.Screen name="session" options={{ presentation: "modal", title: "Session" }} />
+      <Stack.Screen name="diagnostics" options={{ title: "Beta Support" }} />
+      <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to Session" }} />
+      <Stack.Screen name="session" options={{ presentation: "modal", title: "Named Session" }} />
+      <Stack.Screen name="session/[id]" options={{ title: "" }} />
     </Stack>
   );
 }

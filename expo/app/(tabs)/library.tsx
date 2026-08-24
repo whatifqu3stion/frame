@@ -1,28 +1,28 @@
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { Link2, ListPlus, Pencil, Play, Trash2 } from "lucide-react-native";
+import { ChevronRight, Link2, ListPlus, Play, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import type { Video } from "@/types";
 
-type Tab = "saved" | "later" | "resume" | "queues" | "channels";
+type Tab = "saved" | "later" | "resume" | "sessions" | "channels";
 type LibraryVideoItem = { video: Video; progressSeconds?: number };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "saved", label: "Saved" },
   { id: "later", label: "Later" },
   { id: "resume", label: "Resume" },
-  { id: "queues", label: "Queues" },
+  { id: "sessions", label: "Sessions" },
   { id: "channels", label: "Channels" },
 ];
 
@@ -34,18 +34,13 @@ export default function LibraryScreen() {
     savedVideos,
     watchLater,
     resumeList,
-    queues,
+    sessions,
     followedChannels,
     libraryLoading,
     requirePurchase,
-    createQueue,
-    renameQueue,
-    removeQueue,
     unfollowChannel,
   } = useApp();
   const [tab, setTab] = useState<Tab>("saved");
-  const [queueModal, setQueueModal] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
-  const [queueName, setQueueName] = useState<string>("");
   const [addChannelOpen, setAddChannelOpen] = useState<boolean>(false);
 
   const videoItems = useMemo<LibraryVideoItem[]>(() => {
@@ -74,32 +69,10 @@ export default function LibraryScreen() {
     setTab(nextTab);
   }, []);
 
-  const openCreateQueue = useCallback((): void => {
+  const openNewSession = useCallback((): void => {
     if (!requirePurchase()) return;
-    setQueueName("");
-    setQueueModal({ mode: "create" });
+    router.push("/session");
   }, [requirePurchase]);
-
-  const openRenameQueue = useCallback((id: string, current: string): void => {
-    setQueueName(current);
-    setQueueModal({ mode: "rename", id });
-  }, []);
-
-  const submitQueue = useCallback(async (): Promise<void> => {
-    if (!queueName.trim() || !queueModal) return;
-    if (queueModal.mode === "create") await createQueue(queueName);
-    else if (queueModal.id) await renameQueue(queueModal.id, queueName);
-    setQueueName("");
-    setQueueModal(null);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-  }, [createQueue, queueModal, queueName, renameQueue]);
-
-  const confirmDeleteQueue = useCallback((id: string, name: string): void => {
-    Alert.alert("Delete queue?", `“${name}” will be removed.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { void removeQueue(id); } },
-    ]);
-  }, [removeQueue]);
 
   const confirmUnfollow = useCallback((id: string, name: string): void => {
     Alert.alert("Unfollow channel?", `“${name}” will be removed from your shelf.`, [
@@ -114,13 +87,13 @@ export default function LibraryScreen() {
         <ScreenHeader eyebrow="Library" title={"Your\nshelf."} subtitle="Only what you chose to keep." />
       </View>
       <Pressable
-        onPress={() => router.push("/session")}
+        onPress={openNewSession}
         style={({ pressed }) => [styles.sessionRow, pressed && styles.pressed]}
         accessibilityRole="button"
         testID="library-session"
       >
         <Play size={15} color={palette.accent} strokeWidth={1.8} fill={palette.accent} />
-        <Text style={styles.accentLabel}>Start a session from your library</Text>
+        <Text style={styles.accentLabel}>Create a named session from your library</Text>
       </Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
         {TABS.map((item) => {
@@ -150,25 +123,26 @@ export default function LibraryScreen() {
     <EmptyState title="No half-watched videos" body="Frame remembers where you stopped." />
   );
 
-  const queueContent = (
+  const sessionContent = (
     <View>
-      <Pressable onPress={openCreateQueue} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="new-queue">
+      <Pressable onPress={openNewSession} style={({ pressed }) => [styles.newRow, pressed && styles.pressed]} accessibilityRole="button" testID="new-session">
         <ListPlus size={18} color={palette.accent} strokeWidth={1.6} />
-        <Text style={styles.accentLabel}>New queue</Text>
+        <Text style={styles.accentLabel}>New named session</Text>
       </Pressable>
-      {queues.length === 0 ? <EmptyState title="No queues" body="Create a sequence of videos for an evening." /> : queues.map((queue) => (
-        <View key={queue.id} style={styles.queueCard}>
+      {sessions.length === 0 ? <EmptyState title="No named sessions" body="Create a reusable one-to-three-video plan for a quiet sitting." /> : sessions.map((session) => (
+        <Pressable
+          key={session.id}
+          onPress={() => router.push({ pathname: "/session/[id]", params: { id: session.id } })}
+          style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${session.name}`}
+        >
           <View style={styles.flex}>
-            <Text style={type.caption}>{queue.orderedVideoIds.length} videos</Text>
-            <Text style={styles.itemHeading}>{queue.name}</Text>
+            <Text style={type.caption}>{session.orderedVideoIds.length} of 3 videos</Text>
+            <Text style={styles.itemHeading}>{session.name}</Text>
           </View>
-          <Pressable onPress={() => openRenameQueue(queue.id, queue.name)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={`Rename ${queue.name}`}>
-            <Pencil size={17} color={palette.inkMuted} strokeWidth={1.6} />
-          </Pressable>
-          <Pressable onPress={() => confirmDeleteQueue(queue.id, queue.name)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={`Delete ${queue.name}`}>
-            <Trash2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
-          </Pressable>
-        </View>
+          <ChevronRight size={18} color={palette.inkMuted} strokeWidth={1.7} />
+        </Pressable>
       ))}
     </View>
   );
@@ -207,8 +181,8 @@ export default function LibraryScreen() {
   const isVideoTab = tab === "saved" || tab === "later" || tab === "resume";
   const emptyContent = isVideoTab && libraryLoading
     ? <VideoFeedSkeleton count={5} accessibilityLabel="Loading your library" />
-    : tab === "queues"
-      ? queueContent
+    : tab === "sessions"
+      ? sessionContent
       : tab === "channels"
         ? channelContent
         : videoEmpty;
@@ -235,29 +209,6 @@ export default function LibraryScreen() {
         style={styles.list}
       />
 
-      <Modal visible={queueModal !== null} animationType="fade" transparent onRequestClose={() => setQueueModal(null)}>
-        <Pressable onPress={() => setQueueModal(null)} style={[styles.modalBackdrop, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
-          <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalCard}>
-            <Text style={type.caption}>{queueModal?.mode === "rename" ? "Rename queue" : "New queue"}</Text>
-            <Text style={styles.itemHeading}>Name it</Text>
-            <TextInput
-              value={queueName}
-              onChangeText={setQueueName}
-              autoFocus
-              placeholder="Evening at home"
-              placeholderTextColor={palette.inkMuted}
-              style={styles.modalInput}
-              onSubmitEditing={() => { void submitQueue(); }}
-              returnKeyType="done"
-              accessibilityLabel="Queue name"
-            />
-            <Pressable onPress={() => { void submitQueue(); }} style={({ pressed }) => [styles.modalButton, pressed && styles.pressed]} accessibilityRole="button">
-              <Text style={styles.modalButtonText}>{queueModal?.mode === "rename" ? "Save" : "Create"}</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       <AddChannelModal visible={addChannelOpen} onClose={() => setAddChannelOpen(false)} />
     </>
   );
@@ -279,7 +230,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     videoItem: { paddingHorizontal: spacing.page },
     emptyContent: { paddingHorizontal: spacing.page },
     newRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
-    queueCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    sessionCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
     itemHeading: { ...type.heading, marginTop: spacing.xs },
     iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
     channelRow: { minHeight: 80, flexDirection: "row", alignItems: "center", backgroundColor: palette.surface, marginBottom: spacing.md, paddingRight: spacing.xs, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
@@ -287,11 +238,6 @@ function createStyles(palette: FramePalette, type: FrameType) {
     channelAvatar: { width: 52, height: 52, borderRadius: radii.control, backgroundColor: palette.surfaceDeep, overflow: "hidden" },
     avatarImage: { width: "100%", height: "100%" },
     channelDescription: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted },
-    modalBackdrop: { flex: 1, backgroundColor: palette.overlay, justifyContent: "center", paddingHorizontal: spacing.lg },
-    modalCard: { ...softShadow, backgroundColor: palette.surfaceHigh, padding: spacing.lg, borderRadius: radii.large, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
-    modalInput: { ...type.body, marginTop: spacing.lg, minHeight: 52, backgroundColor: palette.surface, paddingHorizontal: spacing.md, fontSize: 16, borderRadius: radii.control, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-    modalButton: { minHeight: 50, marginTop: spacing.lg, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center" },
-    modalButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
     pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });
 }

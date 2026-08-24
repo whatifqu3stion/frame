@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ACTIVE_PROFILE_ID,
   APP_ENV,
+  IS_CLOSED_BETA,
+  RELEASE_CHANNEL_LABEL,
   BACKEND_BASE_URL,
   FEATURE_FLAGS,
   isGooglePlatformConfigured,
@@ -18,7 +20,7 @@ import { useApp } from "@/providers/AppProvider";
 import { isRevenueCatConfigured } from "@/services/revenueCat";
 
 export default function DiagnosticsRoute() {
-  if (!__DEV__) return <Redirect href="/(tabs)/settings" />;
+  if (!IS_CLOSED_BETA) return <Redirect href="/(tabs)/settings" />;
   return <DiagnosticsScreen />;
 }
 
@@ -26,19 +28,13 @@ function DiagnosticsScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { isPremium, subscriptionStatusError, subscriptionStatusLoading } = useApp();
+  const { premiumAccessState } = useApp();
   const databaseQuery = useQuery<DatabaseDiagnostics>({
     queryKey: ["diagnostics", "database"],
     queryFn: getDatabaseDiagnostics,
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const entitlementState = subscriptionStatusLoading
-    ? "checking"
-    : subscriptionStatusError
-      ? "unavailable"
-      : isPremium
-        ? "premium active"
-        : "not entitled";
+  const entitlementState = premiumAccessState === "active" ? "premium active" : premiumAccessState;
   const database = databaseQuery.data;
   const flags = {
     ...FEATURE_FLAGS,
@@ -53,14 +49,15 @@ function DiagnosticsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.intro}>
-        <Text style={type.caption}>Development only</Text>
-        <Text style={type.title}>Diagnostics</Text>
-        <Text style={type.bodySoft}>Configuration status only. Credentials and tokens are never shown.</Text>
+        <Text style={type.caption}>{RELEASE_CHANNEL_LABEL}</Text>
+        <Text style={type.title}>Beta support</Text>
+        <Text style={type.bodySoft}>Safe configuration and readiness status. Credentials and tokens are never shown.</Text>
       </View>
 
       <DiagnosticSection title="Runtime" styles={styles} type={type}>
         <DiagnosticRow label="App version" value={Constants.expoConfig?.version ?? "unknown"} styles={styles} type={type} />
         <DiagnosticRow label="Environment" value={APP_ENV} styles={styles} type={type} />
+        <DiagnosticRow label="Release channel" value={RELEASE_CHANNEL_LABEL} styles={styles} type={type} />
         <DiagnosticRow label="Active profile ID" value={ACTIVE_PROFILE_ID} styles={styles} type={type} />
         <DiagnosticRow label="Entitlement" value={entitlementState} styles={styles} type={type} />
       </DiagnosticSection>
@@ -76,8 +73,11 @@ function DiagnosticsScreen() {
         <DiagnosticRow label="Tables" value={database?.tables.join(", ") ?? "loading"} styles={styles} type={type} />
       </DiagnosticSection>
 
-      <DiagnosticSection title="Backend" styles={styles} type={type}>
-        <DiagnosticRow label="Base URL" value={BACKEND_BASE_URL || "not configured"} styles={styles} type={type} />
+      <DiagnosticSection title="Beta readiness" styles={styles} type={type}>
+        <DiagnosticRow label="Video service" value={BACKEND_BASE_URL ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
+        <DiagnosticRow label="Google on this device" value={isGooglePlatformConfigured() ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
+        <DiagnosticRow label="Premium service" value={isRevenueCatConfigured ? `${APP_ENV === "production" ? "production" : "test"} configured` : "not configured"} styles={styles} type={type} />
+        <DiagnosticRow label="Storage mode" value={database?.storage === "sqlite" ? "persistent on device" : "preview only; resets on refresh"} styles={styles} type={type} />
       </DiagnosticSection>
 
       <DiagnosticSection title="Feature flags" styles={styles} type={type}>

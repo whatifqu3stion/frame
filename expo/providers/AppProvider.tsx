@@ -5,6 +5,7 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
@@ -45,6 +46,8 @@ const INTERESTS_KEY = "frame.interests.v1";
 const RECENT_SEARCHES_KEY = "frame.recentSearches.v1";
 const GOOGLE_TOKEN_KEY = "frame.google.token.v1";
 const MAX_RECENT_SEARCHES = 8;
+
+export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
 
 type GoogleCredential = {
   accessToken: string;
@@ -283,6 +286,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     staleTime: 1000 * 60 * 5,
   });
   const isPremium = hasPremiumEntitlement(customerInfoQuery.data);
+  const premiumAccessState = useMemo<PremiumAccessState>(() => {
+    if (!isRevenueCatConfigured) return "misconfigured";
+    if (customerInfoQuery.isLoading) return "checking";
+    if (customerInfoQuery.isError) return "unavailable";
+    return isPremium ? "active" : "inactive";
+  }, [customerInfoQuery.isError, customerInfoQuery.isLoading, isPremium]);
 
   useEffect(() => {
     return subscribeToRevenueCatCustomerInfo((customerInfo) => {
@@ -291,10 +300,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [queryClient]);
 
   const requirePurchase = useCallback((): boolean => {
-    if (isPremium) return true;
-    setPaywallOpen(true);
+    if (premiumAccessState === "active") return true;
+    if (premiumAccessState === "inactive") {
+      setPaywallOpen(true);
+      return false;
+    }
+
+    const feedback = premiumAccessState === "checking"
+      ? { title: "Checking Premium", message: "Frame is still confirming your access. Try again in a moment." }
+      : premiumAccessState === "misconfigured"
+        ? { title: "Premium unavailable", message: "Premium is not configured for this beta build. Open Beta Support in Settings for details." }
+        : { title: "Couldn’t verify Premium", message: "Frame couldn’t confirm your access. Check your connection, then retry from Settings." };
+    Alert.alert(feedback.title, feedback.message);
     return false;
-  }, [isPremium]);
+  }, [premiumAccessState]);
 
   // Library queries
   const savedQuery = useQuery({
@@ -337,8 +356,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     enabled: ready,
   });
 
-  const invalidateLibrary = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["library"] });
+  const invalidateLibrary = useCallback(async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ["library"] });
   }, [queryClient]);
 
   const saveMutation = useMutation({
@@ -355,39 +374,23 @@ export const [AppProvider, useApp] = createContextHook(() => {
     onSuccess: invalidateLibrary,
   });
 
-  const addToQueue = useCallback(
-    async (queueId: string, videoId: string) => {
-      const existing = queuesQuery.data?.find((q) => q.id === queueId);
+  const updateSessionVideos = useCallback(
+    async (sessionId: string, videoIds: string[]): Promise<void> => {
+      const existing = queuesQuery.data?.find((session) => session.id === sessionId);
       if (!existing) return;
-      const ids = existing.orderedVideoIds.includes(videoId)
-        ? existing.orderedVideoIds
-        : [...existing.orderedVideoIds, videoId];
-      await upsertQueue({ ...existing, orderedVideoIds: ids, updatedAt: Date.now() });
-      invalidateLibrary();
+      const uniqueIds = Array.from(new Set(videoIds)).slice(0, 3);
+      await upsertQueue({ ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
+      await invalidateLibrary();
     },
     [queuesQuery.data, invalidateLibrary],
   );
 
-  const renameQueue = useCallback(
-    async (id: string, name: string) => {
-      const existing = queuesQuery.data?.find((q) => q.id === id);
+  const renameSession = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      const existing = queuesQuery.data?.find((session) => session.id === id);
       if (!existing) return;
       await upsertQueue({ ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
-      invalidateLibrary();
-    },
-    [queuesQuery.data, invalidateLibrary],
-  );
-
-  const removeFromQueue = useCallback(
-    async (queueId: string, videoId: string) => {
-      const existing = queuesQuery.data?.find((q) => q.id === queueId);
-      if (!existing) return;
-      await upsertQueue({
-        ...existing,
-        orderedVideoIds: existing.orderedVideoIds.filter((v) => v !== videoId),
-        updatedAt: Date.now(),
-      });
-      invalidateLibrary();
+      await invalidateLibrary();
     },
     [queuesQuery.data, invalidateLibrary],
   );
@@ -420,25 +423,34 @@ export const [AppProvider, useApp] = createContextHook(() => {
     onSuccess: invalidateLibrary,
   });
 
-  const createQueue = useCallback(
-    async (name: string, firstVideoId?: string): Promise<VideoQueue> => {
-      const q: VideoQueue = {
-        id: `q_${Math.random().toString(36).slice(2, 10)}`,
-        name: name.trim() || "Untitled Queue",
-        orderedVideoIds: firstVideoId ? [firstVideoId] : [],
+  const createSession = useCallback(
+    async (name: string, videoIds: string[] = []): Promise<VideoQueue> => {
+      const session: VideoQueue = {
+        id: `session_${Math.random().toString(36).slice(2, 10)}`,
+        name: name.trim() || "Untitled session",
+        orderedVideoIds: Array.from(new Set(videoIds)).slice(0, 3),
         updatedAt: Date.now(),
       };
-      await upsertQueue(q);
-      invalidateLibrary();
-      return q;
+      await upsertQueue(session);
+      await invalidateLibrary();
+      return session;
     },
     [invalidateLibrary],
   );
 
-  const removeQueue = useCallback(
-    async (id: string) => {
+  const duplicateSession = useCallback(
+    async (id: string): Promise<VideoQueue | null> => {
+      const existing = queuesQuery.data?.find((session) => session.id === id);
+      if (!existing) return null;
+      return createSession(`${existing.name} copy`, existing.orderedVideoIds);
+    },
+    [createSession, queuesQuery.data],
+  );
+
+  const removeSession = useCallback(
+    async (id: string): Promise<void> => {
       await deleteQueue(id);
-      invalidateLibrary();
+      await invalidateLibrary();
     },
     [invalidateLibrary],
   );
@@ -564,6 +576,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setAccent,
       finishOnboarding,
       isPremium,
+      premiumAccessState,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
       subscriptionStatusError: customerInfoQuery.isError,
       libraryLoading: !ready
@@ -588,7 +601,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       addChannelByLink,
       savedVideos: savedQuery.data ?? [],
       resumeList: resumeQuery.data ?? [],
-      queues: queuesQuery.data ?? [],
+      sessions: queuesQuery.data ?? [],
       watchLater: watchLaterQuery.data ?? [],
       followedChannels: channelsQuery.data ?? [],
       isVideoSaved: (id: string) => (savedQuery.data ?? []).some((v) => v.id === id),
@@ -601,11 +614,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       removeFromWatchLater: (id: string) => removeWatchLaterMutation.mutateAsync(id),
       followChannel: (c: FollowedChannel) => followMutation.mutateAsync(c),
       unfollowChannel: (id: string) => unfollowMutation.mutateAsync(id),
-      addToQueue,
-      createQueue,
-      renameQueue,
-      removeQueue,
-      removeFromQueue,
+      createSession,
+      duplicateSession,
+      renameSession,
+      removeSession,
+      updateSessionVideos,
       recordResume,
       clearVideoResume,
       wipeAllData,
@@ -619,6 +632,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setAccent,
       finishOnboarding,
       isPremium,
+      premiumAccessState,
       customerInfoQuery.isLoading,
       customerInfoQuery.isError,
       savedQuery.isLoading,
@@ -649,11 +663,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       removeWatchLaterMutation,
       followMutation,
       unfollowMutation,
-      addToQueue,
-      createQueue,
-      renameQueue,
-      removeQueue,
-      removeFromQueue,
+      createSession,
+      duplicateSession,
+      renameSession,
+      removeSession,
+      updateSessionVideos,
       recordResume,
       clearVideoResume,
       wipeAllData,

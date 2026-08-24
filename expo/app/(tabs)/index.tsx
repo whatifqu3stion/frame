@@ -107,7 +107,7 @@ export default function HomeScreen() {
       >
         <View style={{ flex: 1 }}>
           <Text style={[type.caption, { color: palette.active }]}>Sit down for a while</Text>
-          <Text style={styles.sessionTitle}>Start a session</Text>
+          <Text style={styles.sessionTitle}>Create a named session</Text>
         </View>
         <View style={styles.sessionPlay}>
           <Play size={16} color={palette.onDark} strokeWidth={1.8} fill={palette.onDark} />
@@ -209,7 +209,7 @@ export default function HomeScreen() {
         {libraryLoading ? (
           <VideoFeedSkeleton count={3} accessibilityLabel="Loading more from your library" />
         ) : more.length === 0 ? (
-          <EmptyState title="Nothing else queued" body="Your saved choices will appear here without unrelated filler." />
+          <EmptyState title="Nothing else saved" body="Your saved choices will appear here without unrelated filler." />
         ) : (
           more.map((v) => <VideoCard key={v.id} video={v} variant="wide" />)
         )}

@@ -4,6 +4,7 @@ import { Bug, Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RefreshC
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
+import { IS_CLOSED_BETA, RELEASE_CHANNEL_LABEL } from "@/constants/config";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -66,7 +67,7 @@ export default function SettingsScreen() {
   };
 
   const onWipe = () => {
-    Alert.alert("Delete all data?", "This removes saved videos, queues, resume positions and preferences.", [
+    Alert.alert("Delete all data?", "This removes saved videos, named sessions, resume positions and preferences.", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => wipeAllData() },
     ]);
@@ -256,7 +257,7 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[type.label, { color: palette.danger }]}>Delete all on-device data</Text>
             <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
-              Library, follows, queues, progress, preferences, searches, and connected account credentials. Store purchase records remain with your store account.
+              Library, follows, named sessions, progress, preferences, searches, and connected account credentials. Store purchase records remain with your store account.
             </Text>
           </View>
           <ChevronRight size={16} color={palette.inkMuted} />
@@ -266,10 +267,10 @@ export default function SettingsScreen() {
       <Section label="About">
         <Text style={[type.bodySoft, { maxWidth: 340 }]}>Frame is an intentional YouTube viewer. It keeps playback user-initiated and stops when your chosen video or finite session ends.</Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
-        {__DEV__ ? (
+        {IS_CLOSED_BETA ? (
           <Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-diagnostics">
             <Bug size={14} color={palette.accent} strokeWidth={1.8} />
-            <Text style={[type.label, { color: palette.accent }]}>Development diagnostics</Text>
+            <Text style={[type.label, { color: palette.accent }]}>{RELEASE_CHANNEL_LABEL} support</Text>
           </Pressable>
         ) : null}
       </Section>

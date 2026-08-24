@@ -18,6 +18,10 @@ function valueForEnvironment(values: {
 /** Explicit runtime environment. Unset development builds stay isolated; release builds require production configuration. */
 export const APP_ENV: AppEnvironment = resolveAppEnvironment(process.env.EXPO_PUBLIC_APP_ENV);
 
+/** Non-production builds are explicitly treated as closed-beta surfaces. */
+export const IS_CLOSED_BETA = APP_ENV !== "production";
+export const RELEASE_CHANNEL_LABEL = IS_CLOSED_BETA ? "Closed beta" : "Public release";
+
 /**
  * Environment-scoped backend configuration. The legacy Rork functions URL is accepted
  * only for development so a release cannot silently use the routine development backend.

@@ -6,23 +6,25 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
-export default function AddToQueueModal() {
+export default function AddToSessionModal() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { queues, addToQueue, createQueue } = useApp();
+  const { sessions, updateSessionVideos, createSession, requirePurchase } = useApp();
   const [creating, setCreating] = useState<boolean>(false);
   const [name, setName] = useState<string>("");
 
-  const onPick = async (queueId: string) => {
-    if (!id) return;
-    await addToQueue(queueId, id);
+  const onPick = async (sessionId: string) => {
+    if (!id || !requirePurchase()) return;
+    const session = sessions.find((candidate) => candidate.id === sessionId);
+    if (!session || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= 3) return;
+    await updateSessionVideos(sessionId, [...session.orderedVideoIds, id]);
     router.back();
   };
 
   const onCreate = async () => {
-    if (!name.trim() || !id) return;
-    await createQueue(name, id);
+    if (!name.trim() || !id || !requirePurchase()) return;
+    await createSession(name, [id]);
     router.back();
   };
 
@@ -30,21 +32,21 @@ export default function AddToQueueModal() {
     <View style={{ flex: 1, backgroundColor: palette.wall }}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
         <Text style={type.caption}>Add to</Text>
-        <Text style={[type.title, { marginTop: spacing.xs }]}>A queue.</Text>
+        <Text style={[type.title, { marginTop: spacing.xs }]}>A named session.</Text>
 
         <View style={{ marginTop: spacing.xl }}>
-          {queues.length === 0 && !creating ? (
-            <Text style={[type.bodySoft, { color: palette.inkMuted }]}>No queues yet. Create one below.</Text>
+          {sessions.length === 0 && !creating ? (
+            <Text style={[type.bodySoft, { color: palette.inkMuted }]}>No named sessions yet. Create one below.</Text>
           ) : (
-            queues.map((q) => {
-              const inQueue = q.orderedVideoIds.includes(id ?? "");
+            sessions.map((q) => {
+              const isAlreadyAdded = q.orderedVideoIds.includes(id ?? "");
               return (
-                <Pressable key={q.id} onPress={() => onPick(q.id)} style={styles.row} testID={`queue-${q.id}`}>
+                <Pressable key={q.id} onPress={() => onPick(q.id)} disabled={!isAlreadyAdded && q.orderedVideoIds.length >= 3} style={styles.row} testID={`session-${q.id}`}>
                   <View style={{ flex: 1 }}>
                     <Text style={type.caption}>{q.orderedVideoIds.length} videos</Text>
                     <Text style={[type.heading, { marginTop: 2 }]}>{q.name}</Text>
                   </View>
-                  {inQueue ? <Check size={16} color={palette.accent} /> : null}
+                  {isAlreadyAdded ? <Check size={16} color={palette.accent} /> : null}
                 </Pressable>
               );
             })
@@ -53,7 +55,7 @@ export default function AddToQueueModal() {
 
         {creating ? (
           <View style={{ marginTop: spacing.lg }}>
-            <Text style={type.caption}>New queue</Text>
+            <Text style={type.caption}>New named session</Text>
             <TextInput
               value={name}
               onChangeText={setName}
@@ -69,9 +71,9 @@ export default function AddToQueueModal() {
             </Pressable>
           </View>
         ) : (
-          <Pressable onPress={() => setCreating(true)} style={styles.newRow} testID="open-new-queue">
+          <Pressable onPress={() => setCreating(true)} style={styles.newRow} testID="open-new-session">
             <ListPlus size={16} color={palette.accent} strokeWidth={1.6} />
-            <Text style={[type.label, { color: palette.accent }]}>New queue</Text>
+            <Text style={[type.label, { color: palette.accent }]}>New named session</Text>
           </Pressable>
         )}
       </ScrollView>
