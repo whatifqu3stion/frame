@@ -90,15 +90,15 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     fullRoot: { width: "100%", marginBottom: spacing.xl },
-    fullThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    fullThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
     fullMeta: { marginTop: spacing.md, paddingRight: spacing.xl },
     fullTitle: { ...type.heading, marginTop: spacing.xs, fontSize: 22, lineHeight: 29 },
     compactRoot: { width: 264, marginRight: spacing.lg },
-    compactThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    compactThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
     compactMeta: { marginTop: spacing.md, paddingHorizontal: spacing.xs },
     compactTitle: { ...type.heading, fontSize: 16, lineHeight: 21, marginTop: spacing.xs },
     wideRoot: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg, alignItems: "flex-start", minHeight: 82 },
-    wideThumbWrap: { width: 142, aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.control, position: "relative", borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    wideThumbWrap: { width: 142, aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.control, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
     thumb: { width: "100%", height: "100%" },
     wideMeta: { flex: 1, paddingRight: spacing.sm, paddingTop: 1 },
     wideTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: spacing.xs },

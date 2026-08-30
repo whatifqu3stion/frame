@@ -90,7 +90,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     backgroundColor: palette.surface,
     marginBottom: spacing.sm,
     borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: palette.borderSoft,
   },
   newRow: {
@@ -108,7 +108,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     paddingVertical: 14,
     backgroundColor: palette.surface,
     borderRadius: radii.control,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: palette.borderSoft,
   },
   createBtn: {

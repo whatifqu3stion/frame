@@ -148,7 +148,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     actionText: { ...type.label, color: palette.accent },
     iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
     list: { marginTop: spacing.xl, gap: spacing.md },
-    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
     orderMark: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentDeep },
     orderText: { ...type.label, color: palette.onDark },
     videoMain: { flex: 1, minHeight: 76, justifyContent: "center" },

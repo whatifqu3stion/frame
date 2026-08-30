@@ -62,12 +62,12 @@ function VideoChapters({ chapters, currentSeconds, onJump, disabled = false }: V
 export default memo(VideoChapters);
 
 const styles = StyleSheet.create({
-  section: { marginTop: spacing.xl, padding: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: watchPalette.border },
+  section: { marginTop: spacing.xl, padding: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: watchPalette.border },
   headingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   heading: { ...type.heading, color: palette.wall, fontSize: 18, lineHeight: 24 },
   note: { ...type.caption, color: "rgba(250,249,246,0.52)", marginTop: spacing.xs },
-  list: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(250,249,246,0.15)" },
-  row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(250,249,246,0.12)" },
+  list: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: "rgba(250,249,246,0.22)" },
+  row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: "rgba(250,249,246,0.18)" },
   activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
   time: { width: 48, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
   activeTime: { color: watchPalette.accentSoft },

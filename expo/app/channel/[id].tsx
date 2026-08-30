@@ -148,7 +148,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   channelName: { marginTop: spacing.sm },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
   followBtn: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
-  followBtnActive: { backgroundColor: palette.activeSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.active },
+  followBtnActive: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active },
   followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
   loadingFeed: { paddingHorizontal: spacing.lg },

@@ -35,13 +35,13 @@ type PaletteBase = Omit<FramePalette, keyof AccentTokens>;
 const lightBase: PaletteBase = {
   wall: "#FBF9F4", surface: "#F7F4ED", surfaceDeep: "#EEE9DF", surfaceHigh: "#FEFCF8", surfaceDim: "#E3DED4", surfaceBright: "#FFFEFB",
   ink: "#2C2825", inkSoft: "#625B54", inkMuted: "#8A8177", rose: "#B88E95", clay: "#A9755E", sage: "#60725E", success: "#4A544A", danger: "#943F36",
-  border: "rgba(88, 76, 64, 0.16)", borderSoft: "rgba(88, 76, 64, 0.08)", overlay: "rgba(44, 40, 37, 0.48)", shadow: "rgba(54, 42, 32, 0.09)", onDark: "#FFFDF9", onDarkSoft: "rgba(255, 253, 249, 0.76)",
+  border: "rgba(88, 76, 64, 0.24)", borderSoft: "rgba(88, 76, 64, 0.14)", overlay: "rgba(44, 40, 37, 0.48)", shadow: "rgba(54, 42, 32, 0.09)", onDark: "#FFFDF9", onDarkSoft: "rgba(255, 253, 249, 0.76)",
 };
 
 const darkBase: PaletteBase = {
   wall: "#141312", surface: "#1C1B1A", surfaceDeep: "#201F1E", surfaceHigh: "#282625", surfaceDim: "#10100F", surfaceBright: "#252422",
   ink: "#F4F0ED", inkSoft: "#C7C0BA", inkMuted: "#938B84", rose: "#B6909A", clay: "#B87D61", sage: "#4A544A", success: "#809580", danger: "#D98276",
-  border: "rgba(244, 240, 237, 0.14)", borderSoft: "rgba(244, 240, 237, 0.08)", overlay: "rgba(7, 7, 6, 0.74)", shadow: "rgba(0, 0, 0, 0.30)", onDark: "#F4F0ED", onDarkSoft: "rgba(244, 240, 237, 0.74)",
+  border: "rgba(244, 240, 237, 0.22)", borderSoft: "rgba(244, 240, 237, 0.13)", overlay: "rgba(7, 7, 6, 0.74)", shadow: "rgba(0, 0, 0, 0.30)", onDark: "#F4F0ED", onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
 
 const accentTokens: Record<AccentMode, { light: AccentTokens; dark: AccentTokens }> = {
@@ -83,7 +83,7 @@ export const watchPalette = {
   inkMuted: "rgba(244, 240, 237, 0.55)",
   accent: "#8FB7CA",
   accentSoft: "#C7DEE7",
-  border: "rgba(244, 240, 237, 0.14)",
+  border: "rgba(244, 240, 237, 0.22)",
   glow: "rgba(143, 183, 202, 0.16)",
 } as const;
 

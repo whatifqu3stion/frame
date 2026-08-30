@@ -22,7 +22,7 @@ export default function EmptyState({ symbol, title, body }: Props) {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    root: { marginVertical: spacing.md, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, alignItems: "flex-start", backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+    root: { marginVertical: spacing.md, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, alignItems: "flex-start", backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
     symbolWrap: { width: 48, height: 48, borderRadius: radii.card, alignItems: "center", justifyContent: "center", backgroundColor: palette.surfaceDeep, marginBottom: spacing.lg },
     symbol: { fontSize: 24, color: palette.accent },
     title: { ...type.heading, fontSize: 22, marginBottom: spacing.sm },

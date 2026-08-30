@@ -135,7 +135,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     card: {
       backgroundColor: palette.surface,
       borderRadius: radii.card,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: palette.borderSoft,
       overflow: "hidden",
     },
@@ -143,7 +143,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
       minHeight: 58,
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: 1,
       borderBottomColor: palette.borderSoft,
       gap: spacing.xs,
     },

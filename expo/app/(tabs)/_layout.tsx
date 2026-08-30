@@ -1,6 +1,5 @@
 import { Tabs } from "expo-router";
 import { Compass, Home, Library, Settings } from "lucide-react-native";
-import { StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -21,7 +20,7 @@ export default function TabLayout() {
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3 },
         tabBarStyle: {
           backgroundColor: palette.surfaceHigh,
-          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopWidth: 1,
           borderTopColor: palette.borderSoft,
           elevation: 0,
           height: 58 + bottomInset,
