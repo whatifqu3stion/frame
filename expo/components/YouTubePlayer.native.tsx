@@ -217,8 +217,9 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
   }, [onConnectivityChange, onEnded, onError, onFullscreenChange, onProgress, onReady, onStateChange]);
 
   useEffect(() => {
+    const mountedWebView = webViewRef.current;
     return () => {
-      webViewRef.current?.injectJavaScript("try{disposePlayer();}catch(error){};true;");
+      mountedWebView?.injectJavaScript("try{disposePlayer();}catch(error){};true;");
     };
   }, []);
 

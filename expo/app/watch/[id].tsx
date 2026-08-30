@@ -36,7 +36,10 @@ const PLAYER_TIMEOUT_MS = 18000;
 const RESUME_WRITE_INTERVAL_MS = 15000;
 const FINAL_PROGRESS_DELAY_MS = 250;
 const KEEP_AWAKE_TAG = "frame-video-playback";
-const LANDSCAPE_RAIL_WIDTH = 56;
+const LANDSCAPE_RAIL_WIDTH = 64;
+const CONTROL_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
+const DARK_CONTROL_RIPPLE = { color: "rgba(250,249,246,0.16)", borderless: false } as const;
+const LIGHT_CONTROL_RIPPLE = { color: "rgba(21,30,27,0.12)", borderless: false } as const;
 
 type PendingAction = "retry" | "rewatch" | "save" | "later" | null;
 
@@ -492,7 +495,7 @@ export default function WatchScreen() {
         <StatusBar style="dark" />
         <Text style={type.heading}>Video unavailable</Text>
         <Text style={[type.bodySoft, styles.unavailableBody]}>This link is incomplete or no longer valid.</Text>
-        <Pressable onPress={closePlayer} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
+        <Pressable onPress={closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={[type.label, { color: palette.accent }]}>Go back</Text>
         </Pressable>
       </View>
@@ -546,6 +549,8 @@ export default function WatchScreen() {
           <View style={styles.stateActions}>
             <Pressable
               onPress={retryPlayer}
+              hitSlop={CONTROL_HIT_SLOP}
+              android_ripple={DARK_CONTROL_RIPPLE}
               disabled={playerBusy}
               style={({ pressed }) => [styles.darkOutlineButton, (pressed || playerBusy) && styles.pressed]}
               accessibilityRole="button"
@@ -555,13 +560,13 @@ export default function WatchScreen() {
               {playerBusy ? <ActivityIndicator size="small" color={palette.wall} /> : <RotateCcw size={15} color={palette.wall} />}
               <Text style={styles.darkButtonText}>{playerBusy ? "Retrying" : "Retry"}</Text>
             </Pressable>
-            <Pressable onPress={openInYouTube} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="link" testID="open-youtube">
+            <Pressable onPress={openInYouTube} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="link" testID="open-youtube">
               <ExternalLink size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>YouTube</Text>
             </Pressable>
           </View>
           {isSession ? (
-            <Pressable onPress={playNext} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
+            <Pressable onPress={playNext} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
               <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
             </Pressable>
@@ -576,11 +581,11 @@ export default function WatchScreen() {
           </Text>
           <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done." : "That’s it."}</Text>
           <View style={styles.stateActions}>
-            <Pressable onPress={rewatch} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
+            <Pressable onPress={rewatch} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
               <RotateCcw size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>Watch again</Text>
             </Pressable>
-            <Pressable onPress={nextSessionId ? playNext : closePlayer} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
+            <Pressable onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
               <Text style={styles.lightButtonText}>{nextSessionId ? "Next" : "Done"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
             </Pressable>
@@ -597,6 +602,8 @@ export default function WatchScreen() {
         <View style={styles.landscapeRail}>
           <Pressable
             onPress={closePlayer}
+            hitSlop={CONTROL_HIT_SLOP}
+            android_ripple={DARK_CONTROL_RIPPLE}
             style={({ pressed }) => [styles.landscapeClose, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Close video"
@@ -618,6 +625,8 @@ export default function WatchScreen() {
       <View style={[styles.watchChrome, { paddingTop: insets.top }]}>
         <Pressable
           onPress={closePlayer}
+          hitSlop={CONTROL_HIT_SLOP}
+          android_ripple={DARK_CONTROL_RIPPLE}
           style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel="Close video"
@@ -641,6 +650,8 @@ export default function WatchScreen() {
         <View style={styles.actionRow} accessibilityRole="toolbar">
           <Pressable
             onPress={toggleSave}
+            hitSlop={CONTROL_HIT_SLOP}
+            android_ripple={DARK_CONTROL_RIPPLE}
             disabled={pendingAction === "save"}
             style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "save") && styles.pressed]}
             accessibilityRole="button"
@@ -653,6 +664,8 @@ export default function WatchScreen() {
           </Pressable>
           <Pressable
             onPress={toggleWatchLater}
+            hitSlop={CONTROL_HIT_SLOP}
+            android_ripple={DARK_CONTROL_RIPPLE}
             disabled={pendingAction === "later"}
             style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "later") && styles.pressed]}
             accessibilityRole="button"
@@ -702,12 +715,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   closeButton: {
-    minWidth: 88,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
+    minWidth: 96,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
+    overflow: "hidden",
   },
   closeLabel: { ...type.label, color: palette.wall },
   fullscreenStatus: { ...type.caption, color: palette.wall, marginRight: spacing.sm },
@@ -725,24 +739,24 @@ const styles = StyleSheet.create({
   playerStatusText: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", marginTop: spacing.md },
   errorTitle: { ...type.heading, color: palette.wall, textAlign: "center" },
   errorBody: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", textAlign: "center", marginTop: spacing.sm, maxWidth: 360 },
-  stateActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
-  darkOutlineButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: watchPalette.border, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: watchPalette.surface },
+  stateActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
+  darkOutlineButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: watchPalette.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.control, backgroundColor: watchPalette.surface, overflow: "hidden" },
   darkButtonText: { ...type.label, color: palette.wall },
-  skipButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radii.control },
+  skipButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.md, borderRadius: radii.control, overflow: "hidden" },
   skipButtonText: { ...type.label, color: palette.ink },
   endEyebrow: { ...type.caption, color: "rgba(250,249,246,0.7)" },
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
-  lightStateButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.lg, borderRadius: radii.control },
+  lightStateButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radii.control, overflow: "hidden" },
   lightButtonText: { ...type.label, color: palette.ink },
   landscapeScreen: { flex: 1, backgroundColor: watchPalette.stage, flexDirection: "row" },
   landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
-  landscapeClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: watchPalette.border, backgroundColor: watchPalette.surface, borderRadius: radii.control },
+  landscapeClose: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: watchPalette.border, backgroundColor: watchPalette.surface, borderRadius: radii.control, overflow: "hidden" },
   landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
   content: { padding: spacing.page, backgroundColor: watchPalette.wall },
   videoTitle: { color: palette.wall },
   detailLabel: { marginTop: spacing.md, color: "rgba(250,249,246,0.62)" },
-  actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
-  actionButton: { minHeight: 50, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.control, borderWidth: 1, borderColor: watchPalette.border },
+  actionRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
+  actionButton: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.control, borderWidth: 1, borderColor: watchPalette.border, overflow: "hidden" },
   actionLabel: { color: palette.wall },
   notes: { marginTop: spacing.xl },
   description: { marginTop: spacing.sm, color: "rgba(250,249,246,0.76)" },
@@ -751,6 +765,6 @@ const styles = StyleSheet.create({
   channelLinkLabel: { color: palette.accentSoft, marginTop: spacing.md },
   unavailableScreen: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", paddingHorizontal: spacing.lg },
   unavailableBody: { marginTop: spacing.sm, color: palette.inkMuted },
-  primaryLightButton: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", marginTop: spacing.lg },
+  primaryLightButton: { alignSelf: "flex-start", minHeight: 48, justifyContent: "center", marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radii.control, overflow: "hidden" },
   pressed: { opacity: 0.58 },
 });

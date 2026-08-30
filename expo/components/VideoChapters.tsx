@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   heading: { ...type.heading, color: palette.wall, fontSize: 18, lineHeight: 24 },
   note: { ...type.caption, color: "rgba(250,249,246,0.52)", marginTop: spacing.xs },
   list: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: "rgba(250,249,246,0.22)" },
-  row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: "rgba(250,249,246,0.18)" },
+  row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 12, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: "rgba(250,249,246,0.18)" },
   activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
   time: { width: 48, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
   activeTime: { color: watchPalette.accentSoft },

@@ -116,9 +116,9 @@ export default function SavedSessionScreen() {
                 <Text style={styles.duration}>{video ? formatDuration(video.durationSeconds) : "Remove or add again"}</Text>
               </Pressable>
               <View style={styles.rowActions}>
-                <Pressable onPress={() => { void move(index, -1); }} disabled={index === 0} style={[styles.smallButton, index === 0 && styles.disabled]} accessibilityLabel="Move earlier"><ChevronUp size={16} color={palette.inkMuted} /></Pressable>
-                <Pressable onPress={() => { void move(index, 1); }} disabled={index === session.orderedVideoIds.length - 1} style={[styles.smallButton, index === session.orderedVideoIds.length - 1 && styles.disabled]} accessibilityLabel="Move later"><ChevronDown size={16} color={palette.inkMuted} /></Pressable>
-                <Pressable onPress={() => { void removeVideo(videoId); }} style={styles.smallButton} accessibilityLabel="Remove from session"><X size={16} color={palette.danger} /></Pressable>
+                <Pressable onPress={() => { void move(index, -1); }} disabled={index === 0} style={[styles.smallButton, index === 0 && styles.disabled]} accessibilityRole="button" accessibilityLabel="Move earlier"><ChevronUp size={16} color={palette.inkMuted} /></Pressable>
+                <Pressable onPress={() => { void move(index, 1); }} disabled={index === session.orderedVideoIds.length - 1} style={[styles.smallButton, index === session.orderedVideoIds.length - 1 && styles.disabled]} accessibilityRole="button" accessibilityLabel="Move later"><ChevronDown size={16} color={palette.inkMuted} /></Pressable>
+                <Pressable onPress={() => { void removeVideo(videoId); }} style={styles.smallButton} accessibilityRole="button" accessibilityLabel="Remove from session"><X size={16} color={palette.danger} /></Pressable>
               </View>
             </View>
           );
@@ -156,8 +156,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
     videoTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
     unavailable: { color: palette.danger },
     duration: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xs },
-    rowActions: { gap: 2 },
-    smallButton: { width: 36, height: 32, alignItems: "center", justifyContent: "center" },
+    rowActions: { gap: spacing.xs },
+    smallButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
     disabled: { opacity: 0.22 },
     beginButton: { minHeight: 52, marginTop: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     beginText: { ...type.label, color: palette.onDark },

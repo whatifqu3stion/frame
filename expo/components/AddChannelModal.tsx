@@ -32,7 +32,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.eyebrow}>Add a channel</Text>
-            <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={close} hitSlop={10} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>

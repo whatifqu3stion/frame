@@ -450,8 +450,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
   },
   resultTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
   addChip: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     backgroundColor: palette.surface,
     justifyContent: "center",
     alignItems: "center",
