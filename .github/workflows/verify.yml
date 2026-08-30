@@ -1,0 +1,45 @@
+name: Verify Frame
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  expo:
+    name: Expo checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: expo
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Tests
+        run: bun run test
+
+      - name: Expo dependency health
+        run: bunx expo-doctor
