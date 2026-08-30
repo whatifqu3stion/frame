@@ -1,11 +1,15 @@
 import { Tabs } from "expo-router";
 import { Compass, Home, Library, Settings } from "lucide-react-native";
-import { Platform, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function TabLayout() {
   const { palette } = useFrameTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
@@ -15,7 +19,15 @@ export default function TabLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 10, letterSpacing: 1.15, textTransform: "uppercase" },
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3 },
-        tabBarStyle: { backgroundColor: palette.surfaceHigh, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.borderSoft, elevation: 0, height: Platform.OS === "ios" ? 86 : 68, paddingTop: 9 },
+        tabBarStyle: {
+          backgroundColor: palette.surfaceHigh,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: palette.borderSoft,
+          elevation: 0,
+          height: 58 + bottomInset,
+          paddingTop: 8,
+          paddingBottom: bottomInset,
+        },
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Home size={20} color={color} strokeWidth={1.7} /> }} />
