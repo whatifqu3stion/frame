@@ -1,0 +1,232 @@
+import type {
+  WeeklyInterestPicks,
+  WeeklyPick,
+  WeeklyPickFeaturedMedia,
+  WeeklyPicksResponse,
+} from "./weekly-picks-contract.ts";
+
+export const MAX_INTERESTS_PER_REQUEST = 8;
+export const MAX_PICKS_PER_INTEREST = 3;
+
+export const STABLE_INTEREST_IDS = [
+  "tech",
+  "science",
+  "design",
+  "music",
+  "film",
+  "photography",
+  "architecture",
+  "history",
+  "philosophy",
+  "literature",
+  "art",
+  "cooking",
+  "nature",
+  "travel",
+  "craft",
+  "writing",
+  "interviews",
+  "essays",
+] as const;
+
+const stableInterestIds = new Set<string>(STABLE_INTEREST_IDS);
+
+export interface ServiceState {
+  weeklyPicksEnabled: boolean;
+  maintenanceMode: boolean;
+}
+
+export interface PublishedPickRow {
+  pickSetStatus: string;
+  periodStart: string;
+  periodEnd: string;
+  interestId: string;
+  pickOrder: number;
+  publicReason: string | null;
+  sourceProvider: string;
+  sourceProviderId: string;
+  sourceHandle: string | null;
+  sourceDisplayName: string;
+  sourceDescription: string;
+  sourceThumbnailUrl: string | null;
+  mediaProvider: string | null;
+  mediaProviderId: string | null;
+  mediaTitle: string | null;
+  mediaDescription: string | null;
+  mediaThumbnailUrl: string | null;
+  mediaPublishedAt: string | null;
+  mediaDurationSeconds: number | null;
+  mediaIsLivestream: boolean | null;
+  mediaIsUpcomingPremiere: boolean | null;
+}
+
+export interface WeeklyPicksRepository {
+  getServiceState(): Promise<ServiceState | null>;
+  getActiveInterestIds(interestIds: readonly string[]): Promise<readonly string[]>;
+  getCurrentPublishedPicks(interestIds: readonly string[]): Promise<readonly PublishedPickRow[]>;
+}
+
+export interface WeeklyPicksExecution {
+  status: number;
+  cacheControl: string;
+  body: WeeklyPicksResponse;
+}
+
+type InputValidation =
+  | { ok: true; interestIds: string[] }
+  | { ok: false; message: string };
+
+const publicCache = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
+const shortCache = "public, max-age=30, s-maxage=60";
+const noStore = "no-store";
+
+export function validateWeeklyPicksInput(input: unknown): InputValidation {
+  if (!isPlainObject(input)) return { ok: false, message: "A JSON object is required." };
+  const keys = Object.keys(input);
+  if (keys.length !== 1 || keys[0] !== "interestIds") {
+    return { ok: false, message: "Only interestIds may be provided." };
+  }
+
+  const interestIds = input.interestIds;
+  if (!Array.isArray(interestIds) || interestIds.length === 0) {
+    return { ok: false, message: "interestIds must be a non-empty list." };
+  }
+  if (interestIds.length > MAX_INTERESTS_PER_REQUEST) {
+    return { ok: false, message: `No more than ${MAX_INTERESTS_PER_REQUEST} interests may be requested.` };
+  }
+  if (!interestIds.every((value: unknown) => typeof value === "string" && stableInterestIds.has(value))) {
+    return { ok: false, message: "Every interest must be a known stable interest ID." };
+  }
+
+  return { ok: true, interestIds: [...new Set(interestIds as string[])] };
+}
+
+export async function executeWeeklyPicks(
+  input: unknown,
+  repository: WeeklyPicksRepository,
+  now: Date = new Date(),
+): Promise<WeeklyPicksExecution> {
+  const validation = validateWeeklyPicksInput(input);
+  if (!validation.ok) return unavailable(400, validation.message);
+
+  try {
+    const controls = await repository.getServiceState();
+    if (!controls) return unavailable(503, "Weekly Picks are unavailable.");
+    if (controls.maintenanceMode || !controls.weeklyPicksEnabled) {
+      return {
+        status: 200,
+        cacheControl: shortCache,
+        body: { state: "maintenance", interests: [], message: "Weekly Picks are temporarily paused." },
+      };
+    }
+
+    const activeIds = await repository.getActiveInterestIds(validation.interestIds);
+    const activeIdSet = new Set(activeIds);
+    if (validation.interestIds.some((interestId: string) => !activeIdSet.has(interestId))) {
+      return unavailable(400, "Every interest must be active.");
+    }
+
+    const rows = await repository.getCurrentPublishedPicks(validation.interestIds);
+    const interests = mapPublishedPickRows(rows, validation.interestIds, now);
+    if (interests.length === 0) {
+      return {
+        status: 200,
+        cacheControl: publicCache,
+        body: { state: "empty", interests: [], message: "No Weekly Picks are published for these interests." },
+      };
+    }
+
+    return { status: 200, cacheControl: publicCache, body: { state: "fresh", interests } };
+  } catch {
+    return unavailable(503, "Weekly Picks are unavailable.");
+  }
+}
+
+export function mapPublishedPickRows(
+  rows: readonly PublishedPickRow[],
+  requestedInterestIds: readonly string[],
+  now: Date,
+): WeeklyInterestPicks[] {
+  const today = now.toISOString().slice(0, 10);
+  const requested = new Set(requestedInterestIds);
+  const grouped = new Map<string, PublishedPickRow[]>();
+
+  for (const row of rows) {
+    if (
+      row.pickSetStatus !== "published"
+      || !requested.has(row.interestId)
+      || row.periodStart > today
+      || row.periodEnd < today
+      || row.pickOrder < 1
+      || row.pickOrder > MAX_PICKS_PER_INTEREST
+    ) continue;
+    const current = grouped.get(row.interestId) ?? [];
+    current.push(row);
+    grouped.set(row.interestId, current);
+  }
+
+  const output: WeeklyInterestPicks[] = [];
+  for (const interestId of requestedInterestIds) {
+    const rowsForInterest = grouped.get(interestId) ?? [];
+    const uniqueByOrder = new Map<number, PublishedPickRow>();
+    for (const row of rowsForInterest.sort((left, right) => left.pickOrder - right.pickOrder)) {
+      if (!uniqueByOrder.has(row.pickOrder)) uniqueByOrder.set(row.pickOrder, row);
+    }
+    const boundedRows = [...uniqueByOrder.values()].slice(0, MAX_PICKS_PER_INTEREST);
+    if (boundedRows.length === 0) continue;
+    const first = boundedRows[0];
+    output.push({
+      interestId,
+      publicationPeriod: { start: first.periodStart, end: first.periodEnd },
+      picks: boundedRows.map(mapPick),
+    });
+  }
+  return output;
+}
+
+function mapPick(row: PublishedPickRow): WeeklyPick {
+  const featuredMedia = mapFeaturedMedia(row);
+  return {
+    order: row.pickOrder,
+    reason: row.publicReason,
+    source: {
+      provider: row.sourceProvider,
+      providerSourceId: row.sourceProviderId,
+      handle: row.sourceHandle,
+      displayName: row.sourceDisplayName,
+      description: row.sourceDescription,
+      thumbnailUrl: row.sourceThumbnailUrl,
+    },
+    ...(featuredMedia ? { featuredMedia } : {}),
+  };
+}
+
+function mapFeaturedMedia(row: PublishedPickRow): WeeklyPickFeaturedMedia | undefined {
+  if (
+    row.mediaProvider === null
+    || row.mediaProviderId === null
+    || row.mediaTitle === null
+    || row.mediaIsLivestream === null
+    || row.mediaIsUpcomingPremiere === null
+  ) return undefined;
+
+  return {
+    provider: row.mediaProvider,
+    providerMediaId: row.mediaProviderId,
+    title: row.mediaTitle,
+    description: row.mediaDescription ?? "",
+    thumbnailUrl: row.mediaThumbnailUrl,
+    publishedAt: row.mediaPublishedAt,
+    durationSeconds: row.mediaDurationSeconds,
+    isLivestream: row.mediaIsLivestream,
+    isUpcomingPremiere: row.mediaIsUpcomingPremiere,
+  };
+}
+
+function unavailable(status: number, message: string): WeeklyPicksExecution {
+  return { status, cacheControl: noStore, body: { state: "unavailable", interests: [], message } };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
