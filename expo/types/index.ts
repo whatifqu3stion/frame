@@ -20,9 +20,43 @@ export type FeedContractStatus =
   | "network_error"
   | "backend_allowance_unavailable";
 
+export type WeeklyPickPublicationPeriod = {
+  start: string;
+  end: string;
+};
+
+export type WeeklyPickFeaturedMediaPreview = {
+  provider: ProviderId;
+  providerMediaId: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string | null;
+  publishedAt: string | null;
+  durationSeconds: number | null;
+  isLivestream: boolean;
+  isUpcomingPremiere: boolean;
+};
+
+/** Public source recommendation data exposed by the Weekly Picks boundary. */
+export type WeeklyPickSourceSuggestion = {
+  provider: ProviderId;
+  providerSourceId: string;
+  handle: string | null;
+  displayName: string;
+  description: string;
+  thumbnailUrl: string | null;
+  recommendationReason: string | null;
+  interestId: InterestId;
+  publicationPeriod: WeeklyPickPublicationPeriod;
+  featuredMedia?: WeeklyPickFeaturedMediaPreview;
+};
+
+export type DiscoveryResultReason = "no_interests" | "empty" | "maintenance" | "offline" | "configuration" | "backend";
+
 export type DiscoveryResult = {
   status: FeedContractStatus;
-  items: MediaItemRef[];
+  items: WeeklyPickSourceSuggestion[];
+  reason?: DiscoveryResultReason;
   message?: string;
   cachedAt?: number;
 };

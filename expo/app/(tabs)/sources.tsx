@@ -31,6 +31,8 @@ export default function SourcesScreen() {
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 
   const openAddSource = (): void => {
@@ -121,12 +123,18 @@ export default function SourcesScreen() {
                 </View>
               ) : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
                 <VideoFeedSkeleton count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
-              ) : discoverQuery.data?.status === "network_error" ? (
-                <EmptyState title="Discover is offline" body="Weekly picks need the shared Frame service. No source was searched or polled." />
-              ) : discoverQuery.isError || discoverQuery.data?.status === "temporarily_unavailable" ? (
-                <EmptyState title="Discover couldn't load" body="The weekly service is unavailable. No replacement recommendations were generated." />
+              ) : discoverQuery.data?.reason === "offline" ? (
+                <EmptyState title="Discover is offline" body={discoverQuery.data.message ?? "Weekly picks need a connection. Your sources and preferences were not changed."} />
+              ) : discoverQuery.data?.reason === "configuration" ? (
+                <EmptyState title="Discover isn't configured" body={discoverQuery.data.message ?? "Weekly picks are not configured for this build."} />
+              ) : discoverQuery.data?.reason === "maintenance" ? (
+                <EmptyState title="Weekly picks are paused" body={discoverQuery.data.message ?? "Frame is preparing the next weekly publication."} />
+              ) : discoverQuery.data?.reason === "empty" ? (
+                <EmptyState title="No picks this week" body={discoverQuery.data.message ?? "There is no current publication for your interests."} />
+              ) : discoverQuery.isError || discoverQuery.data?.reason === "backend" || discoverQuery.data?.status === "temporarily_unavailable" ? (
+                <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "The weekly service is unavailable. No replacement recommendations were generated."} />
               ) : (
-                <EmptyState title="Weekly picks are unavailable" body={discoverQuery.data?.message ?? "A small recommendation set will live here when the shared backend exists. Until then, this area stays honestly empty."} />
+                <EmptyState title="Weekly picks stay hidden for now" body="The secure read path is ready. Source cards and actions will arrive in a later Frame Picks release." />
               )}
               <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />

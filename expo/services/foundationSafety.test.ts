@@ -29,11 +29,11 @@ describe("Round 1 network safety", () => {
     expect(fetchCount).toBe(0);
   });
 
-  test("opening Discover returns truthful unavailability without network work", async () => {
+  test("opening Discover with no interests performs no network work", async () => {
     let fetchCount = 0;
     globalThis.fetch = (async () => { fetchCount += 1; throw new Error("unexpected fetch"); }) as typeof fetch;
-    const result = await discoveryService.getWeeklyPicks("owner-default", ["science"]);
-    expect(result.status).toBe("backend_allowance_unavailable");
+    const result = await discoveryService.getWeeklyPicks("owner-default", []);
+    expect(result).toMatchObject({ status: "success", reason: "no_interests", items: [] });
     expect(unavailableSearchResult()).toMatchObject({ status: "unavailable" });
     expect(fetchCount).toBe(0);
   });
