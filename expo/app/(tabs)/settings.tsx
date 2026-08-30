@@ -191,7 +191,13 @@ export default function SettingsScreen() {
         {googleConnected ? (
           <>
             <View style={styles.accountRow}>
-              <UserCircle2 size={20} color={palette.accent} strokeWidth={1.6} />
+              <View style={styles.accountAvatar}>
+                <UserCircle2 size={24} color={palette.accent} strokeWidth={1.6} />
+                <View
+                  style={[styles.accountStatusDot, styles.accountStatusDotConnected]}
+                  accessibilityLabel="Signed in with Google"
+                />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google account"}</Text>
                 <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
@@ -222,7 +228,10 @@ export default function SettingsScreen() {
               <ActivityIndicator color={palette.accent} />
             ) : (
               <>
-                <UserCircle2 size={20} color={palette.accent} strokeWidth={1.7} />
+                <View style={styles.accountAvatar}>
+                  <UserCircle2 size={24} color={palette.accent} strokeWidth={1.7} />
+                  <View style={styles.accountStatusDot} accessibilityLabel="Not signed in with Google" />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.accountConnectTitle}>Sign in with Google</Text>
                   <Text style={styles.accountConnectSubtitle}>
@@ -352,6 +361,26 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderWidth: 1,
     borderColor: palette.borderSoft,
   },
+  accountAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.surfaceHigh,
+  },
+  accountStatusDot: {
+    position: "absolute",
+    right: 0,
+    bottom: 1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: palette.inkMuted,
+    borderWidth: 2,
+    borderColor: palette.surface,
+  },
+  accountStatusDotConnected: { backgroundColor: "#2FA36B" },
   accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   accountConnect: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: palette.surface, padding: spacing.lg, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
   accountConnectTitle: { ...type.label, color: palette.ink },
