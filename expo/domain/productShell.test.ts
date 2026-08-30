@@ -28,6 +28,8 @@ describe("Round 1C product shell", () => {
 
   test("supports each truthful finite Today state", () => {
     expect(resolveTodayShellState({ followedSourceCount: 0, isLoading: false, isError: false, itemCount: 0 })).toBe("no_sources");
+    expect(resolveTodayShellState({ followedSourceCount: 0, isLoading: true, isError: false, itemCount: 0 })).toBe("loading");
+    expect(resolveTodayShellState({ followedSourceCount: 0, isLoading: false, isError: true, itemCount: 0 })).toBe("service_error");
     expect(resolveTodayShellState({ followedSourceCount: 1, isLoading: true, isError: false, itemCount: 0 })).toBe("loading");
     expect(resolveTodayShellState({ followedSourceCount: 1, isLoading: false, isError: false, status: "network_error", itemCount: 0 })).toBe("offline");
     expect(resolveTodayShellState({ followedSourceCount: 1, isLoading: false, isError: true, itemCount: 0 })).toBe("service_error");

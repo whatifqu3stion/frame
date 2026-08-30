@@ -5,7 +5,6 @@ import type {
   WeeklyPicksResponse,
 } from "./weekly-picks-contract.ts";
 
-export const MAX_INTERESTS_PER_REQUEST = 8;
 export const MAX_PICKS_PER_INTEREST = 3;
 
 export const STABLE_INTEREST_IDS = [
@@ -28,6 +27,8 @@ export const STABLE_INTEREST_IDS = [
   "interviews",
   "essays",
 ] as const;
+
+export const MAX_INTERESTS_PER_REQUEST = STABLE_INTEREST_IDS.length;
 
 const stableInterestIds = new Set<string>(STABLE_INTEREST_IDS);
 
@@ -167,7 +168,7 @@ export function mapPublishedPickRows(
 
   const output: WeeklyInterestPicks[] = [];
   for (const interestId of requestedInterestIds) {
-    const rowsForInterest = grouped.get(interestId) ?? [];
+    const rowsForInterest = selectLatestPublicationPeriod(grouped.get(interestId) ?? []);
     const uniqueByOrder = new Map<number, PublishedPickRow>();
     for (const row of rowsForInterest.sort((left, right) => left.pickOrder - right.pickOrder)) {
       if (!uniqueByOrder.has(row.pickOrder)) uniqueByOrder.set(row.pickOrder, row);
@@ -182,6 +183,19 @@ export function mapPublishedPickRows(
     });
   }
   return output;
+}
+
+function selectLatestPublicationPeriod(rows: readonly PublishedPickRow[]): PublishedPickRow[] {
+  const periods = new Map<string, PublishedPickRow[]>();
+  for (const row of rows) {
+    const key = `${row.periodStart}|${row.periodEnd}`;
+    const periodRows = periods.get(key) ?? [];
+    periodRows.push(row);
+    periods.set(key, periodRows);
+  }
+
+  const selectedKey = [...periods.keys()].sort((left, right) => right.localeCompare(left))[0];
+  return selectedKey ? periods.get(selectedKey) ?? [] : [];
 }
 
 function mapPick(row: PublishedPickRow): WeeklyPick {

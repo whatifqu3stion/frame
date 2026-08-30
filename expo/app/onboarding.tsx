@@ -105,13 +105,13 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
 function SourceStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { addChannelByLink, googleConnected, requirePurchase } = useApp();
+  const { addChannelByLink, googleConnected } = useApp();
   const [link, setLink] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
   const addSource = async (): Promise<void> => {
-    if (!link.trim() || busy || !requirePurchase("creators")) return;
+    if (!link.trim() || busy) return;
     setBusy(true);
     setFeedback(null);
     const result = await addChannelByLink(link.trim());

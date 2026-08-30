@@ -3,6 +3,7 @@ import {
   executeWeeklyPicks,
   MAX_INTERESTS_PER_REQUEST,
   mapPublishedPickRows,
+  STABLE_INTEREST_IDS,
   type PublishedPickRow,
   type WeeklyPicksRepository,
   validateWeeklyPicksInput,
@@ -55,6 +56,14 @@ describe("Weekly Picks input boundary", () => {
     expect(validateWeeklyPicksInput({ interestIds: Array(MAX_INTERESTS_PER_REQUEST + 1).fill("science") }).ok).toBe(false);
   });
 
+  test("accepts the complete interest set offered by onboarding", () => {
+    expect(MAX_INTERESTS_PER_REQUEST).toBe(STABLE_INTEREST_IDS.length);
+    expect(validateWeeklyPicksInput({ interestIds: [...STABLE_INTEREST_IDS] })).toEqual({
+      ok: true,
+      interestIds: [...STABLE_INTEREST_IDS],
+    });
+  });
+
   test("deduplicates known stable IDs", () => {
     expect(validateWeeklyPicksInput({ interestIds: ["science", "science", "design"] })).toEqual({
       ok: true,
@@ -94,6 +103,18 @@ describe("Weekly Picks response boundary", () => {
     ], ["science"], now);
     expect(mapped).toHaveLength(1);
     expect(mapped[0]?.picks.map((pick) => pick.order)).toEqual([1, 2, 3]);
+  });
+
+  test("does not mix picks from overlapping publication periods", () => {
+    const mapped = mapPublishedPickRows([
+      row({ periodStart: "2026-08-17", periodEnd: "2026-08-30", pickOrder: 1, sourceProviderId: "older" }),
+      row({ periodStart: "2026-08-24", periodEnd: "2026-08-30", pickOrder: 1, sourceProviderId: "newer" }),
+      row({ periodStart: "2026-08-24", periodEnd: "2026-08-30", pickOrder: 2, sourceProviderId: "newer-two" }),
+    ], ["science"], now);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]?.publicationPeriod.start).toBe("2026-08-24");
+    expect(mapped[0]?.picks.map((pick) => pick.source.providerSourceId)).toEqual(["newer", "newer-two"]);
   });
 
   test("omits internal IDs and inactive or absent featured-media fields", async () => {
