@@ -1,10 +1,14 @@
 import { Platform } from "react-native";
+import { DEFAULT_OWNER_PROFILE_ID } from "@/models/profile";
+import { FOUNDATION_CAPABILITIES } from "@/constants/productConfig";
+
+export { MAX_ITEMS_PER_SOURCE, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 
 export type AppEnvironment = "development" | "staging" | "production";
 
 function resolveAppEnvironment(value: string | undefined): AppEnvironment {
   if (value === "development" || value === "staging" || value === "production") return value;
-  return __DEV__ ? "development" : "production";
+  return typeof __DEV__ !== "undefined" && __DEV__ ? "development" : "production";
 }
 
 function valueForEnvironment(values: {
@@ -51,18 +55,17 @@ export const GOOGLE_CONFIG = {
   }),
 } as const;
 
-/** Stable local identity until a real profile model is introduced. */
-export const ACTIVE_PROFILE_ID = "local-device";
+/** Stable Owner identity used until profile switching is deliberately introduced. */
+export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 
 export const FEATURE_FLAGS = {
-  localLibrary: true,
-  finiteSessions: true,
-  youtubeDiscovery: Boolean(BACKEND_BASE_URL),
-  googleImport: Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
+  ...FOUNDATION_CAPABILITIES,
+  knownYouTubeUrlResolution: Boolean(BACKEND_BASE_URL),
+  googleConnection: Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 
 export function isGoogleConfigured(): boolean {
-  return FEATURE_FLAGS.googleImport;
+  return FEATURE_FLAGS.googleConnection;
 }
 
 /** Returns whether the current platform has the OAuth client ID it requires. */
@@ -72,10 +75,5 @@ export function isGooglePlatformConfigured(): boolean {
   return Boolean(GOOGLE_CONFIG.webClientId);
 }
 
-/** Scopes required to read the user's email and their YouTube subscriptions. */
-export const GOOGLE_SCOPES = [
-  "openid",
-  "email",
-  "profile",
-  "https://www.googleapis.com/auth/youtube.readonly",
-];
+/** Minimal scopes used while selective YouTube subscription import is unavailable. */
+export const GOOGLE_SCOPES = ["openid", "email", "profile"];

@@ -14,27 +14,24 @@ import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { getTopicVideos } from "@/services/youtube";
+import { discoveryService } from "@/services/discovery";
 import type { Video } from "@/types";
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { interests, followedChannels, premiumAccessState, requirePurchase } = useApp();
+  const { activeProfileId, interests, followedChannels, premiumAccessState, requirePurchase } = useApp();
   const [active, setActive] = useState<string | null>(interests[0]?.id ?? null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
 
   const activeTopic = interests.find((interest) => interest.id === active) ?? interests[0] ?? null;
   const topicQuery = useQuery({
-    queryKey: ["topic", activeTopic?.id],
-    queryFn: () => getTopicVideos(activeTopic!.name),
+    queryKey: ["topic", activeProfileId, activeTopic?.id],
+    queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, [activeTopic!.id]),
     enabled: !!activeTopic && premiumAccessState === "active",
   });
-  const videos = useMemo<Video[]>(() => {
-    if (topicQuery.data?.status === "success" || topicQuery.data?.status === "partial") return topicQuery.data.data;
-    return [];
-  }, [topicQuery.data]);
+  const videos = useMemo<Video[]>(() => [], []);
   const topicMessage = topicQuery.data && "message" in topicQuery.data ? topicQuery.data.message : undefined;
 
   const chooseTopic = useCallback((id: string): void => {
@@ -149,12 +146,10 @@ export default function ExploreScreen() {
       </Pressable>
     </View>
   ) : interests.length === 0 ? null : topicQuery.isLoading ? (
-    <VideoFeedSkeleton count={5} accessibilityLabel="Finding verified videos" />
-  ) : topicQuery.data?.status === "empty" ? (
-    <EmptyState title="Quiet topic" body={topicQuery.data.message ?? "No verified, playable videos were found."} />
+    <VideoFeedSkeleton count={5} accessibilityLabel="Loading discovery availability" />
   ) : (
     <View>
-      <EmptyState title="Couldn't load this collection" body={topicMessage ?? "Check your connection and try again."} />
+      <EmptyState title="Discovery is unavailable" body={topicMessage ?? "Bounded weekly discovery is not available yet."} />
       <Pressable onPress={retryTopic} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
         <RotateCcw size={16} color={palette.accent} />
         <Text style={styles.accentLabel}>Try again</Text>

@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
@@ -73,6 +74,7 @@ export default function WatchScreen() {
   const session = firstParam(params.session);
   const indexParam = firstParam(params.i);
   const {
+    activeProfileId,
     savedVideos,
     watchLater,
     saveVideo,
@@ -87,7 +89,7 @@ export default function WatchScreen() {
   } = useApp();
 
   const sessionIds = useMemo<string[]>(
-    () => (session ?? "").split(",").filter((candidate) => VIDEO_ID_PATTERN.test(candidate)).slice(0, 3),
+    () => (session ?? "").split(",").filter((candidate) => VIDEO_ID_PATTERN.test(candidate)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems),
     [session],
   );
   const sessionIndex = useMemo<number>(() => {
@@ -200,7 +202,7 @@ export default function WatchScreen() {
       setResumeReady(true);
       return () => { mounted = false; };
     }
-    getResume(id)
+    getResume(activeProfileId, id)
       .then((resume) => {
         if (!mounted) return;
         const duration = firstPositiveDuration(video?.durationSeconds, resume?.durationSeconds);
@@ -216,7 +218,7 @@ export default function WatchScreen() {
         if (mounted) setResumeReady(true);
       });
     return () => { mounted = false; };
-  }, [id, isPremium, setAction, video?.durationSeconds]);
+  }, [activeProfileId, id, isPremium, setAction, video?.durationSeconds]);
 
   const persist = useCallback((): Promise<void> => {
     if (!video || !isPremium || didEndRef.current) return Promise.resolve();

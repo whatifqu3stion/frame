@@ -10,6 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -148,7 +149,7 @@ export default function LibraryScreen() {
           accessibilityLabel={`Open ${session.name}`}
         >
           <View style={styles.flex}>
-            <Text style={type.caption}>{session.orderedVideoIds.length} of 3 videos</Text>
+            <Text style={type.caption}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text>
             <Text style={styles.itemHeading}>{session.name}</Text>
           </View>
           <ChevronRight size={18} color={palette.inkMuted} strokeWidth={1.7} />

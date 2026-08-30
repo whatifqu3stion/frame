@@ -1,11 +1,12 @@
 import * as SQLite from "expo-sqlite";
 import { Platform } from "react-native";
+import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
+import type { Profile } from "@/models/profile";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-/** The current database has no formal migration ledger; SQLite reports user_version 0. */
-export const DATABASE_SCHEMA_VERSION = 0;
+export { DATABASE_SCHEMA_VERSION } from "@/db/migrations";
 
 export type DatabaseDiagnostics = {
   storage: "sqlite" | "memory-web-preview";
@@ -14,140 +15,99 @@ export type DatabaseDiagnostics = {
 };
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (Platform.OS === "web") {
-    throw new Error("SQLite unavailable on web");
-  }
+  if (Platform.OS === "web") throw new Error("SQLite unavailable on web");
   if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync("frame.db").then(async (db) => {
-      await db.execAsync(`
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS saved_videos (
-          id TEXT PRIMARY KEY NOT NULL,
-          title TEXT NOT NULL,
-          channelId TEXT NOT NULL,
-          channelTitle TEXT NOT NULL,
-          thumbnailUrl TEXT NOT NULL,
-          publishedAt TEXT NOT NULL,
-          durationSeconds INTEGER NOT NULL,
-          description TEXT,
-          savedAt INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS resume_positions (
-          videoId TEXT PRIMARY KEY NOT NULL,
-          timestampSeconds INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          title TEXT,
-          channelTitle TEXT,
-          thumbnailUrl TEXT,
-          durationSeconds INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS queues (
-          id TEXT PRIMARY KEY NOT NULL,
-          name TEXT NOT NULL,
-          orderedVideoIds TEXT NOT NULL,
-          updatedAt INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS watch_later (
-          id TEXT PRIMARY KEY NOT NULL,
-          title TEXT NOT NULL,
-          channelId TEXT NOT NULL,
-          channelTitle TEXT NOT NULL,
-          thumbnailUrl TEXT NOT NULL,
-          publishedAt TEXT NOT NULL,
-          durationSeconds INTEGER NOT NULL,
-          description TEXT,
-          addedAt INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS followed_channels (
-          id TEXT PRIMARY KEY NOT NULL,
-          title TEXT NOT NULL,
-          description TEXT,
-          thumbnailUrl TEXT NOT NULL,
-          followedAt INTEGER NOT NULL,
-          source TEXT NOT NULL DEFAULT 'manual'
-        );
-      `);
-      const columns = await db.getAllAsync<{ name: string }>("PRAGMA table_info(followed_channels)");
-      if (!columns.some((column) => column.name === "source")) {
-        await db.execAsync("ALTER TABLE followed_channels ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
-      }
-      return db;
-    }).catch((error) => {
-      dbPromise = null;
-      throw error;
-    });
+    dbPromise = SQLite.openDatabaseAsync("frame.db")
+      .then(async (db) => {
+        await db.execAsync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF;");
+        await migrateDatabase(db);
+        await db.execAsync("PRAGMA foreign_keys = ON;");
+        return db;
+      })
+      .catch((error) => {
+        dbPromise = null;
+        throw error;
+      });
   }
   return dbPromise;
 }
 
-// In-memory fallback for web previews so the UI still works.
 const webStore = {
   saved: new Map<string, Video & { savedAt: number }>(),
-  resume: new Map<string, ResumePosition & { title?: string; channelTitle?: string; thumbnailUrl?: string; durationSeconds?: number }>(),
+  resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
   watchLater: new Map<string, Video & { addedAt: number }>(),
   channels: new Map<string, FollowedChannel>(),
 };
 
+function profileValues<T>(store: Map<string, T>, profileId: string): T[] {
+  const prefix = `${profileId}:`;
+  return Array.from(store.entries()).filter(([key]) => key.startsWith(prefix)).map(([, value]) => value);
+}
+
+function clearProfileMap<T>(store: Map<string, T>, profileId: string): void {
+  const prefix = `${profileId}:`;
+  for (const key of store.keys()) if (key.startsWith(prefix)) store.delete(key);
+}
+
+/** Initializes migrations eagerly for device-level smoke tests. */
+export async function initializeDatabase(): Promise<void> {
+  if (Platform.OS !== "web") await getDb();
+}
+
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "queues", "resume_positions", "saved_videos", "watch_later"];
-  if (Platform.OS === "web") {
-    return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
-  }
+  const expectedTables = ["followed_channels", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
+  if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
   const tableRows = await db.getAllAsync<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   );
-  return {
-    storage: "sqlite",
-    version: versionRow?.user_version ?? DATABASE_SCHEMA_VERSION,
-    tables: tableRows.map((row) => row.name),
-  };
+  return { storage: "sqlite", version: versionRow?.user_version ?? 0, tables: tableRows.map((row) => row.name) };
 }
 
-export async function listSavedVideos(): Promise<Video[]> {
-  if (Platform.OS === "web") {
-    return Array.from(webStore.saved.values())
-      .sort((a, b) => b.savedAt - a.savedAt)
-      .map((v) => ({ ...v }));
-  }
+export async function listProfiles(): Promise<Profile[]> {
+  if (Platform.OS === "web") return [];
   const db = await getDb();
-  const rows = await db.getAllAsync<Video & { savedAt: number }>(
-    "SELECT * FROM saved_videos ORDER BY savedAt DESC",
-  );
-  return rows;
+  return db.getAllAsync<Profile>("SELECT * FROM profiles ORDER BY createdAt ASC");
 }
 
-export async function isVideoSaved(videoId: string): Promise<boolean> {
-  if (Platform.OS === "web") return webStore.saved.has(videoId);
+export async function listSavedVideos(profileId: string): Promise<Video[]> {
+  if (Platform.OS === "web") return profileValues(webStore.saved, profileId).sort((a, b) => b.savedAt - a.savedAt).map((video) => ({ ...video }));
   const db = await getDb();
-  const row = await db.getFirstAsync<{ id: string }>("SELECT id FROM saved_videos WHERE id = ?", [videoId]);
+  return db.getAllAsync<Video & { savedAt: number }>("SELECT * FROM saved_videos WHERE profileId = ? ORDER BY savedAt DESC", [profileId]);
+}
+
+export async function isVideoSaved(profileId: string, videoId: string): Promise<boolean> {
+  if (Platform.OS === "web") return webStore.saved.has(profileEntityKey(profileId, videoId));
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ id: string }>("SELECT id FROM saved_videos WHERE profileId = ? AND id = ?", [profileId, videoId]);
   return Boolean(row);
 }
 
-export async function saveVideo(v: Video): Promise<void> {
+export async function saveVideo(profileId: string, video: Video): Promise<void> {
   const savedAt = Date.now();
   if (Platform.OS === "web") {
-    webStore.saved.set(v.id, { ...v, savedAt });
+    webStore.saved.set(profileEntityKey(profileId, video.id), { ...video, savedAt });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT OR REPLACE INTO saved_videos (id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [v.id, v.title, v.channelId, v.channelTitle, v.thumbnailUrl, v.publishedAt, v.durationSeconds, v.description ?? null, savedAt],
+    `INSERT INTO saved_videos (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,savedAt=excluded.savedAt`,
+    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, savedAt],
   );
 }
 
-export async function unsaveVideo(videoId: string): Promise<void> {
+export async function unsaveVideo(profileId: string, videoId: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.saved.delete(videoId);
+    webStore.saved.delete(profileEntityKey(profileId, videoId));
     return;
   }
   const db = await getDb();
-  await db.runAsync("DELETE FROM saved_videos WHERE id = ?", [videoId]);
+  await db.runAsync("DELETE FROM saved_videos WHERE profileId = ? AND id = ?", [profileId, videoId]);
 }
 
 export type ResumeRow = ResumePosition & {
@@ -157,204 +117,182 @@ export type ResumeRow = ResumePosition & {
   durationSeconds?: number;
 };
 
-export async function listResume(): Promise<ResumeRow[]> {
-  if (Platform.OS === "web") {
-    return Array.from(webStore.resume.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-  }
+export async function listResume(profileId: string): Promise<ResumeRow[]> {
+  if (Platform.OS === "web") return profileValues(webStore.resume, profileId).sort((a, b) => b.updatedAt - a.updatedAt);
   const db = await getDb();
-  return db.getAllAsync<ResumeRow>("SELECT * FROM resume_positions ORDER BY updatedAt DESC LIMIT 24");
+  return db.getAllAsync<ResumeRow>("SELECT * FROM resume_positions WHERE profileId = ? ORDER BY updatedAt DESC LIMIT 24", [profileId]);
 }
 
-export async function getResume(videoId: string): Promise<ResumeRow | null> {
-  if (Platform.OS === "web") return webStore.resume.get(videoId) ?? null;
+export async function getResume(profileId: string, videoId: string): Promise<ResumeRow | null> {
+  if (Platform.OS === "web") return webStore.resume.get(profileEntityKey(profileId, videoId)) ?? null;
   const db = await getDb();
-  const row = await db.getFirstAsync<ResumeRow>("SELECT * FROM resume_positions WHERE videoId = ?", [videoId]);
-  return row ?? null;
+  return (await db.getFirstAsync<ResumeRow>("SELECT * FROM resume_positions WHERE profileId = ? AND videoId = ?", [profileId, videoId])) ?? null;
 }
 
-export async function upsertResume(v: Video, timestampSeconds: number): Promise<void> {
-  const updatedAt = Date.now();
+export async function upsertResume(profileId: string, video: Video, timestampSeconds: number): Promise<void> {
+  const row: ResumeRow = {
+    videoId: video.id,
+    timestampSeconds: Math.floor(timestampSeconds),
+    updatedAt: Date.now(),
+    title: video.title,
+    channelTitle: video.channelTitle,
+    thumbnailUrl: video.thumbnailUrl,
+    durationSeconds: video.durationSeconds,
+  };
   if (Platform.OS === "web") {
-    webStore.resume.set(v.id, {
-      videoId: v.id,
-      timestampSeconds,
-      updatedAt,
-      title: v.title,
-      channelTitle: v.channelTitle,
-      thumbnailUrl: v.thumbnailUrl,
-      durationSeconds: v.durationSeconds,
-    });
+    webStore.resume.set(profileEntityKey(profileId, video.id), row);
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT OR REPLACE INTO resume_positions (videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds)
-     VALUES (?,?,?,?,?,?,?)`,
-    [v.id, Math.floor(timestampSeconds), updatedAt, v.title, v.channelTitle, v.thumbnailUrl, v.durationSeconds],
+    `INSERT INTO resume_positions (profileId,videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds)
+     VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,videoId) DO UPDATE SET timestampSeconds=excluded.timestampSeconds,updatedAt=excluded.updatedAt,title=excluded.title,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,durationSeconds=excluded.durationSeconds`,
+    [profileId, row.videoId, row.timestampSeconds, row.updatedAt, row.title ?? null, row.channelTitle ?? null, row.thumbnailUrl ?? null, row.durationSeconds ?? null],
   );
 }
 
-export async function clearResume(videoId: string): Promise<void> {
+export async function clearResume(profileId: string, videoId: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.resume.delete(videoId);
+    webStore.resume.delete(profileEntityKey(profileId, videoId));
     return;
   }
   const db = await getDb();
-  await db.runAsync("DELETE FROM resume_positions WHERE videoId = ?", [videoId]);
-}
-
-export async function listQueues(): Promise<VideoQueue[]> {
-  if (Platform.OS === "web") {
-    return Array.from(webStore.queues.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-  }
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number }>(
-    "SELECT * FROM queues ORDER BY updatedAt DESC",
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    orderedVideoIds: safeParseIds(r.orderedVideoIds),
-    updatedAt: r.updatedAt,
-  }));
+  await db.runAsync("DELETE FROM resume_positions WHERE profileId = ? AND videoId = ?", [profileId, videoId]);
 }
 
 function safeParseIds(input: string): string[] {
   try {
-    const parsed = JSON.parse(input);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    const parsed = JSON.parse(input) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
   } catch {
     return [];
   }
 }
 
-export async function upsertQueue(q: VideoQueue): Promise<void> {
+export async function listQueues(profileId: string): Promise<VideoQueue[]> {
+  if (Platform.OS === "web") return profileValues(webStore.queues, profileId).sort((a, b) => b.updatedAt - a.updatedAt);
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number }>(
+    "SELECT id,name,orderedVideoIds,updatedAt FROM queues WHERE profileId = ? ORDER BY updatedAt DESC",
+    [profileId],
+  );
+  return rows.map((row) => ({ ...row, orderedVideoIds: safeParseIds(row.orderedVideoIds) }));
+}
+
+export async function upsertQueue(profileId: string, queue: VideoQueue): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.queues.set(q.id, { ...q });
+    webStore.queues.set(profileEntityKey(profileId, queue.id), { ...queue });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    "INSERT OR REPLACE INTO queues (id,name,orderedVideoIds,updatedAt) VALUES (?,?,?,?)",
-    [q.id, q.name, JSON.stringify(q.orderedVideoIds), q.updatedAt],
+    `INSERT INTO queues (profileId,id,name,orderedVideoIds,updatedAt) VALUES (?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt`,
+    [profileId, queue.id, queue.name, JSON.stringify(queue.orderedVideoIds), queue.updatedAt],
   );
 }
 
-export async function deleteQueue(id: string): Promise<void> {
+export async function deleteQueue(profileId: string, id: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.queues.delete(id);
+    webStore.queues.delete(profileEntityKey(profileId, id));
     return;
   }
   const db = await getDb();
-  await db.runAsync("DELETE FROM queues WHERE id = ?", [id]);
+  await db.runAsync("DELETE FROM queues WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
-export async function listWatchLater(): Promise<Video[]> {
-  if (Platform.OS === "web") {
-    return Array.from(webStore.watchLater.values())
-      .sort((a, b) => b.addedAt - a.addedAt)
-      .map((v) => ({ ...v }));
-  }
+export async function listWatchLater(profileId: string): Promise<Video[]> {
+  if (Platform.OS === "web") return profileValues(webStore.watchLater, profileId).sort((a, b) => b.addedAt - a.addedAt).map((video) => ({ ...video }));
   const db = await getDb();
-  return db.getAllAsync<Video & { addedAt: number }>("SELECT * FROM watch_later ORDER BY addedAt DESC");
+  return db.getAllAsync<Video & { addedAt: number }>("SELECT * FROM watch_later WHERE profileId = ? ORDER BY addedAt DESC", [profileId]);
 }
 
-export async function addWatchLater(v: Video): Promise<void> {
+export async function addWatchLater(profileId: string, video: Video): Promise<void> {
   const addedAt = Date.now();
   if (Platform.OS === "web") {
-    webStore.watchLater.set(v.id, { ...v, addedAt });
+    webStore.watchLater.set(profileEntityKey(profileId, video.id), { ...video, addedAt });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT OR REPLACE INTO watch_later (id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [v.id, v.title, v.channelId, v.channelTitle, v.thumbnailUrl, v.publishedAt, v.durationSeconds, v.description ?? null, addedAt],
+    `INSERT INTO watch_later (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,addedAt=excluded.addedAt`,
+    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, addedAt],
   );
 }
 
-export async function removeWatchLater(videoId: string): Promise<void> {
+export async function removeWatchLater(profileId: string, videoId: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.watchLater.delete(videoId);
+    webStore.watchLater.delete(profileEntityKey(profileId, videoId));
     return;
   }
   const db = await getDb();
-  await db.runAsync("DELETE FROM watch_later WHERE id = ?", [videoId]);
+  await db.runAsync("DELETE FROM watch_later WHERE profileId = ? AND id = ?", [profileId, videoId]);
 }
 
-export async function listFollowedChannels(): Promise<FollowedChannel[]> {
-  if (Platform.OS === "web") {
-    return Array.from(webStore.channels.values()).sort((a, b) => b.followedAt - a.followedAt);
-  }
+export async function listFollowedChannels(profileId: string): Promise<FollowedChannel[]> {
+  if (Platform.OS === "web") return profileValues(webStore.channels, profileId).sort((a, b) => b.followedAt - a.followedAt);
   const db = await getDb();
-  return db.getAllAsync<FollowedChannel>("SELECT * FROM followed_channels ORDER BY followedAt DESC");
+  return db.getAllAsync<FollowedChannel>("SELECT * FROM followed_channels WHERE profileId = ? ORDER BY followedAt DESC", [profileId]);
 }
 
-export async function followChannel(c: FollowedChannel): Promise<void> {
+export async function followChannel(profileId: string, channel: FollowedChannel): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.channels.set(c.id, { ...c });
+    const key = profileEntityKey(profileId, channel.id);
+    const existing = webStore.channels.get(key);
+    webStore.channels.set(key, existing ? { ...channel, followedAt: existing.followedAt, source: existing.source } : { ...channel });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO followed_channels (id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?)
-     ON CONFLICT(id) DO UPDATE SET
-       title=excluded.title,
-       description=excluded.description,
-       thumbnailUrl=excluded.thumbnailUrl`,
-    [c.id, c.title, c.description ?? null, c.thumbnailUrl, c.followedAt, c.source],
+    `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl`,
+    [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
   );
 }
 
-export async function followChannels(channels: FollowedChannel[]): Promise<void> {
+export async function followChannels(profileId: string, channels: FollowedChannel[]): Promise<void> {
   if (Platform.OS === "web") {
-    channels.forEach((channel) => {
-      const existing = webStore.channels.get(channel.id);
-      webStore.channels.set(channel.id, existing ? { ...channel, followedAt: existing.followedAt, source: existing.source } : { ...channel });
-    });
+    for (const channel of channels) await followChannel(profileId, channel);
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     for (const channel of channels) {
       await db.runAsync(
-        `INSERT INTO followed_channels (id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?)
-         ON CONFLICT(id) DO UPDATE SET
-           title=excluded.title,
-           description=excluded.description,
-           thumbnailUrl=excluded.thumbnailUrl`,
-        [channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
+        `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl`,
+        [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
       );
     }
   });
 }
 
-export async function unfollowChannel(id: string): Promise<void> {
+export async function unfollowChannel(profileId: string, id: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.channels.delete(id);
+    webStore.channels.delete(profileEntityKey(profileId, id));
     return;
   }
   const db = await getDb();
-  await db.runAsync("DELETE FROM followed_channels WHERE id = ?", [id]);
+  await db.runAsync("DELETE FROM followed_channels WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
-export async function clearAllData(): Promise<void> {
+/** Clears only the active profile's local records; profiles and other profiles remain intact. */
+export async function clearAllData(profileId: string): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.saved.clear();
-    webStore.resume.clear();
-    webStore.queues.clear();
-    webStore.watchLater.clear();
-    webStore.channels.clear();
+    clearProfileMap(webStore.saved, profileId);
+    clearProfileMap(webStore.resume, profileId);
+    clearProfileMap(webStore.queues, profileId);
+    clearProfileMap(webStore.watchLater, profileId);
+    clearProfileMap(webStore.channels, profileId);
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    await db.execAsync(`
-      DELETE FROM saved_videos;
-      DELETE FROM resume_positions;
-      DELETE FROM queues;
-      DELETE FROM watch_later;
-      DELETE FROM followed_channels;
-    `);
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels"] as const) {
+      await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
+    }
   });
 }

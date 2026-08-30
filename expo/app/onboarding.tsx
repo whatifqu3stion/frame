@@ -210,7 +210,7 @@ function StepBringChannels({ width }: { width: number }) {
       <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
       <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>Bring your{"\n"}channels.</Text>
       <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Pasted-link playback is free. Premium adds creator imports, follows, interests, and every library tool.
+        Pasted-link playback is free. Add trusted sources manually below; Google never follows subscriptions automatically.
       </Text>
 
       <Pressable
@@ -220,13 +220,13 @@ function StepBringChannels({ width }: { width: number }) {
         testID="onboard-google"
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.choiceTitle}>{googleConnected ? "Subscriptions imported" : "Bring your channels"}</Text>
+          <Text style={styles.choiceTitle}>{googleConnected ? "Google connected" : "Connect Google"}</Text>
           <Text style={styles.choiceBody}>
             {googleConnected
               ? googleEmail ?? "Connected"
               : googleConfigured
-                ? "Sign in with Google to import the channels you already follow."
-                : "Google sign-in needs setup — you can still add channels yourself below."}
+                ? "Connect your account without importing or following subscriptions."
+                : "Google sign-in needs setup — you can still add sources yourself below."}
           </Text>
         </View>
         {importing ? (
@@ -372,7 +372,7 @@ function StepCompletion({ width }: { width: number }) {
       <View style={{ marginTop: spacing.xxl }}>
         <Text style={type.caption}>A note on storage</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.sm, maxWidth: 320 }]}>
-          Your library stays on this device. YouTube provides playback and metadata; Google import and Premium verification are optional network services.
+          Your library stays on this device. YouTube provides playback and metadata; Google account connection and Premium verification are optional network services.
         </Text>
       </View>
     </View>

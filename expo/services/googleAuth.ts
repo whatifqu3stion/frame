@@ -1,17 +1,5 @@
 import type { FollowedChannel, ServiceResult } from "@/types";
 
-const API_BASE = "https://www.googleapis.com/youtube/v3";
-const MAX_SUBSCRIPTION_PAGES = 4;
-
-type SubscriptionItem = {
-  snippet: {
-    title: string;
-    description?: string;
-    resourceId: { channelId: string };
-    thumbnails?: { high?: { url: string }; medium?: { url: string }; default?: { url: string } };
-  };
-};
-
 function googleFailure<T>(status: number): ServiceResult<T> {
   if (status === 401) return { status: "unauthorized", message: "Your Google connection expired. Sign in again to continue." };
   if (status === 403) return { status: "quota", message: "Google couldn't complete this request right now. Try again later." };
@@ -34,50 +22,15 @@ export async function fetchGoogleEmail(accessToken: string): Promise<ServiceResu
   }
 }
 
-/** Fetches up to 200 subscriptions and reports truncation or authorization failures honestly. */
-export async function fetchSubscriptions(accessToken: string): Promise<ServiceResult<FollowedChannel[]>> {
-  const channels: FollowedChannel[] = [];
-  let pageToken: string | undefined;
-  const followedAt = Date.now();
-
-  try {
-    for (let page = 0; page < MAX_SUBSCRIPTION_PAGES; page += 1) {
-      const url =
-        `${API_BASE}/subscriptions?part=snippet&mine=true&maxResults=50&order=alphabetical` +
-        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!response.ok) return googleFailure(response.status);
-
-      const data = (await response.json()) as { items?: SubscriptionItem[]; nextPageToken?: string };
-      for (const item of data.items ?? []) {
-        const channelId = item.snippet.resourceId?.channelId;
-        if (!/^UC[A-Za-z0-9_-]{22}$/.test(channelId ?? "")) continue;
-        channels.push({
-          id: channelId,
-          title: item.snippet.title,
-          description: item.snippet.description || undefined,
-          thumbnailUrl:
-            item.snippet.thumbnails?.high?.url ??
-            item.snippet.thumbnails?.medium?.url ??
-            item.snippet.thumbnails?.default?.url ??
-            "",
-          followedAt,
-          source: "google",
-        });
-      }
-      pageToken = data.nextPageToken;
-      if (!pageToken) break;
-    }
-  } catch (error) {
-    console.warn("[google] subscriptions request failed", error instanceof Error ? error.message : "unknown error");
-    return { status: "offline", message: "Frame couldn't reach Google. Check your connection and try again." };
-  }
-
-  if (pageToken) {
-    return { status: "partial", data: channels, message: `Imported the first ${channels.length} channels. More remain in your Google account.` };
-  }
-  if (channels.length === 0) return { status: "empty", data: [], message: "No YouTube subscriptions were found for this account." };
-  return { status: "success", data: channels };
+/**
+ * Selective subscription import is intentionally unavailable in Round 1.
+ * This function never reads subscriptions and therefore can never follow sources automatically.
+ */
+export async function fetchSubscriptions(_accessToken: string): Promise<ServiceResult<FollowedChannel[]>> {
+  return {
+    status: "unavailable",
+    message: "Selective Google subscription import is not available yet. No sources were followed.",
+  };
 }
 
 /** Revokes Google authorization before local credentials are removed. */

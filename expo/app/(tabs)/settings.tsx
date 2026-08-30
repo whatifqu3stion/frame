@@ -27,7 +27,6 @@ export default function SettingsScreen() {
     importing,
     signInWithGoogle,
     signOutGoogle,
-    refreshSubscriptions,
     followedChannels,
     prefs,
     setTheme,
@@ -42,14 +41,6 @@ export default function SettingsScreen() {
     const result = await signInWithGoogle();
     setAccountBusy(false);
     Alert.alert(result.ok ? "Connected" : "Sign-in", result.message);
-  };
-
-  const onRefresh = async () => {
-    if (!requirePurchase("import")) return;
-    setAccountBusy(true);
-    const result = await refreshSubscriptions();
-    setAccountBusy(false);
-    Alert.alert(result.ok ? "Synced" : "Sync", result.message);
   };
 
   const onSignOut = () => {
@@ -85,7 +76,7 @@ export default function SettingsScreen() {
         <ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} />
       </View>
 
-      <Section label="Account" hint="Optional. Bring in the channels you already follow.">
+      <Section label="Account" hint="Optional. Connect Google without changing your followed sources.">
         {googleConnected ? (
           <>
             <View style={styles.accountRow}>
@@ -95,13 +86,11 @@ export default function SettingsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google account"}</Text>
-                <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>{followedChannels.length} channel{followedChannels.length === 1 ? "" : "s"} on your shelf</Text>
+                <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>Connected · {followedChannels.length} manually selected source{followedChannels.length === 1 ? "" : "s"}</Text>
               </View>
             </View>
+            <Text style={styles.accountNotice}>Selective subscription import is unavailable. Frame never follows Google subscriptions automatically.</Text>
             <View style={styles.accountActions}>
-              <Pressable onPress={onRefresh} style={styles.accountBtn} disabled={accountBusy || importing} testID="refresh-subs">
-                {accountBusy || importing ? <ActivityIndicator size="small" color={palette.accent} /> : <><RefreshCw size={14} color={palette.accent} strokeWidth={1.8} /><Text style={[type.label, { color: palette.accent }]}>Refresh</Text></>}
-              </Pressable>
               <Pressable onPress={onSignOut} style={styles.accountBtn} testID="sign-out"><LogOut size={14} color={palette.inkMuted} strokeWidth={1.8} /><Text style={[type.label, { color: palette.inkMuted }]}>Sign out</Text></Pressable>
             </View>
           </>
@@ -115,16 +104,16 @@ export default function SettingsScreen() {
               </View>
             </View>
             <View style={styles.guestDivider} />
-            <Text style={styles.guestUnlockLabel}>SIGN IN TO ADD</Text>
+            <Text style={styles.guestUnlockLabel}>GOOGLE CONNECTION</Text>
             <View style={styles.guestBenefits}>
-              <GuestBenefit icon={<Download size={16} color={palette.accent} strokeWidth={1.8} />} title="Import followed creators" detail="Bring your YouTube subscriptions onto your shelf." styles={styles} />
-              <GuestBenefit icon={<RefreshCw size={16} color={palette.accent} strokeWidth={1.8} />} title="Refresh your creator list" detail="Pull in newly followed channels whenever you choose." styles={styles} />
-              <GuestBenefit icon={<ShieldCheck size={16} color={palette.accent} strokeWidth={1.8} />} title="Stay in control" detail="Disconnect anytime; imported creators remain on this device." styles={styles} />
+              <GuestBenefit icon={<Download size={16} color={palette.accent} strokeWidth={1.8} />} title="Connect your identity" detail="Use your Google email for this optional account connection." styles={styles} />
+              <GuestBenefit icon={<RefreshCw size={16} color={palette.accent} strokeWidth={1.8} />} title="No automatic imports" detail="Your Google subscriptions will not be added or followed." styles={styles} />
+              <GuestBenefit icon={<ShieldCheck size={16} color={palette.accent} strokeWidth={1.8} />} title="Stay in control" detail="Disconnect anytime without removing manually selected sources." styles={styles} />
             </View>
-            <Pressable onPress={onConnect} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" accessibilityHint={googleConfigured ? "Connects your Google account to import YouTube subscriptions" : "Explains why Google sign-in is unavailable"} testID="connect-google">
-              {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleButtonText}>Sign in with Google</Text><ChevronRight size={17} color={palette.onDarkSoft} strokeWidth={1.8} /></>}
+            <Pressable onPress={onConnect} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" accessibilityHint={googleConfigured ? "Connects your Google identity without following YouTube subscriptions" : "Explains why Google sign-in is unavailable"} testID="connect-google">
+              {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleButtonText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} strokeWidth={1.8} /></>}
             </Pressable>
-            <Text style={styles.guestFootnote}>{googleConfigured ? "Google import is included with Frame Premium." : "Account connection isn’t available in this build."}</Text>
+            <Text style={styles.guestFootnote}>{googleConfigured ? "Connecting does not add sources. Use a supported source link to add them manually." : "Account connection isn’t available in this build."}</Text>
           </View>
         )}
       </Section>
@@ -164,7 +153,7 @@ export default function SettingsScreen() {
               <Text style={styles.premiumEyebrow}>Premium inactive</Text>
             </View>
             <Text style={styles.premiumTitle}>Build a library worth returning to.</Text>
-            <Text style={styles.premiumSubtitle}>Pasted-link playback stays free. Premium unlocks saves, resume, interests, creators, imports, and named sessions.</Text>
+            <Text style={styles.premiumSubtitle}>Pasted-link playback stays free. Premium unlocks saves, resume, interests, creators, Google connection, and named sessions.</Text>
             <View style={styles.premiumAction}>
               <Text style={styles.premiumActionText}>View beta plans or restore</Text>
               <ChevronRight size={17} color={palette.onDark} strokeWidth={1.8} />
@@ -373,6 +362,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     borderColor: palette.surface,
   },
   accountStatusDotConnected: { backgroundColor: "#2FA36B" },
+  accountNotice: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.md },
   accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   guestCard: {
     backgroundColor: palette.surface,

@@ -32,7 +32,6 @@ type YouTubeSnippet = {
   liveBroadcastContent?: string;
   thumbnails?: { default?: YouTubeThumbnail; medium?: YouTubeThumbnail; high?: YouTubeThumbnail };
 };
-type SearchItem = { id?: { videoId?: string }; snippet?: YouTubeSnippet };
 type VideoItem = {
   id?: string;
   snippet?: YouTubeSnippet;
@@ -159,16 +158,8 @@ function mapError(error: unknown): Response {
   return json(502, "failed", undefined, "YouTube couldn't complete this request. Try again.");
 }
 
-async function handleSearch(url: URL, env: Env): Promise<Response> {
-  const query = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
-  if (!query) return json(400, "failed", undefined, "A search term is required.");
-  const search = await youtubeJson<{ items?: SearchItem[] }>(
-    `/search?part=snippet&type=video&maxResults=18&safeSearch=moderate&q=${encodeURIComponent(query)}`,
-    env,
-  );
-  const ids = (search.items ?? []).map((item) => item.id?.videoId).filter((id): id is string => Boolean(id && VIDEO_ID.test(id)));
-  const videos = await fetchVideos(ids, env);
-  return videos.length > 0 ? json(200, "success", videos) : json(200, "empty", [], "No verified, playable videos were found.");
+function handleSearch(): Response {
+  return json(503, "unavailable", undefined, "Live YouTube search is disabled while bounded shared discovery is unavailable.");
 }
 
 async function handleVideo(videoId: string, env: Env): Promise<Response> {
@@ -255,7 +246,7 @@ export default {
     if (quotaFailure) return quotaFailure;
 
     try {
-      if (url.pathname === "/youtube/search" && request.method === "GET") return await handleSearch(url, env);
+      if (url.pathname === "/youtube/search" && request.method === "GET") return handleSearch();
       if (url.pathname === "/youtube/resolve" && request.method === "POST") return await handleResolve(request, env);
       const videoMatch = /^\/youtube\/videos\/([A-Za-z0-9_-]{11})$/.exec(url.pathname);
       if (videoMatch?.[1] && request.method === "GET") return await handleVideo(videoMatch[1], env);

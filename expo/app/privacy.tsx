@@ -10,11 +10,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "When you use online features",
-    body: "Frame sends the search terms, links, and video or creator identifiers needed to find and play the content you request. YouTube may also receive standard device and network information when its player loads.",
+    body: "Frame sends links and video or creator identifiers only when needed to resolve or play content you explicitly request. Live YouTube search and personalized discovery are disabled. YouTube may also receive standard device and network information when its official player loads.",
   },
   {
     title: "Optional account connection",
-    body: "If you choose to connect your Google account, Frame receives your email address and YouTube subscriptions so it can import the creators you follow. Your sign-in credential is stored securely on your device and used only to import or refresh that list. Disconnecting removes the credential; imported creators remain in your local library.",
+    body: "If you choose to connect Google, Frame receives your email address and stores the sign-in credential securely on your device. Frame does not read or automatically follow your YouTube subscriptions in this version. Disconnecting revokes access before removing the local credential; manually selected sources remain in your library.",
   },
   {
     title: "Premium purchases",
@@ -37,7 +37,7 @@ export default function PrivacyScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
       <Text style={styles.title}>Privacy Policy</Text>
-      <Text style={styles.updated}>Effective August 4, 2026</Text>
+      <Text style={styles.updated}>Effective August 30, 2026</Text>
       <Text style={styles.intro}>Frame is built around a private, on-device library. This policy explains what stays on your device, when information is shared to provide a feature, and the controls available to you.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>

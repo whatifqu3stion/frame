@@ -1,4 +1,5 @@
-import { BACKEND_BASE_URL } from "@/constants/config";
+import { BACKEND_BASE_URL, FEATURE_FLAGS } from "@/constants/config";
+import { isLiveYouTubeSearchEnabled, unavailableSearchResult } from "@/services/searchPolicy";
 import type { Channel, ServiceFailureKind, ServiceResult, Video } from "@/types";
 
 const FUNCTIONS_URL = BACKEND_BASE_URL;
@@ -55,15 +56,17 @@ async function requestBackend<T>(path: string, init?: RequestInit): Promise<Serv
   }
 }
 
-/** Searches verified, embeddable YouTube videos. */
+/** Legacy UI boundary. Round 1 disables live search centrally and never calls the backend. */
 export async function searchVideos(query: string): Promise<ServiceResult<Video[]>> {
   const trimmed = query.trim();
   if (!trimmed) return { status: "empty", data: [], message: "Enter something to search for." };
+  if (!isLiveYouTubeSearchEnabled()) return unavailableSearchResult();
   return requestBackend<Video[]>(`/youtube/search?q=${encodeURIComponent(trimmed)}`);
 }
 
-/** Loads a finite topic collection from the protected YouTube service. */
+/** Legacy topic boundary. Production discovery remains truthfully unavailable in Round 1. */
 export async function getTopicVideos(topic: string): Promise<ServiceResult<Video[]>> {
+  if (!FEATURE_FLAGS.youtubeDiscovery) return unavailableSearchResult();
   return searchVideos(topic);
 }
 

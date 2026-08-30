@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -88,7 +89,7 @@ export default function SavedSessionScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
       <Text style={styles.eyebrow}>Named session</Text>
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of 3 videos · {formatDuration(totalSeconds)} known runtime</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {formatDuration(totalSeconds)} known runtime</Text>
 
       <View style={styles.actions}>
         <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
@@ -104,7 +105,7 @@ export default function SavedSessionScreen() {
 
       <View style={styles.list}>
         {session.orderedVideoIds.length === 0 ? (
-          <EmptyState title="This session is empty" body="Edit it to choose one to three videos." />
+          <EmptyState title="This session is empty" body={`Edit it to choose one to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos.`} />
         ) : session.orderedVideoIds.map((videoId, index) => {
           const video = videoMap.get(videoId);
           return (

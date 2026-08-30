@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -25,7 +26,7 @@ export default function SessionBuilder() {
 
   useEffect(() => {
     if (didHydrate || !id || !existingSession) return;
-    setSelected(existingSession.orderedVideoIds.slice(0, 3));
+    setSelected(existingSession.orderedVideoIds.slice(0, PRODUCT_LIMITS.sessionDraftMaxItems));
     setName(existingSession.name);
     setDidHydrate(true);
   }, [didHydrate, existingSession, id]);
@@ -48,7 +49,7 @@ export default function SessionBuilder() {
     void Haptics.selectionAsync().catch(() => {});
     setSelected((previous) => {
       if (previous.includes(videoId)) return previous.filter((candidate) => candidate !== videoId);
-      if (previous.length >= 3) return previous;
+      if (previous.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return previous;
       return [...previous, videoId];
     });
   }, [requirePurchase]);
@@ -99,7 +100,7 @@ export default function SessionBuilder() {
     <View style={styles.header}>
       <Text style={styles.eyebrow}>{existingSession ? "Edit named session" : "New named session"}</Text>
       <Text style={styles.title} accessibilityRole="header">Choose a few.{"\n"}Watch. Stop.</Text>
-      <Text style={styles.subtitle}>Pick one to three videos. Frame keeps the order, then stops when the final video ends.</Text>
+      <Text style={styles.subtitle}>Pick one to {PRODUCT_LIMITS.sessionDraftMaxItems} videos. Frame keeps the order, then stops when the final video ends.</Text>
       <TextInput
         value={name}
         onChangeText={setName}
@@ -122,7 +123,7 @@ export default function SessionBuilder() {
         renderItem={({ item }) => {
           const isSelected = selected.includes(item.id);
           const order = selected.indexOf(item.id) + 1;
-          const isDisabled = selected.length >= 3 && !isSelected;
+          const isDisabled = selected.length >= PRODUCT_LIMITS.sessionDraftMaxItems && !isSelected;
           return (
             <Pressable
               onPress={() => toggle(item.id)}

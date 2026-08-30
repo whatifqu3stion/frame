@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Check, ListPlus } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -17,7 +18,7 @@ export default function AddToSessionModal() {
   const onPick = async (sessionId: string) => {
     if (!id || !requirePurchase("sessions")) return;
     const session = sessions.find((candidate) => candidate.id === sessionId);
-    if (!session || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= 3) return;
+    if (!session || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return;
     await updateSessionVideos(sessionId, [...session.orderedVideoIds, id]);
     router.back();
   };
@@ -41,7 +42,7 @@ export default function AddToSessionModal() {
             sessions.map((q) => {
               const isAlreadyAdded = q.orderedVideoIds.includes(id ?? "");
               return (
-                <Pressable key={q.id} onPress={() => onPick(q.id)} disabled={!isAlreadyAdded && q.orderedVideoIds.length >= 3} style={styles.row} testID={`session-${q.id}`}>
+                <Pressable key={q.id} onPress={() => onPick(q.id)} disabled={!isAlreadyAdded && q.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems} style={styles.row} testID={`session-${q.id}`}>
                   <View style={{ flex: 1 }}>
                     <Text style={type.caption}>{q.orderedVideoIds.length} videos</Text>
                     <Text style={[type.heading, { marginTop: 2 }]}>{q.name}</Text>

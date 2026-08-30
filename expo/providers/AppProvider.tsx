@@ -6,10 +6,15 @@ import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
-import type { AccentMode, AddChannelResult, FollowedChannel, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
-import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { ACTIVE_PROFILE_ID, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
+import { toggleInterestId } from "@/domain/interests";
+import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
+import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
+import { clearProfileGoogleCredential, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
+import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
 import {
   getRevenueCatCustomerInfo,
@@ -26,7 +31,6 @@ import {
   clearResume,
   deleteQueue,
   followChannel,
-  followChannels,
   isVideoSaved as dbIsVideoSaved,
   listFollowedChannels,
   listQueues,
@@ -41,10 +45,6 @@ import {
   upsertResume,
 } from "@/db/database";
 
-const PREFS_KEY = "frame.preferences.v1";
-const INTERESTS_KEY = "frame.interests.v1";
-const RECENT_SEARCHES_KEY = "frame.recentSearches.v1";
-const GOOGLE_TOKEN_KEY = "frame.google.token.v1";
 const MAX_RECENT_SEARCHES = 8;
 
 export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
@@ -57,7 +57,7 @@ const PREMIUM_FEATURE_MESSAGES: Record<PremiumFeature, string> = {
   resume: "Premium remembers where you stopped across your library.",
   interests: "Premium uses your chosen interests to build quiet Explore collections.",
   creators: "Premium lets you follow trusted creators on your shelf.",
-  import: "Premium imports the YouTube channels you already follow.",
+  import: "Premium supports optional Google connection. Selective source import is not available yet.",
   sessions: "Premium lets you create and edit reusable one-to-three-video sessions.",
   discovery: "Premium unlocks interest-led browsing without an endless feed.",
 };
@@ -75,9 +75,9 @@ const defaultPrefs: UserPreferences = {
   googleConnectedAt: null,
 };
 
-async function loadPrefs(): Promise<UserPreferences> {
+async function loadPrefs(profileId: string): Promise<UserPreferences> {
   try {
-    const raw = await AsyncStorage.getItem(PREFS_KEY);
+    const raw = await readProfileStorage(AsyncStorage, "preferences", profileId);
     if (!raw) return defaultPrefs;
     const parsed = JSON.parse(raw) as Partial<UserPreferences>;
     return {
@@ -95,17 +95,17 @@ async function loadPrefs(): Promise<UserPreferences> {
   }
 }
 
-async function savePrefs(p: UserPreferences): Promise<void> {
+async function savePrefs(profileId: string, p: UserPreferences): Promise<void> {
   try {
-    await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(p));
+    await writeProfileStorage(AsyncStorage, "preferences", profileId, JSON.stringify(p));
   } catch (err) {
     console.warn("[prefs] save failed", err);
   }
 }
 
-async function loadRecentSearches(): Promise<string[]> {
+async function loadRecentSearches(profileId: string): Promise<string[]> {
   try {
-    const raw = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+    const raw = await readProfileStorage(AsyncStorage, "recentSearches", profileId);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as string[];
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
@@ -114,39 +114,38 @@ async function loadRecentSearches(): Promise<string[]> {
   }
 }
 
-async function persistRecentSearches(items: string[]): Promise<void> {
+async function persistRecentSearches(profileId: string, items: string[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(items));
+    await writeProfileStorage(AsyncStorage, "recentSearches", profileId, JSON.stringify(items));
   } catch (err) {
     console.warn("[recent] save failed", err);
   }
 }
 
-async function loadInterests(): Promise<InterestTopic[]> {
+async function loadInterests(profileId: string): Promise<InterestTopic[]> {
   try {
-    const raw = await AsyncStorage.getItem(INTERESTS_KEY);
+    const raw = await readProfileStorage(AsyncStorage, "interests", profileId);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     const validIds = new Set(INTEREST_LIBRARY.map((interest) => interest.id));
-    return parsed
-      .filter(
-        (item): item is InterestTopic =>
-          typeof item === "object" &&
-          item !== null &&
-          typeof (item as InterestTopic).id === "string" &&
-          validIds.has((item as InterestTopic).id),
-      )
-      .map((item) => INTEREST_LIBRARY.find((interest) => interest.id === item.id)!)
-      .filter(Boolean);
+    const ids = parsed.flatMap((item): InterestId[] => {
+      if (typeof item === "string") return validIds.has(item) ? [item] : [];
+      if (typeof item === "object" && item !== null && typeof (item as Partial<InterestTopic>).id === "string") {
+        const id = (item as InterestTopic).id;
+        return validIds.has(id) ? [id] : [];
+      }
+      return [];
+    });
+    return ids.map((id) => INTEREST_LIBRARY.find((interest) => interest.id === id)).filter((item): item is InterestTopic => Boolean(item));
   } catch {
     return [];
   }
 }
 
-async function saveInterests(items: InterestTopic[]): Promise<void> {
+async function saveInterests(profileId: string, items: InterestTopic[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(INTERESTS_KEY, JSON.stringify(items));
+    await writeProfileStorage(AsyncStorage, "interests", profileId, JSON.stringify(items.map((item) => item.id)));
   } catch (err) {
     console.warn("[interests] save failed", err);
   }
@@ -164,6 +163,7 @@ function parseGoogleCredential(raw: string | null): GoogleCredential | null {
 }
 
 export const [AppProvider, useApp] = createContextHook(() => {
+  const activeProfileId = ACTIVE_PROFILE_ID;
   const [prefs, setPrefs] = useState<UserPreferences>(defaultPrefs);
   const [interests, setInterests] = useState<InterestTopic[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -171,7 +171,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [paywallOpen, setPaywallOpen] = useState<boolean>(false);
   const [paywallMessage, setPaywallMessage] = useState<string>(PREMIUM_FEATURE_MESSAGES.library);
   const [googleCredential, setGoogleCredential] = useState<GoogleCredential | null>(null);
-  const [importing, setImporting] = useState<boolean>(false);
+  const importing = false;
   const prefsRef = useRef<UserPreferences>(defaultPrefs);
   const interestsRef = useRef<InterestTopic[]>([]);
   const recentSearchesRef = useRef<string[]>([]);
@@ -205,7 +205,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([loadPrefs(), loadInterests(), loadRecentSearches(), SecureStore.getItemAsync(GOOGLE_TOKEN_KEY).catch(() => null)])
+    Promise.all([loadPrefs(activeProfileId), loadInterests(activeProfileId), loadRecentSearches(activeProfileId), readProfileGoogleCredential(SecureStore, activeProfileId).catch(() => null)])
       .then(([p, i, r, rawCredential]) => {
         if (!mounted) return;
         const credential = parseGoogleCredential(rawCredential);
@@ -218,7 +218,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         setInterests(i);
         setRecentSearches(r);
         setGoogleCredential(activeCredential);
-        if (!activeCredential && rawCredential) void SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
+        if (!activeCredential && rawCredential) void clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
         setReady(true);
       })
       .catch((err) => {
@@ -236,7 +236,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     prefsRef.current = next;
     setPrefs(next);
     const write = prefsWriteRef.current.then(async () => {
-      if (storageGenerationRef.current === generation) await savePrefs(next);
+      if (storageGenerationRef.current === generation) await savePrefs(activeProfileId, next);
     });
     prefsWriteRef.current = write.catch(() => {});
     await write;
@@ -251,7 +251,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     interestsRef.current = items;
     setInterests(items);
     const write = interestsWriteRef.current.then(async () => {
-      if (storageGenerationRef.current === generation) await saveInterests(items);
+      if (storageGenerationRef.current === generation) await saveInterests(activeProfileId, items);
     });
     interestsWriteRef.current = write.catch(() => {});
     await write;
@@ -262,7 +262,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     recentSearchesRef.current = items;
     setRecentSearches(items);
     const write = searchesWriteRef.current.then(async () => {
-      if (storageGenerationRef.current === generation) await persistRecentSearches(items);
+      if (storageGenerationRef.current === generation) await persistRecentSearches(activeProfileId, items);
     });
     searchesWriteRef.current = write.catch(() => {});
     await write;
@@ -320,7 +320,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return false;
     }
     if (premiumAccessState === "misconfigured") {
-      Alert.alert("Premium unavailable", "Premium is not configured for this beta build. Open Beta Support in Settings for the setup status.");
+      Alert.alert("Premium unavailable", "Premium is not configured for this build yet.");
       return false;
     }
     Alert.alert(
@@ -342,12 +342,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const toggleInterest = useCallback(
     (id: string): void => {
       if (!requirePurchase("interests")) return;
-      const interest = INTEREST_LIBRARY.find((item) => item.id === id);
-      if (!interest) return;
-      const current = interestsRef.current;
-      const next = current.some((item) => item.id === id)
-        ? current.filter((item) => item.id !== id)
-        : [...current, interest];
+      const validIds = new Set<InterestId>(INTEREST_LIBRARY.map((item) => item.id));
+      const nextIds = toggleInterestId(interestsRef.current.map((item) => item.id), id, validIds);
+      const next = nextIds.map((interestId) => INTEREST_LIBRARY.find((item) => item.id === interestId)).filter((item): item is InterestTopic => Boolean(item));
       void persistInterests(next);
     },
     [persistInterests, requirePurchase],
@@ -355,60 +352,60 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   // Library queries
   const savedQuery = useQuery({
-    queryKey: ["library", "saved"],
-    queryFn: listSavedVideos,
+    queryKey: ["library", activeProfileId, "saved"],
+    queryFn: () => listSavedVideos(activeProfileId),
     enabled: ready,
   });
 
   const resumeQuery = useQuery({
-    queryKey: ["library", "resume"],
-    queryFn: listResume,
+    queryKey: ["library", activeProfileId, "resume"],
+    queryFn: () => listResume(activeProfileId),
     enabled: ready,
   });
 
   const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
     if (premiumAccessState !== "active") return;
-    await upsertResume(video, timestampSeconds);
-    await queryClient.invalidateQueries({ queryKey: ["library", "resume"] });
+    await upsertResume(activeProfileId, video, timestampSeconds);
+    await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
   }, [premiumAccessState, queryClient]);
 
   const clearVideoResume = useCallback(async (videoId: string): Promise<void> => {
-    await clearResume(videoId);
-    await queryClient.invalidateQueries({ queryKey: ["library", "resume"] });
+    await clearResume(activeProfileId, videoId);
+    await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
   }, [queryClient]);
 
   const queuesQuery = useQuery({
-    queryKey: ["library", "queues"],
-    queryFn: listQueues,
+    queryKey: ["library", activeProfileId, "queues"],
+    queryFn: () => listQueues(activeProfileId),
     enabled: ready,
   });
 
   const watchLaterQuery = useQuery({
-    queryKey: ["library", "watchLater"],
-    queryFn: listWatchLater,
+    queryKey: ["library", activeProfileId, "watchLater"],
+    queryFn: () => listWatchLater(activeProfileId),
     enabled: ready,
   });
 
   const channelsQuery = useQuery({
-    queryKey: ["library", "channels"],
-    queryFn: listFollowedChannels,
+    queryKey: ["library", activeProfileId, "channels"],
+    queryFn: () => listFollowedChannels(activeProfileId),
     enabled: ready,
   });
 
   const invalidateLibrary = useCallback(async (): Promise<void> => {
-    await queryClient.invalidateQueries({ queryKey: ["library"] });
+    await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId] });
   }, [queryClient]);
 
   const saveMutation = useMutation({
     mutationFn: async (video: Video) => {
-      await saveVideo(video);
+      await saveVideo(activeProfileId, video);
     },
     onSuccess: invalidateLibrary,
   });
 
   const unsaveMutation = useMutation({
     mutationFn: async (videoId: string) => {
-      await unsaveVideo(videoId);
+      await unsaveVideo(activeProfileId, videoId);
     },
     onSuccess: invalidateLibrary,
   });
@@ -418,8 +415,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (!requirePurchase("sessions")) return;
       const existing = queuesQuery.data?.find((session) => session.id === sessionId);
       if (!existing) return;
-      const uniqueIds = Array.from(new Set(videoIds)).slice(0, 3);
-      await upsertQueue({ ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
+      const uniqueIds = Array.from(new Set(videoIds)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems);
+      await upsertQueue(activeProfileId, { ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
       await invalidateLibrary();
     },
     [queuesQuery.data, invalidateLibrary, requirePurchase],
@@ -430,7 +427,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (!requirePurchase("sessions")) return;
       const existing = queuesQuery.data?.find((session) => session.id === id);
       if (!existing) return;
-      await upsertQueue({ ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
+      await upsertQueue(activeProfileId, { ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
       await invalidateLibrary();
     },
     [queuesQuery.data, invalidateLibrary, requirePurchase],
@@ -438,28 +435,28 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const watchLaterMutation = useMutation({
     mutationFn: async (video: Video) => {
-      await addWatchLater(video);
+      await addWatchLater(activeProfileId, video);
     },
     onSuccess: invalidateLibrary,
   });
 
   const removeWatchLaterMutation = useMutation({
     mutationFn: async (videoId: string) => {
-      await removeWatchLater(videoId);
+      await removeWatchLater(activeProfileId, videoId);
     },
     onSuccess: invalidateLibrary,
   });
 
   const followMutation = useMutation({
     mutationFn: async (channel: FollowedChannel) => {
-      await followChannel(channel);
+      await followChannel(activeProfileId, channel);
     },
     onSuccess: invalidateLibrary,
   });
 
   const unfollowMutation = useMutation({
     mutationFn: async (id: string) => {
-      await unfollowChannel(id);
+      await unfollowChannel(activeProfileId, id);
     },
     onSuccess: invalidateLibrary,
   });
@@ -470,10 +467,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const session: VideoQueue = {
         id: `session_${Math.random().toString(36).slice(2, 10)}`,
         name: name.trim() || "Untitled session",
-        orderedVideoIds: Array.from(new Set(videoIds)).slice(0, 3),
+        orderedVideoIds: Array.from(new Set(videoIds)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems),
         updatedAt: Date.now(),
       };
-      await upsertQueue(session);
+      await upsertQueue(activeProfileId, session);
       await invalidateLibrary();
       return session;
     },
@@ -493,36 +490,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const removeSession = useCallback(
     async (id: string): Promise<void> => {
       if (!requirePurchase("sessions")) return;
-      await deleteQueue(id);
+      await deleteQueue(activeProfileId, id);
       await invalidateLibrary();
     },
     [invalidateLibrary, requirePurchase],
   );
 
-  // --- Google account / subscription import ---
-  const importSubscriptions = useCallback(
-    async (token: string): Promise<AddChannelResult> => {
-      setImporting(true);
-      try {
-        const result = await fetchSubscriptions(token);
-        if (result.status !== "success" && result.status !== "empty" && result.status !== "partial") {
-          return { ok: false, message: result.message };
-        }
-        await followChannels(result.data);
-        invalidateLibrary();
-        if (result.status === "partial") return { ok: true, message: result.message };
-        if (result.status === "empty") return { ok: true, message: result.message ?? "No YouTube subscriptions were found." };
-        const count = result.data.length;
-        return { ok: true, message: `Imported ${count} channel${count === 1 ? "" : "s"}.` };
-      } finally {
-        setImporting(false);
-      }
-    },
-    [invalidateLibrary],
-  );
-
+  // Google authorization is separate from following. Round 1 never imports automatically.
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
-    if (!requirePurchase("import")) return { ok: false, message: "Google import is part of Frame Premium." };
+    if (!requirePurchase("import")) return { ok: false, message: "Google connection is part of Frame Premium." };
     if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
     if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
@@ -540,34 +516,31 @@ export const [AppProvider, useApp] = createContextHook(() => {
             : emailResult.message,
         };
       }
-      const importResult = await importSubscriptions(token);
-      if (!importResult.ok) return importResult;
-
       const expiresInSeconds = result.authentication?.expiresIn ?? 3600;
       const credential = {
         accessToken: token,
         expiresAt: Date.now() + Math.max(60, expiresInSeconds - 60) * 1000,
       };
-      await SecureStore.setItemAsync(GOOGLE_TOKEN_KEY, JSON.stringify(credential));
+      await writeProfileGoogleCredential(SecureStore, activeProfileId, JSON.stringify(credential));
       setGoogleCredential(credential);
       await updatePrefs({ googleEmail: emailResult.data, googleConnectedAt: Date.now() });
-      return importResult;
+      return { ok: true, message: GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE };
     } catch (err) {
       console.warn("[google] sign-in failed", err instanceof Error ? err.message : "unknown error");
       return { ok: false, message: "Sign-in failed. Please try again." };
     }
-  }, [promptGoogle, requirePurchase, updatePrefs, importSubscriptions]);
+  }, [promptGoogle, requirePurchase, updatePrefs]);
 
   const refreshSubscriptions = useCallback(async (): Promise<AddChannelResult> => {
-    if (!requirePurchase("import")) return { ok: false, message: "Google import is part of Frame Premium." };
+    if (!requirePurchase("import")) return { ok: false, message: "Google connection is part of Frame Premium." };
     if (!googleCredential || googleCredential.expiresAt <= Date.now()) {
       setGoogleCredential(null);
-      await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
+      await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
       await updatePrefs({ googleEmail: null, googleConnectedAt: null });
       return { ok: false, message: "Your Google connection expired. Sign in again to refresh." };
     }
-    return importSubscriptions(googleCredential.accessToken);
-  }, [googleCredential, importSubscriptions, requirePurchase, updatePrefs]);
+    return getGoogleImportAvailability();
+  }, [googleCredential, requirePurchase, updatePrefs]);
 
   const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (googleCredential) {
@@ -575,7 +548,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (result.status !== "success") return { ok: false, message: result.message ?? "Google couldn't revoke access. Try again." };
     }
     setGoogleCredential(null);
-    await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
+    await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     await updatePrefs({ googleEmail: null, googleConnectedAt: null });
     return { ok: true, message: "Google access was revoked. Imported creators remain on this device." };
   }, [googleCredential, updatePrefs]);
@@ -587,7 +560,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (result.status !== "success") {
         return { ok: false, message: result.message ?? "That creator could not be verified." };
       }
-      await followChannel({ ...result.data, followedAt: Date.now(), source: "link" });
+      await followChannel(activeProfileId, { ...result.data, followedAt: Date.now(), source: "link" });
       invalidateLibrary();
       return { ok: true, message: `Added ${result.data.title}.` };
     },
@@ -597,9 +570,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const wipeAllData = useCallback(async (): Promise<void> => {
     storageGenerationRef.current += 1;
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
-    await clearAllData();
-    await AsyncStorage.multiRemove([PREFS_KEY, INTERESTS_KEY, RECENT_SEARCHES_KEY]);
-    await SecureStore.deleteItemAsync(GOOGLE_TOKEN_KEY).catch(() => {});
+    await clearAllData(activeProfileId);
+    await clearProfileStorage(AsyncStorage, activeProfileId);
+    await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     prefsRef.current = defaultPrefs;
     interestsRef.current = [];
     recentSearchesRef.current = [];
@@ -613,6 +586,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   return useMemo(
     () => ({
       ready,
+      activeProfileId,
       prefs,
       interests,
       paywallOpen,
@@ -655,7 +629,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       isVideoSaved: (id: string) => (savedQuery.data ?? []).some((v) => v.id === id),
       isInWatchLater: (id: string) => (watchLaterQuery.data ?? []).some((v) => v.id === id),
       isChannelFollowed: (id: string) => (channelsQuery.data ?? []).some((c) => c.id === id),
-      checkIsVideoSaved: (id: string) => dbIsVideoSaved(id),
+      checkIsVideoSaved: (id: string) => dbIsVideoSaved(activeProfileId, id),
       saveVideo: async (v: Video): Promise<void> => {
         if (!requirePurchase("save")) return;
         await saveMutation.mutateAsync(v);

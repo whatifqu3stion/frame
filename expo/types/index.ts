@@ -1,4 +1,39 @@
 /** A verified YouTube video shown in Frame. */
+export type ProviderId = "youtube";
+export type InterestId = string;
+
+export type SourceRef = {
+  providerId: ProviderId;
+  sourceId: string;
+};
+
+export type MediaItemRef = {
+  providerId: ProviderId;
+  mediaId: string;
+  source?: SourceRef;
+};
+
+export type FeedContractStatus =
+  | "success"
+  | "cached_success"
+  | "temporarily_unavailable"
+  | "network_error"
+  | "backend_allowance_unavailable";
+
+export type DiscoveryResult = {
+  status: FeedContractStatus;
+  items: MediaItemRef[];
+  message?: string;
+  cachedAt?: number;
+};
+
+export type TodayFeedResult = {
+  status: FeedContractStatus;
+  items: MediaItemRef[];
+  message?: string;
+  cachedAt?: number;
+};
+
 export type Video = {
   id: string;
   title: string;
@@ -38,7 +73,7 @@ export type VideoQueue = {
 };
 
 export type InterestTopic = {
-  id: string;
+  id: InterestId;
   name: string;
   emoji: string;
 };
