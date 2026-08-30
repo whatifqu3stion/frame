@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import { DEFAULT_OWNER_PROFILE_ID } from "@/models/profile";
 import { FOUNDATION_CAPABILITIES } from "@/constants/productConfig";
 
-export { MAX_ITEMS_PER_SOURCE, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
+export { MAX_ITEMS_PER_SOURCE, ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS, TODAY_MAX_ITEMS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
 
 export type AppEnvironment = "development" | "staging" | "production";
 

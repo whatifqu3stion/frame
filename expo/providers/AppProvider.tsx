@@ -8,9 +8,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { ACTIVE_PROFILE_ID, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
-import { toggleInterestId } from "@/domain/interests";
+import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
 import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
@@ -128,15 +128,7 @@ async function loadInterests(profileId: string): Promise<InterestTopic[]> {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    const validIds = new Set(INTEREST_LIBRARY.map((interest) => interest.id));
-    const ids = parsed.flatMap((item): InterestId[] => {
-      if (typeof item === "string") return validIds.has(item) ? [item] : [];
-      if (typeof item === "object" && item !== null && typeof (item as Partial<InterestTopic>).id === "string") {
-        const id = (item as InterestTopic).id;
-        return validIds.has(id) ? [id] : [];
-      }
-      return [];
-    });
+    const ids = canonicalizeInterestIds(parsed);
     return ids.map((id) => INTEREST_LIBRARY.find((interest) => interest.id === id)).filter((item): item is InterestTopic => Boolean(item));
   } catch {
     return [];
@@ -341,7 +333,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const toggleInterest = useCallback(
     (id: string): void => {
       const validIds = new Set<InterestId>(INTEREST_LIBRARY.map((item) => item.id));
-      const nextIds = toggleInterestId(interestsRef.current.map((item) => item.id), id, validIds);
+      const nextIds = toggleInterestId(interestsRef.current.map((item) => item.id), id, validIds, ONBOARDING_INTEREST_MAX);
       const next = nextIds.map((interestId) => INTEREST_LIBRARY.find((item) => item.id === interestId)).filter((item): item is InterestTopic => Boolean(item));
       void persistInterests(next);
     },

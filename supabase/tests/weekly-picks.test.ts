@@ -52,6 +52,7 @@ describe("Weekly Picks input boundary", () => {
     expect(validateWeeklyPicksInput(null).ok).toBe(false);
     expect(validateWeeklyPicksInput({ interestIds: [] }).ok).toBe(false);
     expect(validateWeeklyPicksInput({ interestIds: ["unknown"] }).ok).toBe(false);
+    expect(validateWeeklyPicksInput({ interestIds: ["photography"] }).ok).toBe(false);
     expect(validateWeeklyPicksInput({ interestIds: ["science"], order: "desc" }).ok).toBe(false);
     expect(validateWeeklyPicksInput({ interestIds: Array(MAX_INTERESTS_PER_REQUEST + 1).fill("science") }).ok).toBe(false);
   });

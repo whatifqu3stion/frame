@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { ArrowRight, Plus } from "lucide-react-native";
+import { ArrowRight, Plus, SlidersHorizontal } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,11 +9,11 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { PRODUCT_LIMITS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { discoveryService } from "@/services/discovery";
+import { discoveryService, shouldRequestWeeklyPicks } from "@/services/discovery";
 
 type SourcesSection = "followed" | "discover";
 
@@ -27,7 +27,7 @@ export default function SourcesScreen() {
   const discoverQuery = useQuery({
     queryKey: ["weekly-picks", activeProfileId, interests.map((interest) => interest.id).join(",")],
     queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interests.map((interest) => interest.id)),
-    enabled: section === "discover",
+    enabled: section === "discover" && shouldRequestWeeklyPicks(interests.map((interest) => interest.id)),
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -111,8 +111,16 @@ export default function SourcesScreen() {
                 <Text style={type.caption}>Weekly picks</Text>
                 <Text style={styles.limitLabel}>FINITE · WEEKLY</Text>
               </View>
-              {discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
-                <VideoFeedSkeleton count={3} accessibilityLabel="Loading weekly picks" />
+              {interests.length === 0 ? (
+                <View>
+                  <EmptyState title="Choose interests when you’re ready" body="Discover stays empty until you choose interests in Settings. You can still add and follow any trusted source manually." />
+                  <Pressable onPress={() => router.push("/(tabs)/settings")} style={styles.settingsButton} accessibilityRole="button" testID="discover-choose-interests">
+                    <SlidersHorizontal size={16} color={palette.active} strokeWidth={1.8} />
+                    <Text style={styles.settingsButtonText}>Choose interests in Settings</Text>
+                  </Pressable>
+                </View>
+              ) : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
+                <VideoFeedSkeleton count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
               ) : discoverQuery.data?.status === "network_error" ? (
                 <EmptyState title="Discover is offline" body="Weekly picks need the shared Frame service. No source was searched or polled." />
               ) : discoverQuery.isError || discoverQuery.data?.status === "temporarily_unavailable" ? (
@@ -125,7 +133,7 @@ export default function SourcesScreen() {
                 <Text style={styles.endText}>End of weekly picks</Text>
                 <View style={styles.endLine} />
               </View>
-              <Text style={styles.discoverNote}>Future sets will be bounded and refreshed no more than once every {PRODUCT_LIMITS.discoveryCadenceDays} days.</Text>
+              <Text style={styles.discoverNote}>Future releases will show no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} suggestions total and refresh no more than once every {PRODUCT_LIMITS.discoveryCadenceDays} days.</Text>
             </View>
           )}
         </View>
@@ -160,6 +168,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
     endLine: { flex: 1, height: 1, backgroundColor: palette.borderSoft },
     endText: { ...type.caption, color: palette.inkMuted },
     discoverNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
+    settingsButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+    settingsButtonText: { ...type.label, color: palette.active },
     pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   });
 }

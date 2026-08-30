@@ -5,8 +5,10 @@ import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
 import { INTEREST_LIBRARY } from "@/constants/interests";
+import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+import { isInterestOptionDisabled } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsScreen() {
@@ -70,12 +72,14 @@ export default function SettingsScreen() {
         ) : <Text style={styles.infoText}>Google connection is unavailable in this build. Manual source setup remains available.</Text>}
       </Section>
 
-      <Section label="Interests" hint="Stable choices for future bounded weekly picks. Changing them never starts a search.">
+      <Section label={`Interests · ${interests.length} of ${ONBOARDING_INTEREST_MAX}`} hint="Optional choices shape occasional source suggestions. Select up to five; changing them never starts a search.">
         <View style={styles.chipGrid} accessibilityRole="list">
           {INTEREST_LIBRARY.map((interest) => {
-            const selected = interests.some((item) => item.id === interest.id);
+            const selectedIds = interests.map((item) => item.id);
+            const selected = selectedIds.includes(interest.id);
+            const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
             return (
-              <Pressable key={interest.id} onPress={() => toggleInterest(interest.id)} style={[styles.chip, selected && styles.chipActive]} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} testID={`interest-${interest.id}`}>
+              <Pressable key={interest.id} onPress={() => toggleInterest(interest.id)} disabled={unavailable} style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: unavailable }} accessibilityHint={unavailable ? "Remove a selected interest before choosing this one." : undefined} testID={`interest-${interest.id}`}>
                 <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
               </Pressable>
             );
@@ -159,7 +163,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     profileCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
     profileAvatar: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: palette.activeSoft }, profileName: { ...type.heading, fontSize: 18 }, supporting: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
     accountBlock: { marginTop: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card }, googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, googleMark: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 17, width: 22, textAlign: "center" }, googleText: { ...type.label, flex: 1, color: palette.onDark },
-    chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, chip: { minHeight: 44, justifyContent: "center", paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipText: { ...type.label }, chipTextActive: { color: palette.active },
+    chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, chip: { minHeight: 44, justifyContent: "center", paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipDisabled: { opacity: 0.48, borderStyle: "dashed" }, chipText: { ...type.label }, chipTextActive: { color: palette.active },
     choiceRow: { flexDirection: "row", gap: spacing.sm }, appearanceChoice: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, appearanceText: { ...type.label, color: palette.inkMuted, flexShrink: 1 }, appearanceTextActive: { color: palette.active },
     accentRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }, accentChoice: { minHeight: 82, flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.xs, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, accentChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, swatch: { width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 16 }, accentText: { ...type.label, color: palette.inkMuted, fontSize: 10, textAlign: "center" },
     infoCard: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, infoText: { ...type.bodySoft, color: palette.inkMuted },

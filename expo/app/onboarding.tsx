@@ -1,13 +1,15 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Check, Link2 } from "lucide-react-native";
+import { Check, Link2, Lock } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_STEPS } from "@/constants/navigation";
+import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+import { isInterestOptionDisabled } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
 
 const { width } = Dimensions.get("window");
@@ -84,16 +86,29 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <View style={[styles.step, { width: stepWidth }]}>
-      <Text style={styles.accentCaption}>Your interests</Text>
+      <Text style={styles.accentCaption}>Choose up to 5.</Text>
       <Text style={styles.stepTitle}>What matters{"\n"}to you?</Text>
-      <Text style={styles.stepBody}>Choose a few stable interests for future bounded weekly picks. Selecting one never starts a search.</Text>
+      <Text style={styles.stepBody}>Interests shape occasional source suggestions. Choose none or up to five, and change them later in Settings.</Text>
+      <Text style={styles.selectionStatus} accessibilityLiveRegion="polite">
+        {selectedIds.length === 0 ? "Optional · none selected" : `${selectedIds.length} of ${ONBOARDING_INTEREST_MAX} selected`}
+      </Text>
       <ScrollView style={styles.chipScroll} contentContainerStyle={styles.chipGrid} showsVerticalScrollIndicator={false}>
         {INTEREST_LIBRARY.map((interest) => {
           const selected = selectedIds.includes(interest.id);
+          const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
           return (
-            <Pressable key={interest.id} onPress={() => onToggle(interest.id)} style={[styles.chip, selected && styles.chipActive]} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} testID={`onboard-interest-${interest.id}`}>
-              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
-              {selected ? <Check size={14} color={palette.active} strokeWidth={2} /> : null}
+            <Pressable
+              key={interest.id}
+              onPress={() => onToggle(interest.id)}
+              disabled={unavailable}
+              style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selected, disabled: unavailable }}
+              accessibilityHint={unavailable ? "Five interests are already selected. Remove one to choose this interest." : selected ? "Double tap to remove this interest." : "Double tap to select this interest."}
+              testID={`onboard-interest-${interest.id}`}
+            >
+              <Text style={[styles.chipText, selected && styles.chipTextActive, unavailable && styles.chipTextDisabled]}>{interest.name}</Text>
+              {selected ? <Check size={14} color={palette.active} strokeWidth={2} /> : unavailable ? <Lock size={13} color={palette.inkMuted} strokeWidth={1.8} /> : null}
             </Pressable>
           );
         })}
@@ -164,8 +179,8 @@ function createStyles(palette: FramePalette, frameType: FrameType) {
     frameSymbol: { width: 78, height: 78, marginTop: spacing.xl, alignItems: "center", justifyContent: "center" }, frameOuter: { width: 68, height: 68, borderRadius: radii.large, borderWidth: 1.5, borderColor: palette.accent },
     bigTitle: { ...frameType.display, fontSize: 42, lineHeight: 49, marginTop: spacing.xl }, bigBody: { ...frameType.body, color: palette.inkSoft, maxWidth: 330, marginTop: spacing.lg },
     principles: { gap: spacing.md, marginTop: spacing.xl }, principle: { ...frameType.caption, color: palette.inkMuted },
-    stepTitle: { ...frameType.display, fontSize: 36, lineHeight: 43, marginTop: spacing.lg }, stepBody: { ...frameType.bodySoft, maxWidth: 330, marginTop: spacing.md },
-    chipScroll: { marginTop: spacing.lg }, chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl }, chip: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipText: { ...frameType.label }, chipTextActive: { color: palette.active },
+    stepTitle: { ...frameType.display, fontSize: 36, lineHeight: 43, marginTop: spacing.lg }, stepBody: { ...frameType.bodySoft, maxWidth: 330, marginTop: spacing.md }, selectionStatus: { ...frameType.caption, color: palette.inkMuted, marginTop: spacing.md },
+    chipScroll: { marginTop: spacing.md }, chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl }, chip: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipDisabled: { opacity: 0.48, borderStyle: "dashed" }, chipText: { ...frameType.label }, chipTextActive: { color: palette.active }, chipTextDisabled: { textDecorationLine: "line-through" },
     sourceContent: { paddingBottom: spacing.xxl }, inputRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.xl, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, input: { ...frameType.body, flex: 1, paddingVertical: 0 },
     addButton: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, addButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 }, feedback: { ...frameType.label, marginTop: spacing.sm },
     googleNotice: { padding: spacing.md, marginTop: spacing.xl, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, noticeTitle: { ...frameType.label }, noticeBody: { ...frameType.bodySoft, color: palette.inkMuted, marginTop: spacing.xs },
