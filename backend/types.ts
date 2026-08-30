@@ -143,6 +143,7 @@ export type Database = {
           id: string
           maintenance_mode: boolean
           reserved_safety_units: number
+          source_leases_enabled: boolean
           updated_at: string
           weekly_picks_enabled: boolean
           youtube_ingestion_enabled: boolean
@@ -152,6 +153,7 @@ export type Database = {
           id: string
           maintenance_mode?: boolean
           reserved_safety_units: number
+          source_leases_enabled?: boolean
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
@@ -161,11 +163,47 @@ export type Database = {
           id?: string
           maintenance_mode?: boolean
           reserved_safety_units?: number
+          source_leases_enabled?: boolean
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
         }
         Relationships: []
+      }
+      source_demand_leases: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          lease_token_hash: string
+          renewed_at: string
+          source_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          lease_token_hash: string
+          renewed_at?: string
+          source_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          lease_token_hash?: string
+          renewed_at?: string
+          source_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_demand_leases_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       source_interests: {
         Row: {
@@ -358,6 +396,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_or_renew_source_demand_lease: {
+        Args: {
+          p_expires_at: string
+          p_lease_token_hash: string
+          p_source_id: string
+        }
+        Returns: string
+      }
       get_current_weekly_picks: {
         Args: { p_interest_ids: string[] }
         Returns: {
@@ -397,6 +443,11 @@ export type Database = {
           updated_at: string
           usage_date: string
         }[]
+      }
+      purge_expired_source_demand_leases: { Args: never; Returns: number }
+      release_source_demand_lease: {
+        Args: { p_lease_token_hash: string }
+        Returns: boolean
       }
       user_id: { Args: never; Returns: string }
     }
