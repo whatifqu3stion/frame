@@ -335,19 +335,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [openPremium, premiumAccessState, refreshPremiumAccess]);
 
   const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
-    if (!requirePurchase("interests")) return;
     await persistInterests(items);
-  }, [persistInterests, requirePurchase]);
+  }, [persistInterests]);
 
   const toggleInterest = useCallback(
     (id: string): void => {
-      if (!requirePurchase("interests")) return;
       const validIds = new Set<InterestId>(INTEREST_LIBRARY.map((item) => item.id));
       const nextIds = toggleInterestId(interestsRef.current.map((item) => item.id), id, validIds);
       const next = nextIds.map((interestId) => INTEREST_LIBRARY.find((item) => item.id === interestId)).filter((item): item is InterestTopic => Boolean(item));
       void persistInterests(next);
     },
-    [persistInterests, requirePurchase],
+    [persistInterests],
   );
 
   // Library queries
@@ -555,7 +553,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const addChannelByLink = useCallback(
     async (input: string): Promise<AddChannelResult> => {
-      if (!requirePurchase("creators")) return { ok: false, message: "Following creators is part of Frame Premium." };
       const result = await resolveChannelFromLink(parseYouTubeLink(input));
       if (result.status !== "success") {
         return { ok: false, message: result.message ?? "That creator could not be verified." };
@@ -564,7 +561,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       invalidateLibrary();
       return { ok: true, message: `Added ${result.data.title}.` };
     },
-    [requirePurchase, invalidateLibrary],
+    [activeProfileId, invalidateLibrary],
   );
 
   const wipeAllData = useCallback(async (): Promise<void> => {
@@ -607,6 +604,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         || queuesQuery.isLoading
         || watchLaterQuery.isLoading
         || channelsQuery.isLoading,
+      sourcesLoading: !ready || channelsQuery.isLoading,
       sourcesError: channelsQuery.isError,
       replaceInterests,
       toggleInterest,
@@ -642,7 +640,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       },
       removeFromWatchLater: (id: string) => removeWatchLaterMutation.mutateAsync(id),
       followChannel: async (c: FollowedChannel): Promise<void> => {
-        if (!requirePurchase("creators")) return;
         await followMutation.mutateAsync(c);
       },
       unfollowChannel: (id: string) => unfollowMutation.mutateAsync(id),

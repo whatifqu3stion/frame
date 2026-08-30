@@ -46,3 +46,29 @@ jobs:
       - name: Expo dependency health (tracked advisory)
         continue-on-error: true
         run: bunx expo-doctor
+
+  backend:
+    name: Shared backend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: latest
+
+      - name: Backend tests
+        run: bun test tests
+
+      - name: Edge Function lint
+        run: deno lint --config deno.json functions

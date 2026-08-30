@@ -21,7 +21,7 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError, requirePurchase } = useApp();
+  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const discoverQuery = useQuery({
@@ -34,7 +34,6 @@ export default function SourcesScreen() {
   });
 
   const openAddSource = (): void => {
-    if (!requirePurchase("creators")) return;
     setAddOpen(true);
   };
 

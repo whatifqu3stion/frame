@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 const catalogPath = new URL("../migrations/20260830150000_shared_catalog.sql", import.meta.url);
 const controlsPath = new URL("../migrations/20260830150100_service_controls.sql", import.meta.url);
 const readPath = new URL("../migrations/20260830150200_weekly_picks_read.sql", import.meta.url);
+const hardenedReadPath = new URL("../migrations/20260830150300_harden_weekly_picks.sql", import.meta.url);
 const functionPath = new URL("../functions/weekly-picks/index.ts", import.meta.url);
 const mobileInterestsPath = new URL("../../expo/constants/interests.ts", import.meta.url);
 
@@ -45,7 +46,7 @@ describe("shared schema constraints", () => {
   });
 
   test("creates no cloud tables for private viewing behavior", async () => {
-    const migrations = `${await sql(catalogPath)}\n${await sql(controlsPath)}\n${await sql(readPath)}`;
+    const migrations = `${await sql(catalogPath)}\n${await sql(controlsPath)}\n${await sql(readPath)}\n${await sql(hardenedReadPath)}`;
     for (const tableName of privateTableNames) {
       expect(migrations).not.toMatch(new RegExp(`create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?public\\.${tableName}\\b`, "i"));
     }
@@ -72,7 +73,7 @@ describe("database access boundary", () => {
   });
 
   test("allows only service-role execution of operational functions", async () => {
-    const migrations = `${await sql(controlsPath)}\n${await sql(readPath)}`;
+    const migrations = `${await sql(controlsPath)}\n${await sql(readPath)}\n${await sql(hardenedReadPath)}`;
     expect(migrations).toContain("revoke execute on function public.increment_daily_provider_usage(text, bigint, bigint) from public, anon, authenticated;");
     expect(migrations).toContain("grant execute on function public.increment_daily_provider_usage(text, bigint, bigint) to service_role;");
     expect(migrations).toContain("revoke execute on function public.get_current_weekly_picks(text[]) from public, anon, authenticated;");
@@ -80,11 +81,13 @@ describe("database access boundary", () => {
   });
 
   test("database read function independently filters published current sets", async () => {
-    const migration = await sql(readPath);
+    const migration = await sql(hardenedReadPath);
     expect(migration).toContain("pick_sets.status = 'published'");
     expect(migration).toContain("pick_sets.published_at <= now()");
     expect(migration).toContain("between pick_sets.period_start and pick_sets.period_end");
     expect(migration).toContain("pick_items.display_order between 1 and 3");
+    expect(migration).toContain("partition by pick_sets.interest_id");
+    expect(migration).toContain("where publication_rank = 1");
   });
 
   test("Edge Function source contains no YouTube or AI integration", async () => {

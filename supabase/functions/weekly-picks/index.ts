@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   executeWeeklyPicks,
+  MAX_INTERESTS_PER_REQUEST,
   type PublishedPickRow,
   type ServiceState,
   type WeeklyPicksRepository,
 } from "../_shared/weekly-picks.ts";
+import {
+  getSupabaseSecretKey,
+  hasValidPublishableKey,
+  readBoundedJsonBody,
+} from "../_shared/edge-security.ts";
 
 const corsHeaders: Readonly<Record<string, string>> = {
   "Access-Control-Allow-Origin": "*",
@@ -18,25 +24,27 @@ const maxRequestBytes = 4096;
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== "POST") return jsonResponse(405, "no-store", { state: "unavailable", interests: [], message: "Use POST." });
-
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > maxRequestBytes) {
-    return jsonResponse(413, "no-store", { state: "unavailable", interests: [], message: "Request body is too large." });
+  if (!hasValidPublishableKey(request, Deno.env.get)) {
+    return jsonResponse(401, "no-store", { state: "unavailable", interests: [], message: "A valid client API key is required." });
   }
 
-  const input: unknown = await request.json().catch(() => null);
+  const body = await readBoundedJsonBody(request, maxRequestBytes);
+  if (!body.ok) {
+    return jsonResponse(body.status, "no-store", { state: "unavailable", interests: [], message: body.message });
+  }
+
   const repository = createRepository();
   if (!repository) {
     return jsonResponse(503, "no-store", { state: "unavailable", interests: [], message: "Weekly Picks are unavailable." });
   }
 
-  const result = await executeWeeklyPicks(input, repository);
+  const result = await executeWeeklyPicks(body.value, repository);
   return jsonResponse(result.status, result.cacheControl, result.body);
 });
 
 function createRepository(): WeeklyPicksRepository | null {
   const url = Deno.env.get("SUPABASE_URL");
-  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const secretKey = getSupabaseSecretKey(Deno.env.get);
   if (!url || !secretKey) return null;
   const client = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
@@ -61,7 +69,7 @@ function createRepository(): WeeklyPicksRepository | null {
         .select("id")
         .in("id", [...interestIds])
         .eq("is_active", true)
-        .limit(8);
+        .limit(MAX_INTERESTS_PER_REQUEST);
       if (error) throw new Error("interest validation unavailable");
       return Array.isArray(data)
         ? data.flatMap((item: unknown) => isRecord(item) && typeof item.id === "string" ? [item.id] : [])
@@ -129,6 +137,7 @@ function jsonResponse(status: number, cacheControl: string, body: unknown): Resp
       ...corsHeaders,
       "Cache-Control": cacheControl,
       "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
       "Vary": "Accept-Encoding",
     },
   });

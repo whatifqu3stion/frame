@@ -19,10 +19,10 @@ export type TodayStateInput = {
 
 /** Maps the future Today contract to finite, truthful interface states. */
 export function resolveTodayShellState(input: TodayStateInput): TodayShellState {
-  if (input.followedSourceCount === 0) return "no_sources";
   if (input.isLoading) return "loading";
-  if (input.isError || input.status === "temporarily_unavailable") return "service_error";
   if (input.status === "network_error") return "offline";
+  if (input.isError || input.status === "temporarily_unavailable") return "service_error";
+  if (input.followedSourceCount === 0) return "no_sources";
   if (input.status === "success" && input.itemCount === 0) return "caught_up";
   if (input.itemCount > 0) return "ready";
   return "no_qualifying_videos";

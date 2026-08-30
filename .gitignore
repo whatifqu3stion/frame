@@ -6,6 +6,9 @@ node_modules
 # Generated Expo exports
 expo/dist-*/
 
+# Supabase CLI state
+supabase/.temp/
+
 # Cloudflare Functions
 functions/node_modules
 !functions/package.json

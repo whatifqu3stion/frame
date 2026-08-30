@@ -18,7 +18,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, followedChannels } = useApp();
+  const { activeProfileId, followedChannels, sourcesLoading, sourcesError } = useApp();
   const keys = shellProfileQueryKeys(activeProfileId);
   const todayQuery = useQuery({
     queryKey: keys.today,
@@ -30,8 +30,8 @@ export default function TodayScreen() {
   });
   const state = resolveTodayShellState({
     followedSourceCount: followedChannels.length,
-    isLoading: todayQuery.isLoading && todayQuery.fetchStatus !== "idle",
-    isError: todayQuery.isError,
+    isLoading: sourcesLoading || (todayQuery.isLoading && todayQuery.fetchStatus !== "idle"),
+    isError: sourcesError || todayQuery.isError,
     status: todayQuery.data?.status,
     itemCount: todayQuery.data?.items.length ?? 0,
   });
