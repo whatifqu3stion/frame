@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Bug, Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { Bug, Check, ChevronRight, Crown, Download, FileText, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, ShieldCheck, Sun, Trash2, UserCircle2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -223,25 +223,53 @@ export default function SettingsScreen() {
             </View>
           </>
         ) : (
-          <Pressable onPress={onConnect} style={styles.accountConnect} disabled={accountBusy || importing} testID="connect-google">
-            {accountBusy || importing ? (
-              <ActivityIndicator color={palette.accent} />
-            ) : (
-              <>
-                <View style={styles.accountAvatar}>
-                  <UserCircle2 size={24} color={palette.accent} strokeWidth={1.7} />
-                  <View style={styles.accountStatusDot} accessibilityLabel="Not signed in with Google" />
+          <View style={styles.guestCard} accessibilityLabel="Guest profile. Not signed in with Google.">
+            <View style={styles.guestHeader}>
+              <View style={styles.guestAvatar}>
+                <UserCircle2 size={30} color={palette.accent} strokeWidth={1.6} />
+                <View style={styles.accountStatusDot} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.guestNameRow}>
+                  <Text style={styles.guestName}>Guest profile</Text>
+                  <View style={styles.guestBadge}>
+                    <Text style={styles.guestBadgeText}>LOCAL</Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.accountConnectTitle}>Sign in with Google</Text>
-                  <Text style={styles.accountConnectSubtitle}>
-                    {googleConfigured ? "Import the channels you already follow." : "Account connection isn’t available in this build."}
-                  </Text>
-                </View>
-                <ChevronRight size={17} color={palette.inkMuted} strokeWidth={1.7} />
-              </>
-            )}
-          </Pressable>
+                <Text style={styles.guestSubtitle}>Your viewing stays private and on this device.</Text>
+              </View>
+            </View>
+
+            <View style={styles.guestDivider} />
+            <Text style={styles.guestUnlockLabel}>SIGN IN TO ADD</Text>
+            <View style={styles.guestBenefits}>
+              <GuestBenefit icon={<Download size={16} color={palette.accent} strokeWidth={1.8} />} title="Import followed creators" detail="Bring your YouTube subscriptions onto your shelf." styles={styles} />
+              <GuestBenefit icon={<RefreshCw size={16} color={palette.accent} strokeWidth={1.8} />} title="Refresh your creator list" detail="Pull in newly followed channels whenever you choose." styles={styles} />
+              <GuestBenefit icon={<ShieldCheck size={16} color={palette.accent} strokeWidth={1.8} />} title="Stay in control" detail="Disconnect anytime; imported creators remain on this device." styles={styles} />
+            </View>
+
+            <Pressable
+              onPress={onConnect}
+              style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+              disabled={accountBusy || importing}
+              accessibilityRole="button"
+              accessibilityHint={googleConfigured ? "Connects your Google account to import YouTube subscriptions" : "Explains why Google sign-in is unavailable"}
+              testID="connect-google"
+            >
+              {accountBusy || importing ? (
+                <ActivityIndicator color={palette.onDark} />
+              ) : (
+                <>
+                  <Text style={styles.googleMark}>G</Text>
+                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                  <ChevronRight size={17} color={palette.onDarkSoft} strokeWidth={1.8} />
+                </>
+              )}
+            </Pressable>
+            <Text style={styles.guestFootnote}>
+              {googleConfigured ? "Google import is included with Frame Premium." : "Account connection isn’t available in this build."}
+            </Text>
+          </View>
         )}
       </Section>
 
@@ -321,6 +349,18 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
   );
 }
 
+function GuestBenefit({ icon, title, detail, styles }: { icon: React.ReactNode; title: string; detail: string; styles: ReturnType<typeof createStyles> }) {
+  return (
+    <View style={styles.guestBenefitRow}>
+      <View style={styles.guestBenefitIcon}>{icon}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.guestBenefitTitle}>{title}</Text>
+        <Text style={styles.guestBenefitDetail}>{detail}</Text>
+      </View>
+    </View>
+  );
+}
+
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
   section: {
@@ -382,9 +422,40 @@ function createStyles(palette: FramePalette, type: FrameType) {
   },
   accountStatusDotConnected: { backgroundColor: "#2FA36B" },
   accountActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
-  accountConnect: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: palette.surface, padding: spacing.lg, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
-  accountConnectTitle: { ...type.label, color: palette.ink },
-  accountConnectSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
+  guestCard: {
+    backgroundColor: palette.surface,
+    padding: spacing.lg,
+    borderRadius: radii.large,
+    borderWidth: 1,
+    borderColor: palette.borderSoft,
+  },
+  guestHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  guestAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.activeSoft,
+    borderWidth: 1,
+    borderColor: palette.borderSoft,
+  },
+  guestNameRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm },
+  guestName: { ...type.heading, fontSize: 19, lineHeight: 24 },
+  guestBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radii.pill, backgroundColor: palette.surfaceDeep },
+  guestBadgeText: { ...type.caption, color: palette.inkMuted, fontSize: 9, lineHeight: 11, letterSpacing: 1 },
+  guestSubtitle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 3 },
+  guestDivider: { height: 1, backgroundColor: palette.borderSoft, marginVertical: spacing.lg },
+  guestUnlockLabel: { ...type.caption, color: palette.accent },
+  guestBenefits: { gap: spacing.md, marginTop: spacing.md },
+  guestBenefitRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  guestBenefitIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: palette.activeSoft },
+  guestBenefitTitle: { ...type.label, color: palette.ink },
+  guestBenefitDetail: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
+  googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
+  googleMark: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 17, width: 22, textAlign: "center" },
+  googleButtonText: { flex: 1, color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
+  guestFootnote: { ...type.bodySoft, color: palette.inkMuted, fontSize: 12, lineHeight: 17, textAlign: "center", marginTop: spacing.sm },
   accountBtn: {
     flexDirection: "row",
     alignItems: "center",
