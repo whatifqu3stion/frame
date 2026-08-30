@@ -1,30 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Check, Link2, Plus, Search as SearchIcon } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Check, Link2 } from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
+import { ONBOARDING_STEPS } from "@/constants/navigation";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { searchVideos } from "@/services/youtube";
-import type { Video } from "@/types";
 
 const { width } = Dimensions.get("window");
-const LAST_STEP = 4;
+const LAST_STEP = ONBOARDING_STEPS.length - 1;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
@@ -33,461 +20,157 @@ export default function Onboarding() {
   const { interests, toggleInterest, finishOnboarding } = useApp();
   const scrollRef = useRef<ScrollView>(null);
   const [step, setStep] = useState<number>(0);
-  const fade = useRef(new Animated.Value(1)).current;
+  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
 
-  const goTo = (i: number) => {
-    const clamped = Math.max(0, Math.min(LAST_STEP, i));
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+  }, []);
+
+  const goTo = (index: number): void => {
+    const clamped = Math.max(0, Math.min(LAST_STEP, index));
     setStep(clamped);
-    scrollRef.current?.scrollTo({ x: clamped * width, animated: true });
-    fade.setValue(0.4);
-    Animated.timing(fade, { toValue: 1, duration: 350, useNativeDriver: true }).start();
+    scrollRef.current?.scrollTo({ x: clamped * width, animated: !reduceMotion });
   };
-
-  const finish = async () => {
+  const finish = async (): Promise<void> => {
     await finishOnboarding();
     router.replace("/(tabs)");
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.wall }}>
-      <LinearGradient
-        colors={isDark ? ["#1D2022", palette.wall, "#121211"] : ["#FFFDF8", palette.wall, "#F5F0E7"]}
-        locations={[0, 0.52, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+    <View style={styles.screen}>
+      <LinearGradient colors={isDark ? ["#1D2022", palette.wall, "#121211"] : ["#FFFDF8", palette.wall, "#F5F0E7"]} locations={[0, 0.52, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[styles.topRow, { paddingTop: insets.top + spacing.md }]}>
-        <View style={styles.dots}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
-          ))}
+        <View style={styles.dots} accessibilityLabel={`Step ${step + 1} of ${ONBOARDING_STEPS.length}`}>
+          {ONBOARDING_STEPS.map((name, index) => <View key={name} style={[styles.dot, index === step && styles.dotActive]} />)}
         </View>
-        <Pressable onPress={finish} hitSlop={12} testID="skip">
-          <Text style={[type.caption, { color: palette.inkMuted }]}>Skip</Text>
-        </Pressable>
+        {step === 2 ? <Pressable onPress={() => goTo(3)} style={styles.topAction} accessibilityRole="button"><Text style={styles.mutedCaption}>Skip source</Text></Pressable> : <View style={styles.topAction} />}
       </View>
-
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        <StepWelcome width={width} />
-        <StepPhilosophy width={width} />
-        <StepBringChannels width={width} />
-        <StepInterests width={width} interests={interests.map((i) => i.id)} onToggle={toggleInterest} />
-        <StepCompletion width={width} />
+      <ScrollView ref={scrollRef} horizontal pagingEnabled scrollEnabled={false} showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ApproachStep stepWidth={width} />
+        <InterestsStep stepWidth={width} selectedIds={interests.map((interest) => interest.id)} onToggle={toggleInterest} />
+        <SourceStep stepWidth={width} />
+        <EnterTodayStep stepWidth={width} />
       </ScrollView>
-
-      <Animated.View style={[styles.bottomRow, { opacity: fade, paddingBottom: insets.bottom + spacing.md }]}>
-        {step > 0 ? (
-          <Pressable onPress={() => goTo(step - 1)} hitSlop={8} testID="back">
-            <Text style={[type.caption, { color: palette.inkMuted }]}>Back</Text>
-          </Pressable>
-        ) : (
-          <View />
-        )}
-        <Pressable
-          onPress={() => (step === LAST_STEP ? finish() : goTo(step + 1))}
-          style={styles.nextBtn}
-          testID="next"
-        >
-          <Text style={styles.nextText}>{step === LAST_STEP ? "Enter Frame" : "Continue"}</Text>
+      <View style={[styles.bottomRow, { paddingBottom: insets.bottom + spacing.md }]}>
+        {step > 0 ? <Pressable onPress={() => goTo(step - 1)} style={styles.backButton} accessibilityRole="button"><Text style={styles.mutedCaption}>Back</Text></Pressable> : <View style={styles.backButton} />}
+        <Pressable onPress={() => { if (step === LAST_STEP) void finish(); else goTo(step + 1); }} style={styles.nextButton} accessibilityRole="button" testID="onboarding-next">
+          <Text style={styles.nextText}>{step === LAST_STEP ? "Enter Today" : "Continue"}</Text>
         </Pressable>
-      </Animated.View>
-    </View>
-  );
-}
-
-function StepWelcome({ width }: { width: number }) {
-  const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  return (
-    <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>Frame</Text>
-      <View style={styles.frameSymbol}>
-        <View style={styles.frameOuter} />
-      </View>
-      <Text style={styles.bigTitle}>One video.{"\n"}Whole.</Text>
-      <Text style={styles.bigBody}>
-        A quiet way to watch YouTube. No feed scroll. No autoplay. No reasons to stay longer than you want.
-      </Text>
-    </View>
-  );
-}
-
-function StepPhilosophy({ width }: { width: number }) {
-  const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const items = [
-    { eyebrow: "No", title: "Recommendations." },
-    { eyebrow: "No", title: "Autoplay." },
-    { eyebrow: "No", title: "Rabbit holes." },
-  ];
-  return (
-    <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>What Frame doesn&apos;t do</Text>
-      <Text style={[styles.bigTitle, { marginTop: spacing.lg }]}>Less,{"\n"}on purpose.</Text>
-      <View style={{ marginTop: spacing.xl }}>
-        {items.map((it) => (
-          <View key={it.title} style={{ marginBottom: spacing.lg }}>
-            <Text style={type.caption}>{it.eyebrow}</Text>
-            <Text style={[type.title, { marginTop: 2 }]}>{it.title}</Text>
-          </View>
-        ))}
       </View>
     </View>
   );
 }
 
-function StepBringChannels({ width }: { width: number }) {
+function ApproachStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const {
-    googleConfigured,
-    googleConnected,
-    googleEmail,
-    importing,
-    signInWithGoogle,
-    addChannelByLink,
-    followChannel,
-    isChannelFollowed,
-    requirePurchase,
-  } = useApp();
+  return (
+    <View style={[styles.step, { width: stepWidth }]}>
+      <Text style={styles.accentCaption}>Frame</Text>
+      <View style={styles.frameSymbol}><View style={styles.frameOuter} /></View>
+      <Text style={styles.bigTitle}>A finite inbox.{"\n"}Then, stop.</Text>
+      <Text style={styles.bigBody}>Frame gathers a small set from sources you trust. Nothing autoplays, nothing scrolls forever, and nothing invents a reason to stay.</Text>
+      <View style={styles.principles}>
+        <Text style={styles.principle}>01 · You choose the sources.</Text>
+        <Text style={styles.principle}>02 · Today has a visible end.</Text>
+        <Text style={styles.principle}>03 · Playback stays intentional.</Text>
+      </View>
+    </View>
+  );
+}
 
-  const [signInMsg, setSignInMsg] = useState<string | null>(null);
+function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number; selectedIds: string[]; onToggle: (id: string) => void }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  return (
+    <View style={[styles.step, { width: stepWidth }]}>
+      <Text style={styles.accentCaption}>Your interests</Text>
+      <Text style={styles.stepTitle}>What matters{"\n"}to you?</Text>
+      <Text style={styles.stepBody}>Choose a few stable interests for future bounded weekly picks. Selecting one never starts a search.</Text>
+      <ScrollView style={styles.chipScroll} contentContainerStyle={styles.chipGrid} showsVerticalScrollIndicator={false}>
+        {INTEREST_LIBRARY.map((interest) => {
+          const selected = selectedIds.includes(interest.id);
+          return (
+            <Pressable key={interest.id} onPress={() => onToggle(interest.id)} style={[styles.chip, selected && styles.chipActive]} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} testID={`onboard-interest-${interest.id}`}>
+              <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
+              {selected ? <Check size={14} color={palette.active} strokeWidth={2} /> : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function SourceStep({ stepWidth }: { stepWidth: number }) {
+  const { palette, type } = useFrameTheme();
+  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const { addChannelByLink, googleConnected, requirePurchase } = useApp();
   const [link, setLink] = useState<string>("");
-  const [linkMsg, setLinkMsg] = useState<{ ok: boolean; message: string } | null>(null);
-  const [linkBusy, setLinkBusy] = useState<boolean>(false);
-  const [term, setTerm] = useState<string>("");
-  const [submitted, setSubmitted] = useState<string>("");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const searchQuery = useQuery({
-    queryKey: ["onboard-search", submitted],
-    queryFn: () => searchVideos(submitted),
-    enabled: submitted.length > 0,
-  });
-
-  const onSignIn = async () => {
-    if (!requirePurchase("import")) return;
-    setSignInMsg(null);
-    const result = await signInWithGoogle();
-    setSignInMsg(result.message);
-  };
-
-  const onAddLink = async () => {
-    if (!link.trim() || linkBusy || !requirePurchase("creators")) return;
-    setLinkBusy(true);
-    setLinkMsg(null);
+  const addSource = async (): Promise<void> => {
+    if (!link.trim() || busy || !requirePurchase("creators")) return;
+    setBusy(true);
+    setFeedback(null);
     const result = await addChannelByLink(link.trim());
-    setLinkBusy(false);
-    setLinkMsg(result);
+    setBusy(false);
+    setFeedback(result);
     if (result.ok) setLink("");
   };
 
-  const runSearch = () => {
-    if (!requirePurchase("discovery")) return;
-    const trimmed = term.trim();
-    if (!trimmed) return;
-    setSubmitted(trimmed);
-    Keyboard.dismiss();
-  };
-
-  const addFromVideo = async (v: Video) => {
-    if (!v.channelId || !requirePurchase("creators")) return;
-    await followChannel({ id: v.channelId, title: v.channelTitle || "Channel", thumbnailUrl: "", followedAt: Date.now(), source: "manual" });
-  };
-
   return (
-    <ScrollView
-      style={[styles.step, { width }]}
-      contentContainerStyle={{ paddingBottom: spacing.xxxl }}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={[type.caption, { color: palette.accent }]}>Step three</Text>
-      <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>Bring your{"\n"}channels.</Text>
-      <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Pasted-link playback is free. Add trusted sources manually below; Google never follows subscriptions automatically.
-      </Text>
-
-      <Pressable
-        onPress={onSignIn}
-        style={[styles.bigChoice, importing && { opacity: 0.7 }]}
-        disabled={importing}
-        testID="onboard-google"
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={styles.choiceTitle}>{googleConnected ? "Google connected" : "Connect Google"}</Text>
-          <Text style={styles.choiceBody}>
-            {googleConnected
-              ? googleEmail ?? "Connected"
-              : googleConfigured
-                ? "Connect your account without importing or following subscriptions."
-                : "Google sign-in needs setup — you can still add sources yourself below."}
-          </Text>
-        </View>
-        {importing ? (
-          <ActivityIndicator color={palette.wall} />
-        ) : googleConnected ? (
-          <Check size={18} color={palette.wall} strokeWidth={2} />
-        ) : (
-          <Plus size={18} color={palette.wall} strokeWidth={2} />
-        )}
+    <ScrollView style={[styles.step, { width: stepWidth }]} contentContainerStyle={styles.sourceContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <Text style={styles.accentCaption}>One trusted source</Text>
+      <Text style={styles.stepTitle}>Start with{"\n"}someone you trust.</Text>
+      <Text style={styles.stepBody}>Paste a supported channel, handle, or video link. You can skip this and add a source later.</Text>
+      <View style={styles.inputRow}>
+        <Link2 size={17} color={palette.inkMuted} strokeWidth={1.7} />
+        <TextInput value={link} onChangeText={(value) => { setLink(value); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void addSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
+      </View>
+      <Pressable onPress={() => { void addSource(); }} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} disabled={busy || !link.trim()} accessibilityRole="button" testID="onboard-add-source">
+        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>Add source</Text>}
       </Pressable>
-      {signInMsg ? <Text style={[type.label, { marginTop: spacing.sm, color: palette.accent }]}>{signInMsg}</Text> : null}
-
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={[type.caption, { color: palette.inkMuted }]}>or add them yourself</Text>
-        <View style={styles.dividerLine} />
+      {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
+      <View style={styles.googleNotice} accessible>
+        <Text style={styles.noticeTitle}>{googleConnected ? "Google connected" : "Google import unavailable"}</Text>
+        <Text style={styles.noticeBody}>Selective subscription import is not available yet. Frame will not follow Google subscriptions automatically.</Text>
       </View>
-
-      <View style={styles.inputRow}>
-        <Link2 size={16} color={palette.inkMuted} strokeWidth={1.6} />
-        <TextInput
-          value={link}
-          onChangeText={(t) => {
-            setLink(t);
-            setLinkMsg(null);
-          }}
-          placeholder="Paste a channel or video link"
-          placeholderTextColor={palette.inkMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          onSubmitEditing={onAddLink}
-          returnKeyType="done"
-          testID="onboard-link-input"
-        />
-        <Pressable onPress={onAddLink} hitSlop={8} disabled={linkBusy}>
-          {linkBusy ? <ActivityIndicator size="small" color={palette.accent} /> : <Text style={[type.label, { color: palette.accent }]}>Add</Text>}
-        </Pressable>
-      </View>
-      {linkMsg ? (
-        <Text style={[type.label, { marginTop: spacing.sm, color: linkMsg.ok ? palette.success : palette.danger }]}>{linkMsg.message}</Text>
-      ) : null}
-
-      <View style={styles.searchHeader}>
-        <Text style={type.caption}>Search YouTube creators</Text>
-      </View>
-
-      <View style={styles.inputRow}>
-        <SearchIcon size={16} color={palette.inkMuted} strokeWidth={1.6} />
-        <TextInput
-          value={term}
-          onChangeText={setTerm}
-          placeholder="Search for a channel or topic"
-          placeholderTextColor={palette.inkMuted}
-          autoCapitalize="none"
-          style={styles.input}
-          onSubmitEditing={runSearch}
-          returnKeyType="search"
-          testID="onboard-search-input"
-        />
-        <Pressable onPress={runSearch} hitSlop={8}>
-          <Text style={[type.label, { color: palette.accent }]}>Go</Text>
-        </Pressable>
-      </View>
-
-      {submitted.length > 0 ? (
-        <View style={{ marginTop: spacing.lg }}>
-          {searchQuery.isLoading ? (
-            <Text style={[type.bodySoft, { paddingVertical: spacing.md }]}>Searching…</Text>
-          ) : searchQuery.data?.status === "success" || searchQuery.data?.status === "partial" ? (
-            searchQuery.data.data.slice(0, 6).map((v) => {
-              const added = v.channelId ? isChannelFollowed(v.channelId) : false;
-              return (
-                <View key={v.id} style={styles.resultRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={type.caption} numberOfLines={1}>{v.channelTitle || "YouTube"}</Text>
-                    <Text style={styles.resultTitle} numberOfLines={2}>{v.title}</Text>
-                  </View>
-                  <Pressable
-                    onPress={() => addFromVideo(v)}
-                    style={[styles.addChip, added && styles.addChipDone]}
-                    disabled={added || !v.channelId}
-                    testID={`onboard-add-${v.id}`}
-                    accessibilityLabel={added ? `${v.channelTitle} already followed` : `Follow ${v.channelTitle}`}
-                  >
-                    {added ? <Check size={14} color={palette.active} strokeWidth={2} /> : <Plus size={14} color={palette.ink} strokeWidth={2} />}
-                  </Pressable>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={[type.bodySoft, { color: searchQuery.data?.status === "empty" ? palette.inkMuted : palette.danger }]}>
-              {searchQuery.data?.message ?? "Search is unavailable right now."}
-            </Text>
-          )}
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
 
-function StepInterests({ width, interests, onToggle }: { width: number; interests: string[]; onToggle: (id: string) => void }) {
+function EnterTodayStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
-    <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>Step four</Text>
-      <Text style={[styles.bigTitle, { marginTop: spacing.lg, fontSize: 36, lineHeight: 42 }]}>What do you{"\n"}care about?</Text>
-      <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 320 }]}>
-        Premium uses these choices to seed Explore collections. You can change them later.
-      </Text>
-      <ScrollView style={{ marginTop: spacing.lg }} showsVerticalScrollIndicator={false}>
-        <View style={styles.chipsGrid}>
-          {INTEREST_LIBRARY.map((t) => {
-            const active = interests.includes(t.id);
-            return (
-              <Pressable
-                key={t.id}
-                onPress={() => onToggle(t.id)}
-                style={[styles.interestChip, active && styles.interestChipActive]}
-                testID={`onboard-interest-${t.id}`}
-              >
-                <Text style={[styles.interestLabel, active && { color: palette.active }]}>{t.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+    <View style={[styles.step, { width: stepWidth }]}>
+      <Text style={styles.accentCaption}>You’re ready</Text>
+      <Text style={styles.bigTitle}>Enter Today.{"\n"}Leave whole.</Text>
+      <Text style={styles.bigBody}>Today may be empty until Frame’s shared service exists. That is intentional: no fake feed, no automatic polling, and no invented videos.</Text>
+      <View style={styles.endMark}><View style={styles.endLine} /><Text style={styles.endLabel}>A REAL END</Text><View style={styles.endLine} /></View>
     </View>
   );
 }
 
-function StepCompletion({ width }: { width: number }) {
-  const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  return (
-    <View style={[styles.step, { width }]}>
-      <Text style={[type.caption, { color: palette.accent }]}>That&apos;s it</Text>
-      <Text style={[styles.bigTitle, { marginTop: spacing.lg }]}>When a video{"\n"}ends, that&apos;s it.</Text>
-      <Text style={[type.bodySoft, { marginTop: spacing.lg, maxWidth: 320 }]}>
-        Nothing autoplays. Nothing pulls you forward. You choose what to watch next, if anything.
-      </Text>
-      <View style={{ marginTop: spacing.xxl }}>
-        <Text style={type.caption}>A note on storage</Text>
-        <Text style={[type.bodySoft, { marginTop: spacing.sm, maxWidth: 320 }]}>
-          Your library stays on this device. YouTube provides playback and metadata; Google account connection and Premium verification are optional network services.
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function createStyles(palette: FramePalette, type: FrameType) {
+function createStyles(palette: FramePalette, frameType: FrameType) {
   return StyleSheet.create({
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  dots: { flexDirection: "row", gap: 6 },
-  dot: { width: 18, height: 3, borderRadius: 2, backgroundColor: palette.surfaceDeep },
-  dotActive: { backgroundColor: palette.accent },
-  step: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, flex: 1 },
-  bigTitle: { ...type.display, fontSize: 44, lineHeight: 50, marginTop: spacing.xl },
-  bigBody: { ...type.body, marginTop: spacing.lg, maxWidth: 320, color: palette.inkSoft },
-  frameSymbol: {
-    width: 80,
-    height: 80,
-    marginTop: spacing.xxl,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  frameOuter: {
-    width: 70,
-    height: 70,
-    borderWidth: 1.5,
-    borderColor: palette.accent,
-    borderRadius: radii.large,
-  },
-  bigChoice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: palette.accentDeep,
-    padding: spacing.lg,
-    marginTop: spacing.xl,
-    borderRadius: radii.card,
-  },
-  choiceTitle: { color: palette.onDark, fontFamily: fonts.serif, fontSize: 19 },
-  choiceBody: { color: palette.onDarkSoft, fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
-  divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.xl },
-  dividerLine: { flex: 1, height: 1, backgroundColor: palette.surfaceDeep },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: palette.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    marginTop: spacing.sm,
-    borderRadius: radii.control,
-    borderWidth: 1,
-    borderColor: palette.borderSoft,
-  },
-  input: { flex: 1, ...type.body, padding: 0, fontSize: 15 },
-  searchHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: spacing.xl,
-  },
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.surfaceDeep,
-  },
-  resultTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
-  addChip: {
-    width: 44,
-    height: 44,
-    backgroundColor: palette.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: radii.control,
-  },
-  addChipDone: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active },
-  chipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl },
-  interestChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: palette.surface,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.borderSoft,
-    minHeight: 44,
-  },
-  interestChipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
-  interestLabel: { ...type.label, fontSize: 13 },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  nextBtn: {
-    backgroundColor: palette.accentDeep,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
-    borderRadius: radii.control,
-    minHeight: 48,
-    justifyContent: "center",
-  },
-  nextText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+    screen: { flex: 1, backgroundColor: palette.wall },
+    topRow: { minHeight: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.page, paddingBottom: spacing.sm },
+    dots: { flexDirection: "row", gap: 6 }, dot: { width: 22, height: 3, borderRadius: 2, backgroundColor: palette.surfaceDeep }, dotActive: { backgroundColor: palette.accent },
+    topAction: { minWidth: 88, minHeight: 48, alignItems: "flex-end", justifyContent: "center" }, mutedCaption: { ...frameType.caption, color: palette.inkMuted },
+    step: { flex: 1, paddingHorizontal: spacing.page, paddingTop: spacing.lg }, accentCaption: { ...frameType.caption, color: palette.accent },
+    frameSymbol: { width: 78, height: 78, marginTop: spacing.xl, alignItems: "center", justifyContent: "center" }, frameOuter: { width: 68, height: 68, borderRadius: radii.large, borderWidth: 1.5, borderColor: palette.accent },
+    bigTitle: { ...frameType.display, fontSize: 42, lineHeight: 49, marginTop: spacing.xl }, bigBody: { ...frameType.body, color: palette.inkSoft, maxWidth: 330, marginTop: spacing.lg },
+    principles: { gap: spacing.md, marginTop: spacing.xl }, principle: { ...frameType.caption, color: palette.inkMuted },
+    stepTitle: { ...frameType.display, fontSize: 36, lineHeight: 43, marginTop: spacing.lg }, stepBody: { ...frameType.bodySoft, maxWidth: 330, marginTop: spacing.md },
+    chipScroll: { marginTop: spacing.lg }, chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl }, chip: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipText: { ...frameType.label }, chipTextActive: { color: palette.active },
+    sourceContent: { paddingBottom: spacing.xxl }, inputRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.xl, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, input: { ...frameType.body, flex: 1, paddingVertical: 0 },
+    addButton: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, addButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 }, feedback: { ...frameType.label, marginTop: spacing.sm },
+    googleNotice: { padding: spacing.md, marginTop: spacing.xl, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, noticeTitle: { ...frameType.label }, noticeBody: { ...frameType.bodySoft, color: palette.inkMuted, marginTop: spacing.xs },
+    endMark: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xxl }, endLine: { flex: 1, height: 1, backgroundColor: palette.borderSoft }, endLabel: { ...frameType.caption, color: palette.inkMuted },
+    bottomRow: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.page, paddingTop: spacing.sm }, backButton: { minWidth: 72, minHeight: 48, justifyContent: "center" }, nextButton: { minHeight: 52, minWidth: 132, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg, borderRadius: radii.control, backgroundColor: palette.accentDeep }, nextText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+    pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   });
 }

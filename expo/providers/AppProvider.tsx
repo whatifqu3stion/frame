@@ -607,6 +607,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         || queuesQuery.isLoading
         || watchLaterQuery.isLoading
         || channelsQuery.isLoading,
+      sourcesError: channelsQuery.isError,
       replaceInterests,
       toggleInterest,
       requirePurchase,
@@ -674,6 +675,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       queuesQuery.isLoading,
       watchLaterQuery.isLoading,
       channelsQuery.isLoading,
+      channelsQuery.isError,
       replaceInterests,
       toggleInterest,
       requirePurchase,
