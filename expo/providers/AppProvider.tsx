@@ -5,16 +5,20 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, AppState } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
-import { ACTIVE_PROFILE_ID, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
+import { ACTIVE_PROFILE_ID, APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
 import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
 import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
+import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
+import { followedSourceRepository } from "@/repositories/followedSourceRepository";
+import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
+import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
 import {
   getRevenueCatCustomerInfo,
@@ -30,22 +34,35 @@ import {
   clearAllData,
   clearResume,
   deleteQueue,
-  followChannel,
   isVideoSaved as dbIsVideoSaved,
-  listFollowedChannels,
   listQueues,
   listResume,
   listSavedVideos,
   listWatchLater,
   removeWatchLater,
   saveVideo,
-  unfollowChannel,
   unsaveVideo,
   upsertQueue,
   upsertResume,
 } from "@/db/database";
 
 const MAX_RECENT_SEARCHES = 8;
+const sourceLeaseClient = createSourceLeaseClient({
+  supabaseUrl: APP_ENV === "development" ? process.env.EXPO_PUBLIC_SUPABASE_URL : undefined,
+  publishableKey: APP_ENV === "development"
+    ? process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    : undefined,
+});
+const sourceLeaseCoordinator = createSourceLeaseCoordinator({
+  followedSources: followedSourceRepository,
+  stateStore: createSourceLeaseStateStore(AsyncStorage),
+  tokenStore: sourceLeaseTokenStore,
+  client: sourceLeaseClient,
+});
+
+function queueSourceLeaseReconciliation(reason: SourceLeaseReconciliationReason): void {
+  void sourceLeaseCoordinator.reconcile(reason).catch(() => {});
+}
 
 export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
 export type PremiumFeature = "library" | "save" | "watchLater" | "resume" | "interests" | "creators" | "import" | "sessions" | "discovery";
@@ -197,8 +214,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([loadPrefs(activeProfileId), loadInterests(activeProfileId), loadRecentSearches(activeProfileId), readProfileGoogleCredential(SecureStore, activeProfileId).catch(() => null)])
-      .then(([p, i, r, rawCredential]) => {
+    Promise.all([
+      followedSourceRepository.initialize(),
+      loadPrefs(activeProfileId),
+      loadInterests(activeProfileId),
+      loadRecentSearches(activeProfileId),
+      readProfileGoogleCredential(SecureStore, activeProfileId).catch(() => null),
+    ])
+      .then(([, p, i, r, rawCredential]) => {
         if (!mounted) return;
         const credential = parseGoogleCredential(rawCredential);
         const activeCredential = credential && credential.expiresAt > Date.now() ? credential : null;
@@ -221,6 +244,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    let previousState = AppState.currentState;
+    queueSourceLeaseReconciliation("launch");
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && previousState !== "active") queueSourceLeaseReconciliation("foreground");
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [ready]);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>): Promise<void> => {
     const next = { ...prefsRef.current, ...patch };
@@ -378,7 +412,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const channelsQuery = useQuery({
     queryKey: ["library", activeProfileId, "channels"],
-    queryFn: () => listFollowedChannels(activeProfileId),
+    queryFn: () => followedSourceRepository.listForProfile(activeProfileId),
     enabled: ready,
   });
 
@@ -439,14 +473,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const followMutation = useMutation({
     mutationFn: async (channel: FollowedChannel) => {
-      await followChannel(activeProfileId, channel);
+      await followedSourceRepository.follow(activeProfileId, channel);
+      queueSourceLeaseReconciliation("local_change");
     },
     onSuccess: invalidateLibrary,
   });
 
   const unfollowMutation = useMutation({
     mutationFn: async (id: string) => {
-      await unfollowChannel(activeProfileId, id);
+      await followedSourceRepository.unfollow(activeProfileId, id);
+      queueSourceLeaseReconciliation("local_change");
     },
     onSuccess: invalidateLibrary,
   });
@@ -549,7 +585,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (result.status !== "success") {
         return { ok: false, message: result.message ?? "That creator could not be verified." };
       }
-      await followChannel(activeProfileId, { ...result.data, followedAt: Date.now(), source: "link" });
+      await followedSourceRepository.follow(activeProfileId, { ...result.data, followedAt: Date.now(), source: "link" });
+      queueSourceLeaseReconciliation("local_change");
       invalidateLibrary();
       return { ok: true, message: `Added ${result.data.title}.` };
     },
@@ -560,6 +597,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     storageGenerationRef.current += 1;
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
     await clearAllData(activeProfileId);
+    queueSourceLeaseReconciliation("local_change");
     await clearProfileStorage(AsyncStorage, activeProfileId);
     await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     prefsRef.current = defaultPrefs;

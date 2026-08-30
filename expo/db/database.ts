@@ -238,6 +238,14 @@ export async function listFollowedChannels(profileId: string): Promise<FollowedC
   return db.getAllAsync<FollowedChannel>("SELECT * FROM followed_channels WHERE profileId = ? ORDER BY followedAt DESC", [profileId]);
 }
 
+/** Reads the device-wide distinct source union without exposing local profile ownership. */
+export async function listDistinctFollowedChannelIds(): Promise<string[]> {
+  if (Platform.OS === "web") return [...new Set(Array.from(webStore.channels.values(), (channel) => channel.id))].sort();
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string }>("SELECT DISTINCT id FROM followed_channels ORDER BY id ASC");
+  return rows.map((row) => row.id);
+}
+
 export async function followChannel(profileId: string, channel: FollowedChannel): Promise<void> {
   if (Platform.OS === "web") {
     const key = profileEntityKey(profileId, channel.id);

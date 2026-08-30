@@ -2,8 +2,10 @@ const generatedNotice = "// AUTO-GENERATED from supabase/functions. Do not edit 
 
 const files = [
   "_shared/edge-security.ts",
+  "_shared/source-leases.ts",
   "_shared/weekly-picks-contract.ts",
   "_shared/weekly-picks.ts",
+  "source-leases/index.ts",
   "weekly-picks/index.ts",
 ] as const;
 
@@ -12,7 +14,7 @@ for (const relativePath of files) {
   const targetUrl = new URL(`../backend/functions/${relativePath}`, import.meta.url);
   await Deno.mkdir(new URL(".", targetUrl), { recursive: true });
   let source = await Deno.readTextFile(sourceUrl);
-  if (relativePath === "weekly-picks/index.ts") {
+  if (relativePath.endsWith("/index.ts")) {
     source = source.replace(
       'from "@supabase/supabase-js"',
       'from "npm:@supabase/supabase-js@2"',
