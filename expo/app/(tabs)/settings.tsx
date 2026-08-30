@@ -1,10 +1,9 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Bug, Check, ChevronRight, Crown, Download, FileText, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, ShieldCheck, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { Check, ChevronRight, Crown, Download, FileText, Lock, LogOut, Moon, RefreshCw, RotateCcw, Shield, ShieldCheck, Sun, Trash2, UserCircle2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
-import { IS_CLOSED_BETA, RELEASE_CHANNEL_LABEL } from "@/constants/config";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -283,12 +282,6 @@ export default function SettingsScreen() {
       <Section label="About">
         <Text style={[type.bodySoft, { maxWidth: 340 }]}>Frame is an intentional YouTube viewer. It keeps playback user-initiated and stops when your chosen video or finite session ends.</Text>
         <Text style={[type.caption, { color: palette.inkMuted, marginTop: spacing.lg }]}>Version 1.0</Text>
-        {IS_CLOSED_BETA ? (
-          <Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-diagnostics">
-            <Bug size={14} color={palette.accent} strokeWidth={1.8} />
-            <Text style={[type.label, { color: palette.accent }]}>{RELEASE_CHANNEL_LABEL} support</Text>
-          </Pressable>
-        ) : null}
       </Section>
 
     </ScrollView>
