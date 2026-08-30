@@ -63,6 +63,8 @@ function playerHtml(videoId: string, startSeconds: number): string {
     }
     function disposePlayer() {
       stopProgressTimer();
+      exitFullscreen();
+      reportFullscreen(false);
       try {
         if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
         if (player && typeof player.destroy === 'function') player.destroy();
@@ -219,7 +221,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
   useEffect(() => {
     const mountedWebView = webViewRef.current;
     return () => {
-      mountedWebView?.injectJavaScript("try{disposePlayer();}catch(error){};true;");
+      mountedWebView?.injectJavaScript("try{exitFullscreen();disposePlayer();reportFullscreen(false);}catch(error){};true;");
     };
   }, []);
 

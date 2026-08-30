@@ -254,6 +254,9 @@ export default function WatchScreen() {
     setIsScreenFocused(true);
     void setOrientationRequest("watch", ScreenOrientation.OrientationLock.DEFAULT);
     return () => {
+      playerRef.current?.exitFullscreen();
+      isFullscreenRef.current = false;
+      setIsFullscreen(false);
       pauseAndPersist();
       setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
       setPlayerReady(false);
@@ -267,7 +270,7 @@ export default function WatchScreen() {
     const subscription = AppState.addEventListener("change", (state) => {
       const nextActive = state === "active";
       if (!nextActive) {
-        if (isFullscreenRef.current) leaveFullscreen();
+        leaveFullscreen();
         pauseAndPersist();
         setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
         setPlayerReady(false);
@@ -391,7 +394,7 @@ export default function WatchScreen() {
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
     haptic();
-    if (isFullscreenRef.current) leaveFullscreen();
+    leaveFullscreen();
     pauseAndPersist();
     if (router.canGoBack()) router.back();
     else router.replace("/(tabs)");
