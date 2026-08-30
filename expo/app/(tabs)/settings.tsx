@@ -86,7 +86,52 @@ export default function SettingsScreen() {
         <ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} />
       </View>
 
-      <Section label="Frame Premium">
+      <Section label="Account" hint="Optional. Bring in the channels you already follow.">
+        {googleConnected ? (
+          <>
+            <View style={styles.accountRow}>
+              <View style={styles.accountAvatar}>
+                <UserCircle2 size={24} color={palette.accent} strokeWidth={1.6} />
+                <View style={[styles.accountStatusDot, styles.accountStatusDotConnected]} accessibilityLabel="Signed in with Google" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google account"}</Text>
+                <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>{followedChannels.length} channel{followedChannels.length === 1 ? "" : "s"} on your shelf</Text>
+              </View>
+            </View>
+            <View style={styles.accountActions}>
+              <Pressable onPress={onRefresh} style={styles.accountBtn} disabled={accountBusy || importing} testID="refresh-subs">
+                {accountBusy || importing ? <ActivityIndicator size="small" color={palette.accent} /> : <><RefreshCw size={14} color={palette.accent} strokeWidth={1.8} /><Text style={[type.label, { color: palette.accent }]}>Refresh</Text></>}
+              </Pressable>
+              <Pressable onPress={onSignOut} style={styles.accountBtn} testID="sign-out"><LogOut size={14} color={palette.inkMuted} strokeWidth={1.8} /><Text style={[type.label, { color: palette.inkMuted }]}>Sign out</Text></Pressable>
+            </View>
+          </>
+        ) : (
+          <View style={styles.guestCard} accessibilityLabel="Guest profile. Not signed in with Google.">
+            <View style={styles.guestHeader}>
+              <View style={styles.guestAvatar}><UserCircle2 size={30} color={palette.accent} strokeWidth={1.6} /><View style={styles.accountStatusDot} /></View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.guestNameRow}><Text style={styles.guestName}>Guest profile</Text><View style={styles.guestBadge}><Text style={styles.guestBadgeText}>LOCAL</Text></View></View>
+                <Text style={styles.guestSubtitle}>Your viewing stays private and on this device.</Text>
+              </View>
+            </View>
+            <View style={styles.guestDivider} />
+            <Text style={styles.guestUnlockLabel}>SIGN IN TO ADD</Text>
+            <View style={styles.guestBenefits}>
+              <GuestBenefit icon={<Download size={16} color={palette.accent} strokeWidth={1.8} />} title="Import followed creators" detail="Bring your YouTube subscriptions onto your shelf." styles={styles} />
+              <GuestBenefit icon={<RefreshCw size={16} color={palette.accent} strokeWidth={1.8} />} title="Refresh your creator list" detail="Pull in newly followed channels whenever you choose." styles={styles} />
+              <GuestBenefit icon={<ShieldCheck size={16} color={palette.accent} strokeWidth={1.8} />} title="Stay in control" detail="Disconnect anytime; imported creators remain on this device." styles={styles} />
+            </View>
+            <Pressable onPress={onConnect} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" accessibilityHint={googleConfigured ? "Connects your Google account to import YouTube subscriptions" : "Explains why Google sign-in is unavailable"} testID="connect-google">
+              {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleButtonText}>Sign in with Google</Text><ChevronRight size={17} color={palette.onDarkSoft} strokeWidth={1.8} /></>}
+            </Pressable>
+            <Text style={styles.guestFootnote}>{googleConfigured ? "Google import is included with Frame Premium." : "Account connection isn’t available in this build."}</Text>
+          </View>
+        )}
+      </Section>
+
+      {premiumAccessState !== "misconfigured" ? (
+        <View style={styles.premiumSection}>
         {premiumAccessState === "checking" ? (
           <View style={styles.simpleRow}>
             <ActivityIndicator size="small" color={palette.accent} />
@@ -129,17 +174,15 @@ export default function SettingsScreen() {
         ) : (
           <View style={styles.simpleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={type.label}>{premiumAccessState === "misconfigured" ? "Premium not configured" : "Premium status unavailable"}</Text>
-              <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
-                {premiumAccessState === "misconfigured" ? "This beta build cannot offer Premium yet." : "Frame could not verify access. Check your connection and retry."}
-              </Text>
+              <Text style={type.label}>Premium status unavailable</Text>
+              <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>Frame could not verify access. Check your connection and retry.</Text>
             </View>
             <Pressable
-              onPress={premiumAccessState === "misconfigured" ? () => router.push("/diagnostics") : () => { void refreshPremiumAccess(); }}
+              onPress={() => { void refreshPremiumAccess(); }}
               style={styles.statusAction}
               accessibilityRole="button"
             >
-              <Text style={[type.label, { color: palette.accent }]}>{premiumAccessState === "misconfigured" ? "Beta Support" : "Try again"}</Text>
+              <Text style={[type.label, { color: palette.accent }]}>Try again</Text>
             </Pressable>
           </View>
         )}
@@ -149,7 +192,8 @@ export default function SettingsScreen() {
             <Text style={[type.caption, { color: palette.inkMuted }]}>Restore purchases</Text>
           </Pressable>
         ) : null}
-      </Section>
+        </View>
+      ) : null}
 
       <Section label="Appearance" hint="Light by default. The video room always stays dark and focused.">
         <View style={styles.appearanceRow} accessibilityRole="radiogroup">
@@ -185,92 +229,6 @@ export default function SettingsScreen() {
             );
           })}
         </View>
-      </Section>
-
-      <Section label="Account" hint="Optional. Bring in the channels you already follow.">
-        {googleConnected ? (
-          <>
-            <View style={styles.accountRow}>
-              <View style={styles.accountAvatar}>
-                <UserCircle2 size={24} color={palette.accent} strokeWidth={1.6} />
-                <View
-                  style={[styles.accountStatusDot, styles.accountStatusDotConnected]}
-                  accessibilityLabel="Signed in with Google"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google account"}</Text>
-                <Text style={[type.bodySoft, { color: palette.inkMuted, marginTop: 2 }]}>
-                  {followedChannels.length} channel{followedChannels.length === 1 ? "" : "s"} on your shelf
-                </Text>
-              </View>
-            </View>
-            <View style={styles.accountActions}>
-              <Pressable onPress={onRefresh} style={styles.accountBtn} disabled={accountBusy || importing} testID="refresh-subs">
-                {accountBusy || importing ? (
-                  <ActivityIndicator size="small" color={palette.accent} />
-                ) : (
-                  <>
-                    <RefreshCw size={14} color={palette.accent} strokeWidth={1.8} />
-                    <Text style={[type.label, { color: palette.accent }]}>Refresh</Text>
-                  </>
-                )}
-              </Pressable>
-              <Pressable onPress={onSignOut} style={styles.accountBtn} testID="sign-out">
-                <LogOut size={14} color={palette.inkMuted} strokeWidth={1.8} />
-                <Text style={[type.label, { color: palette.inkMuted }]}>Sign out</Text>
-              </Pressable>
-            </View>
-          </>
-        ) : (
-          <View style={styles.guestCard} accessibilityLabel="Guest profile. Not signed in with Google.">
-            <View style={styles.guestHeader}>
-              <View style={styles.guestAvatar}>
-                <UserCircle2 size={30} color={palette.accent} strokeWidth={1.6} />
-                <View style={styles.accountStatusDot} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.guestNameRow}>
-                  <Text style={styles.guestName}>Guest profile</Text>
-                  <View style={styles.guestBadge}>
-                    <Text style={styles.guestBadgeText}>LOCAL</Text>
-                  </View>
-                </View>
-                <Text style={styles.guestSubtitle}>Your viewing stays private and on this device.</Text>
-              </View>
-            </View>
-
-            <View style={styles.guestDivider} />
-            <Text style={styles.guestUnlockLabel}>SIGN IN TO ADD</Text>
-            <View style={styles.guestBenefits}>
-              <GuestBenefit icon={<Download size={16} color={palette.accent} strokeWidth={1.8} />} title="Import followed creators" detail="Bring your YouTube subscriptions onto your shelf." styles={styles} />
-              <GuestBenefit icon={<RefreshCw size={16} color={palette.accent} strokeWidth={1.8} />} title="Refresh your creator list" detail="Pull in newly followed channels whenever you choose." styles={styles} />
-              <GuestBenefit icon={<ShieldCheck size={16} color={palette.accent} strokeWidth={1.8} />} title="Stay in control" detail="Disconnect anytime; imported creators remain on this device." styles={styles} />
-            </View>
-
-            <Pressable
-              onPress={onConnect}
-              style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
-              disabled={accountBusy || importing}
-              accessibilityRole="button"
-              accessibilityHint={googleConfigured ? "Connects your Google account to import YouTube subscriptions" : "Explains why Google sign-in is unavailable"}
-              testID="connect-google"
-            >
-              {accountBusy || importing ? (
-                <ActivityIndicator color={palette.onDark} />
-              ) : (
-                <>
-                  <Text style={styles.googleMark}>G</Text>
-                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
-                  <ChevronRight size={17} color={palette.onDarkSoft} strokeWidth={1.8} />
-                </>
-              )}
-            </Pressable>
-            <Text style={styles.guestFootnote}>
-              {googleConfigured ? "Google import is included with Frame Premium." : "Account connection isn’t available in this build."}
-            </Text>
-          </View>
-        )}
       </Section>
 
       <Section label="Interests" hint="Seeds the Explore tab.">
@@ -368,6 +326,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
   },
+  premiumSection: { paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.lg },
   appearanceRow: { flexDirection: "row", gap: spacing.sm },
   appearanceChoice: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
   appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
