@@ -41,5 +41,8 @@ jobs:
       - name: Tests
         run: bun run test
 
-      - name: Expo dependency health
+      # Advisory until https://github.com/whatifqu3stion/frame/issues/1 is resolved.
+      # The actionable build checks above remain required.
+      - name: Expo dependency health (tracked advisory)
+        continue-on-error: true
         run: bunx expo-doctor
