@@ -30,7 +30,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-web-browser",
       "expo-sqlite",
       "expo-secure-store",
       [
@@ -38,7 +37,8 @@
         {
           "initialOrientation": "DEFAULT"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
