@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
+import type { DailyAllowanceStatus, ManagedAllowance } from "@/models/dailyAllowance";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
@@ -30,6 +31,7 @@ import {
 import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
 import { profileRepository } from "@/repositories/profileRepository";
+import { dailyAllowanceService } from "@/services/dailyAllowanceService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
@@ -238,6 +240,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [googleCredential, setGoogleCredential] = useState<GoogleCredential | null>(null);
   const [ownerPinAvailability, setOwnerPinAvailability] = useState<OwnerPinAvailability>("unavailable");
   const [hasOwnerPin, setHasOwnerPin] = useState<boolean>(false);
+  const [ownerPinProtectionError, setOwnerPinProtectionError] = useState<boolean>(false);
   const [ownerPinPromptOpen, setOwnerPinPromptOpen] = useState<boolean>(false);
   const [ownerPinPromptError, setOwnerPinPromptError] = useState<string | null>(null);
   const [ownerPinCooldownUntil, setOwnerPinCooldownUntil] = useState<number>(0);
@@ -287,9 +290,13 @@ export const [AppProvider, useApp] = createContextHook(() => {
         getOwnerPinAvailability(),
       ]);
       const resolvedProfileId = resolveActiveProfileId(savedProfileId, availableProfiles);
+      let pinReadFailed = false;
+      const pinRecordPromise = pinAvailability === "available"
+        ? readOwnerPinRecord().catch(() => { pinReadFailed = true; return null; })
+        : Promise.resolve(null);
       const [snapshot, pinRecord] = await Promise.all([
         loadProfileSnapshot(resolvedProfileId),
-        pinAvailability === "available" ? readOwnerPinRecord().catch(() => null) : Promise.resolve(null),
+        pinRecordPromise,
       ]);
       if (!mounted) return;
       if (savedProfileId !== resolvedProfileId) await writeActiveProfileId(AsyncStorage, resolvedProfileId);
@@ -310,6 +317,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setGoogleCredential(snapshot.googleCredential);
       setOwnerPinAvailability(pinAvailability);
       setHasOwnerPin(Boolean(pinRecord));
+      setOwnerPinProtectionError(pinReadFailed || pinAvailability === "unavailable");
       if (!snapshot.googleCredential && snapshot.rawGoogleCredential) {
         void clearProfileGoogleCredential(SecureStore, resolvedProfileId).catch(() => {});
       }
@@ -321,6 +329,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     return () => {
       mounted = false;
+      void dailyAllowanceService.stopPlaying();
       authorizationResolverRef.current?.(false);
       authorizationResolverRef.current = null;
     };
@@ -337,6 +346,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const requestOwnerAuthorization = useCallback(async (): Promise<boolean> => {
     if (authorizationSessionRef.current.isAuthorized()) return true;
+    if (ownerPinProtectionError) {
+      Alert.alert("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
+      return false;
+    }
     if (!hasOwnerPin || ownerPinAvailability !== "available") {
       authorizationSessionRef.current.authorizeWithoutPin();
       setIsOwnerAuthorized(true);
@@ -349,7 +362,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return new Promise<boolean>((resolve) => {
       authorizationResolverRef.current = resolve;
     });
-  }, [hasOwnerPin, ownerPinAvailability]);
+  }, [hasOwnerPin, ownerPinAvailability, ownerPinProtectionError]);
 
   const cancelOwnerAuthorization = useCallback((): void => {
     setOwnerPinPromptOpen(false);
@@ -365,7 +378,18 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setOwnerPinPromptError("Too many attempts. Wait a moment, then try again.");
       return;
     }
-    const isCorrect = await verifyOwnerPin(pin).catch(() => false);
+    let isCorrect: boolean;
+    try {
+      isCorrect = await verifyOwnerPin(pin);
+    } catch {
+      setOwnerPinProtectionError(true);
+      setOwnerPinPromptOpen(false);
+      setOwnerPinPromptError(null);
+      authorizationResolverRef.current?.(false);
+      authorizationResolverRef.current = null;
+      Alert.alert("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
+      return;
+    }
     const result = authorizationSessionRef.current.attempt(isCorrect, now);
     if (result.status === "authorized") {
       setIsOwnerAuthorized(true);
@@ -410,11 +434,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
     setProfileSwitching(true);
     const previousProfileId = activeProfileIdRef.current;
-    storageGenerationRef.current += 1;
     try {
       await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
+      storageGenerationRef.current += 1;
+      await dailyAllowanceService.stopPlaying();
       await queryClient.cancelQueries({ queryKey: ["library", previousProfileId] });
-      const snapshot = await loadProfileSnapshot(profileId);
+      const [snapshot] = await Promise.all([
+        loadProfileSnapshot(profileId),
+        dailyAllowanceService.getStatus(target),
+      ]);
       await writeActiveProfileId(AsyncStorage, profileId);
       applyProfileSnapshot(profileId, snapshot);
       queryClient.removeQueries({ queryKey: ["today"] });
@@ -440,15 +468,29 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setProfiles(await profileRepository.list());
       return { ok: true, message: `${createdProfile.name} is ready.` };
     } catch (error) {
-      if (createdProfile) await profileRepository.deleteStandard(createdProfile.id).catch(() => {});
+      if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that profile." };
     }
   }, []);
 
-  const renameStandardProfile = useCallback(async (profileId: string, name: string): Promise<AddChannelResult> => {
+  const createManagedProfile = useCallback(async (name: string, allowance: ManagedAllowance): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Owner authorization is required to create a Managed profile." };
+    let createdProfile: Profile | null = null;
+    try {
+      createdProfile = await profileRepository.createManaged(name, allowance);
+      await writeProfileStorage(AsyncStorage, "preferences", createdProfile.id, JSON.stringify({ ...defaultPrefs, hasCompletedOnboarding: true }));
+      setProfiles(await profileRepository.list());
+      return { ok: true, message: `${createdProfile.name} is ready with explicit Daily Frame time.` };
+    } catch (error) {
+      if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that Managed profile." };
+    }
+  }, []);
+
+  const renameLocalProfile = useCallback(async (profileId: string, name: string): Promise<AddChannelResult> => {
     if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
     try {
-      const updated = await profileRepository.renameStandard(profileId, name);
+      const updated = await profileRepository.renameLocal(profileId, name);
       setProfiles((current) => current.map((profile) => profile.id === updated.id ? updated : profile));
       return { ok: true, message: "Profile renamed." };
     } catch (error) {
@@ -456,10 +498,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, []);
 
+  const reorderLocalProfile = useCallback(async (profileId: string, direction: "up" | "down"): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    try {
+      setProfiles(await profileRepository.reorderLocal(profileId, direction));
+      return { ok: true, message: "Profile order updated." };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t reorder that profile." };
+    }
+  }, []);
+
   const deleteLocalProfile = useCallback(async (profileId: string): Promise<AddChannelResult> => {
     if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
     const target = profiles.find((profile) => profile.id === profileId);
-    if (!target || target.role !== "standard") return { ok: false, message: "Only Standard profiles can be deleted." };
+    if (!target || target.role === "owner") return { ok: false, message: "Only Standard or Managed profiles can be deleted." };
     if (activeProfileIdRef.current === profileId) {
       const switchResult = await switchProfile(DEFAULT_OWNER_PROFILE_ID);
       if (!switchResult.ok) return switchResult;
@@ -467,18 +519,57 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setIsOwnerAuthorized(true);
     }
     try {
-      await profileRepository.deleteStandard(profileId);
-      await Promise.all([
-        clearProfileStorage(AsyncStorage, profileId),
-        clearProfileGoogleCredential(SecureStore, profileId).catch(() => {}),
-      ]);
+      await profileRepository.deleteLocal(profileId);
       setProfiles(await profileRepository.list());
       queryClient.removeQueries({ queryKey: ["library", profileId] });
-      return { ok: true, message: `${target.name} was removed.` };
+      const cleanupSucceeded = await Promise.all([
+        clearProfileStorage(AsyncStorage, profileId),
+        clearProfileGoogleCredential(SecureStore, profileId),
+      ]).then(() => true).catch(() => false);
+      return { ok: true, message: cleanupSucceeded ? `${target.name} was removed.` : `${target.name} was removed. Some inactive auxiliary storage will be retried on cleanup.` };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t delete that profile." };
     }
   }, [profiles, queryClient, switchProfile]);
+
+  const setManagedProfileAllowance = useCallback(async (profileId: string, allowance: ManagedAllowance): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Owner authorization is required to change Daily Frame time." };
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile || profile.role !== "managed") return { ok: false, message: "That Managed profile is no longer available." };
+    try {
+      await dailyAllowanceService.setRecurringAllowance(profile, allowance);
+      return { ok: true, message: allowance.mode === "unlimited" ? "Daily Frame time is now explicitly Unlimited." : `Daily Frame time is now ${allowance.minutes} minutes.` };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t update that allowance." };
+    }
+  }, [profiles]);
+
+  const getPlaybackAllowance = useCallback(async (profileId?: string): Promise<DailyAllowanceStatus> => {
+    const profile = profiles.find((candidate) => candidate.id === (profileId ?? activeProfileIdRef.current));
+    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
+    return dailyAllowanceService.getStatus(profile);
+  }, [profiles]);
+
+  const beginAllowancePlayback = useCallback(async (): Promise<DailyAllowanceStatus> => {
+    const profile = profiles.find((candidate) => candidate.id === activeProfileIdRef.current);
+    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
+    return dailyAllowanceService.beginPlaying(profile);
+  }, [profiles]);
+
+  const checkpointAllowancePlayback = useCallback((): Promise<DailyAllowanceStatus> => dailyAllowanceService.checkpoint(), []);
+  const stopAllowancePlayback = useCallback((): Promise<DailyAllowanceStatus | null> => dailyAllowanceService.stopPlaying(), []);
+
+  const addManagedTimeToday = useCallback(async (profileId: string, minutes: number): Promise<{ result: AddChannelResult; status?: DailyAllowanceStatus }> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { result: { ok: false, message: "Owner authorization is required to add time." } };
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile || profile.role !== "managed") return { result: { ok: false, message: "That Managed profile is no longer available." } };
+    try {
+      const status = await dailyAllowanceService.addTimeForToday(profile, minutes);
+      return { result: { ok: true, message: `${minutes} minutes added for today only.` }, status };
+    } catch (error) {
+      return { result: { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t add time today." } };
+    }
+  }, [profiles]);
 
   const saveOwnerPin = useCallback(async (pin: string): Promise<AddChannelResult> => {
     if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
@@ -486,6 +577,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await setOwnerPin(pin);
       setHasOwnerPin(true);
+      setOwnerPinProtectionError(false);
       return { ok: true, message: hasOwnerPin ? "Owner PIN changed." : "Owner PIN added." };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t save the PIN." };
@@ -498,6 +590,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await removeOwnerPin();
       setHasOwnerPin(false);
+      setOwnerPinProtectionError(false);
       return { ok: true, message: "Owner PIN removed." };
     } catch {
       return { ok: false, message: "Frame couldn’t remove the PIN." };
@@ -510,7 +603,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queueSourceLeaseReconciliation("launch");
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && previousState !== "active") queueSourceLeaseReconciliation("foreground");
-      if (nextState !== "active") relockOwnerAccess();
+      if (nextState !== "active") {
+        void dailyAllowanceService.stopPlaying();
+        relockOwnerAccess();
+      }
       previousState = nextState;
     });
     return () => subscription.remove();
@@ -881,8 +977,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
       profileSwitching,
       switchProfile,
       createStandardProfile,
-      renameStandardProfile,
+      createManagedProfile,
+      renameLocalProfile,
+      reorderLocalProfile,
       deleteLocalProfile,
+      setManagedProfileAllowance,
+      getPlaybackAllowance,
+      beginAllowancePlayback,
+      checkpointAllowancePlayback,
+      stopAllowancePlayback,
+      addManagedTimeToday,
       requestOwnerAuthorization,
       relockOwnerAccess,
       ownerPinAvailability,
@@ -970,8 +1074,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
       profileSwitching,
       switchProfile,
       createStandardProfile,
-      renameStandardProfile,
+      createManagedProfile,
+      renameLocalProfile,
+      reorderLocalProfile,
       deleteLocalProfile,
+      setManagedProfileAllowance,
+      getPlaybackAllowance,
+      beginAllowancePlayback,
+      checkpointAllowancePlayback,
+      stopAllowancePlayback,
+      addManagedTimeToday,
       requestOwnerAuthorization,
       relockOwnerAccess,
       ownerPinAvailability,

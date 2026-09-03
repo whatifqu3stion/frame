@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { Platform } from "react-native";
 import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
+import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -36,12 +37,14 @@ const webOwner: Profile = {
   id: DEFAULT_OWNER_PROFILE_ID,
   name: DEFAULT_OWNER_PROFILE_NAME,
   role: "owner",
+  sortOrder: 0,
   createdAt: 0,
   updatedAt: 0,
 };
 
 const webStore = {
   profiles: new Map<string, Profile>([[webOwner.id, webOwner]]),
+  allowances: new Map<string, ManagedAllowanceRecord>(),
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
@@ -66,7 +69,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -77,65 +80,112 @@ export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
 }
 
 export async function listProfiles(): Promise<Profile[]> {
-  if (Platform.OS === "web") return Array.from(webStore.profiles.values()).sort((a, b) => a.createdAt - b.createdAt);
+  if (Platform.OS === "web") return Array.from(webStore.profiles.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
   const db = await getDb();
-  return db.getAllAsync<Profile>("SELECT * FROM profiles ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, createdAt ASC");
+  return db.getAllAsync<Profile>("SELECT * FROM profiles ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, sortOrder ASC, createdAt ASC");
 }
 
-/** Adds one local Standard profile without copying another profile's records. */
-export async function insertStandardProfile(profile: Profile): Promise<void> {
-  if (profile.role !== "standard") throw new Error("Only Standard profiles can be created.");
+/** Adds a local Standard or Managed profile without copying another profile's records. */
+export async function insertLocalProfile(profile: Profile, allowance?: ManagedAllowanceRecord): Promise<void> {
+  if (profile.role === "owner") throw new Error("The Owner profile already exists.");
+  if ((profile.role === "managed") !== Boolean(allowance)) throw new Error("Managed profiles require an explicit viewing allowance.");
   if (Platform.OS === "web") {
     if (webStore.profiles.has(profile.id)) throw new Error("That profile already exists.");
     webStore.profiles.set(profile.id, { ...profile });
+    if (allowance) webStore.allowances.set(profile.id, { ...allowance });
     return;
   }
   const db = await getDb();
-  await db.runAsync(
-    "INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES (?,?,?,?,?)",
-    [profile.id, profile.name, profile.role, profile.createdAt, profile.updatedAt],
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      "INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?,?,?,?,?,?)",
+      [profile.id, profile.name, profile.role, profile.sortOrder, profile.createdAt, profile.updatedAt],
+    );
+    if (allowance) await writeManagedAllowanceRecord(allowance, db);
+  });
 }
 
-/** Renames an existing Standard profile while preserving its stable identity. */
-export async function updateStandardProfileName(profileId: string, name: string, updatedAt: number): Promise<void> {
+/** Renames an existing non-Owner profile while preserving its stable identity. */
+export async function updateLocalProfileName(profileId: string, name: string, updatedAt: number): Promise<void> {
   if (Platform.OS === "web") {
     const profile = webStore.profiles.get(profileId);
-    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be renamed.");
+    if (!profile || profile.role === "owner") throw new Error("The Owner profile cannot be renamed here.");
     webStore.profiles.set(profileId, { ...profile, name, updatedAt });
     return;
   }
   const db = await getDb();
   const result = await db.runAsync(
-    "UPDATE profiles SET name = ?, updatedAt = ? WHERE id = ? AND role = 'standard'",
+    "UPDATE profiles SET name = ?, updatedAt = ? WHERE id = ? AND role != 'owner'",
     [name, updatedAt, profileId],
   );
-  if (result.changes !== 1) throw new Error("Only Standard profiles can be renamed.");
+  if (result.changes !== 1) throw new Error("The Owner profile cannot be renamed here.");
 }
 
-/** Deletes one Standard profile and all of its profile-owned SQLite rows atomically. */
-export async function deleteStandardProfile(profileId: string): Promise<void> {
+/** Persists the complete profile order while keeping the Owner first. */
+export async function updateProfileOrder(orderedProfileIds: readonly string[]): Promise<void> {
+  if (Platform.OS === "web") {
+    orderedProfileIds.forEach((id, index) => {
+      const profile = webStore.profiles.get(id);
+      if (profile && profile.role !== "owner") webStore.profiles.set(id, { ...profile, sortOrder: index + 1, updatedAt: Date.now() });
+    });
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const [index, id] of orderedProfileIds.entries()) {
+      await db.runAsync("UPDATE profiles SET sortOrder = ?, updatedAt = ? WHERE id = ? AND role != 'owner'", [index + 1, Date.now(), id]);
+    }
+  });
+}
+
+/** Deletes one non-Owner profile and all profile-owned local rows atomically. */
+export async function deleteLocalProfileRecords(profileId: string): Promise<void> {
   if (profileId === DEFAULT_OWNER_PROFILE_ID) throw new Error("The Owner profile cannot be deleted.");
   if (Platform.OS === "web") {
     const profile = webStore.profiles.get(profileId);
-    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be deleted.");
+    if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
     clearProfileMap(webStore.saved, profileId);
     clearProfileMap(webStore.resume, profileId);
     clearProfileMap(webStore.queues, profileId);
     clearProfileMap(webStore.watchLater, profileId);
     clearProfileMap(webStore.channels, profileId);
+    webStore.allowances.delete(profileId);
     webStore.profiles.delete(profileId);
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
-    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels"] as const) {
+    if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
-    await db.runAsync("DELETE FROM profiles WHERE id = ? AND role = 'standard'", [profileId]);
+    await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
   });
+}
+
+export async function readManagedAllowanceRecord(profileId: string): Promise<ManagedAllowanceRecord | null> {
+  if (Platform.OS === "web") return webStore.allowances.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ManagedAllowanceRecord>("SELECT * FROM managed_allowances WHERE profileId = ?", [profileId])) ?? null;
+}
+
+async function writeManagedAllowanceRecord(record: ManagedAllowanceRecord, database?: SQLite.SQLiteDatabase): Promise<void> {
+  if (Platform.OS === "web") {
+    webStore.allowances.set(record.profileId, { ...record });
+    return;
+  }
+  const db = database ?? await getDb();
+  await db.runAsync(
+    `INSERT INTO managed_allowances (profileId,mode,dailyLimitMinutes,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,addedSeconds,warnedFive,warnedOne,updatedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET mode=excluded.mode,dailyLimitMinutes=excluded.dailyLimitMinutes,dayKey=excluded.dayKey,dayStartedAt=excluded.dayStartedAt,lastSeenAt=excluded.lastSeenAt,timezoneOffsetMinutes=excluded.timezoneOffsetMinutes,consumedSeconds=excluded.consumedSeconds,addedSeconds=excluded.addedSeconds,warnedFive=excluded.warnedFive,warnedOne=excluded.warnedOne,updatedAt=excluded.updatedAt`,
+    [record.profileId, record.mode, record.dailyLimitMinutes, record.dayKey, record.dayStartedAt, record.lastSeenAt, record.timezoneOffsetMinutes, record.consumedSeconds, record.addedSeconds, record.warnedFive, record.warnedOne, record.updatedAt],
+  );
+}
+
+export async function upsertManagedAllowanceRecord(record: ManagedAllowanceRecord): Promise<void> {
+  await writeManagedAllowanceRecord(record);
 }
 
 export async function listSavedVideos(profileId: string): Promise<Video[]> {

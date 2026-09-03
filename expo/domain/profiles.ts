@@ -23,6 +23,22 @@ export function validateProfileName(
   return { ok: true, name };
 }
 
+/** Returns a stable non-Owner order without changing profile identities. */
+export function reorderLocalProfiles(
+  profiles: readonly Profile[],
+  profileId: string,
+  direction: "up" | "down",
+): Profile[] {
+  const owner = profiles.filter((profile) => profile.role === "owner");
+  const local = profiles.filter((profile) => profile.role !== "owner");
+  const index = local.findIndex((profile) => profile.id === profileId);
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || targetIndex < 0 || targetIndex >= local.length) return [...owner, ...local];
+  const reordered = [...local];
+  [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+  return [...owner, ...reordered.map((profile, position) => ({ ...profile, sortOrder: position + 1 }))];
+}
+
 /** Resolves a saved selection only after it has been checked against existing profiles. */
 export function resolveActiveProfileId(savedProfileId: string | null, profiles: readonly Profile[]): string {
   if (savedProfileId && profiles.some((profile) => profile.id === savedProfileId)) return savedProfileId;

@@ -21,8 +21,12 @@ export const LEGACY_COMPATIBILITY_ROUTES = {
   library: "/(tabs)/saved",
 } as const;
 
+export const FRAME_PLAYBACK_ROUTE = "/watch/[id]" as const;
+
+export const FRAME_PLAYBACK_ENTRY_PATHS = ["pastedLink", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"] as const;
+
 export const PLAYER_AND_RECOVERY_ROUTES = [
-  "/watch/[id]",
+  FRAME_PLAYBACK_ROUTE,
   "/session",
   "/session/[id]",
   "/add-to-queue",

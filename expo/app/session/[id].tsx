@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
+import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -35,7 +36,7 @@ export default function SavedSessionScreen() {
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.push({
-      pathname: "/watch/[id]",
+      pathname: FRAME_PLAYBACK_ROUTE,
       params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id },
     });
   }, [requirePurchase, session, videoMap]);

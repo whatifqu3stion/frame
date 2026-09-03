@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_TAB_ROUTE, LEGACY_COMPATIBILITY_ROUTES, ONBOARDING_STEPS, PLAYER_AND_RECOVERY_ROUTES, PRIMARY_TABS } from "../constants/navigation";
+import { DEFAULT_TAB_ROUTE, FRAME_PLAYBACK_ENTRY_PATHS, FRAME_PLAYBACK_ROUTE, LEGACY_COMPATIBILITY_ROUTES, ONBOARDING_STEPS, PLAYER_AND_RECOVERY_ROUTES, PRIMARY_TABS } from "../constants/navigation";
 import { DEFAULT_OWNER_PROFILE_ID } from "../models/profile";
 import { toggleInterestId } from "./interests";
 import { resolveTodayShellState, shellProfileQueryKeys } from "./productShell";
@@ -17,6 +17,12 @@ describe("Round 1C product shell", () => {
   test("keeps player and legacy recovery routes reachable", () => {
     expect(PLAYER_AND_RECOVERY_ROUTES).toEqual(expect.arrayContaining(["/watch/[id]", "/session", "/session/[id]", "/add-to-queue"]));
     expect(LEGACY_COMPATIBILITY_ROUTES).toEqual({ explore: "/(tabs)/sources", library: "/(tabs)/saved" });
+  });
+
+  test("routes every playback origin through the centralized watch allowance boundary", () => {
+    expect(FRAME_PLAYBACK_ROUTE).toBe("/watch/[id]");
+    expect(FRAME_PLAYBACK_ENTRY_PATHS).toEqual(["pastedLink", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"]);
+    expect(PLAYER_AND_RECOVERY_ROUTES[0]).toBe(FRAME_PLAYBACK_ROUTE);
   });
 
   test("uses the active profile for Saved, Continue Watching, and interests", () => {

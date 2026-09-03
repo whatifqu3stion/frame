@@ -19,10 +19,10 @@ function parseRecord(raw: string | null): OwnerPinRecord | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<OwnerPinRecord>;
-    if (parsed.version !== 1 || typeof parsed.salt !== "string" || typeof parsed.verifier !== "string") return null;
+    if (parsed.version !== 1 || typeof parsed.salt !== "string" || typeof parsed.verifier !== "string" || !/^[0-9a-f]{64}$/i.test(parsed.salt) || !/^[0-9a-f]{64}$/i.test(parsed.verifier)) throw new Error("The protected Owner PIN record is unreadable.");
     return { version: 1, salt: parsed.salt, verifier: parsed.verifier };
-  } catch {
-    return null;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("The protected Owner PIN record is unreadable.");
   }
 }
 

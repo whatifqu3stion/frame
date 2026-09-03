@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 1;
+export const DATABASE_SCHEMA_VERSION = 2;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -91,6 +91,22 @@ export const CREATE_PROFILES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS profiles (
   updatedAt INTEGER NOT NULL
 )`;
 
+export const CREATE_MANAGED_ALLOWANCES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS managed_allowances (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  mode TEXT NOT NULL,
+  dailyLimitMinutes INTEGER,
+  dayKey TEXT NOT NULL,
+  dayStartedAt INTEGER NOT NULL,
+  lastSeenAt INTEGER NOT NULL,
+  timezoneOffsetMinutes INTEGER NOT NULL,
+  consumedSeconds INTEGER NOT NULL,
+  addedSeconds INTEGER NOT NULL,
+  warnedFive INTEGER NOT NULL,
+  warnedOne INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
 export function createProfileOwnedTableSql(table: ProfileOwnedTable, tableName: string = table): string {
   return `CREATE TABLE IF NOT EXISTS ${tableName} (${tableDefinitions[table]})`;
 }
@@ -111,8 +127,18 @@ export function buildVersion1MigrationPlan(metadata: SchemaMetadata): string[] {
       statements.push(...rebuildLegacyTableSql(table, columns));
     }
   }
-  statements.push(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION}`);
+  statements.push("PRAGMA user_version = 1");
   return statements;
+}
+
+/** Adds ordering and explicit Managed allowance state without rewriting profile-owned content. */
+export function buildVersion2MigrationPlan(): string[] {
+  return [
+    "ALTER TABLE profiles ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0",
+    `UPDATE profiles SET sortOrder = CASE WHEN role = 'owner' THEN 0 ELSE (SELECT COUNT(*) FROM profiles AS earlier WHERE earlier.role != 'owner' AND (earlier.createdAt < profiles.createdAt OR (earlier.createdAt = profiles.createdAt AND earlier.id < profiles.id))) + 1 END`,
+    CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
+    "PRAGMA user_version = 2",
+  ];
 }
 
 function seedDefaultOwnerSql(): string {
@@ -164,16 +190,19 @@ async function readSchemaMetadata(db: MigrationExecutor): Promise<SchemaMetadata
   return metadata;
 }
 
-/** Migrates fresh or legacy databases to version 1 without deleting user records. */
+/** Migrates fresh or legacy databases additively without deleting user records. */
 export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
-  const currentVersion = versionRow?.user_version ?? 0;
+  let currentVersion = versionRow?.user_version ?? 0;
   if (currentVersion > DATABASE_SCHEMA_VERSION) {
     throw new Error(`Database version ${currentVersion} is newer than this build supports.`);
   }
-  if (currentVersion === DATABASE_SCHEMA_VERSION) return;
-
-  const metadata = await readSchemaMetadata(db);
-  const plan = buildVersion1MigrationPlan(metadata);
-  await executeMigrationTransaction(db, plan);
+  if (currentVersion < 1) {
+    const metadata = await readSchemaMetadata(db);
+    await executeMigrationTransaction(db, buildVersion1MigrationPlan(metadata));
+    currentVersion = 1;
+  }
+  if (currentVersion < 2) {
+    await executeMigrationTransaction(db, buildVersion2MigrationPlan());
+  }
 }

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
+  CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
   DATABASE_SCHEMA_VERSION,
   PROFILE_OWNED_TABLES,
   buildVersion1MigrationPlan,
+  buildVersion2MigrationPlan,
   createProfileOwnedTableSql,
   executeMigrationTransaction,
   migrateDatabase,
@@ -58,8 +60,8 @@ describe("database version 1 migration", () => {
       const version = database.query("PRAGMA user_version").get() as { user_version: number };
       const tables = database.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[];
       expect(version.user_version).toBe(DATABASE_SCHEMA_VERSION);
-      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", ...PROFILE_OWNED_TABLES]));
-      expect(database.query("SELECT role FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner" });
+      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", ...PROFILE_OWNED_TABLES]));
+      expect(database.query("SELECT role, sortOrder FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner", sortOrder: 0 });
     } finally {
       database.close();
     }
@@ -90,7 +92,8 @@ describe("database version 1 migration", () => {
       expect(plan).toContain(createProfileOwnedTableSql(table));
       expect(createProfileOwnedTableSql(table)).toContain("profileId TEXT NOT NULL");
     }
-    expect(plan.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION}`);
+    expect(plan.at(-1)).toBe("PRAGMA user_version = 1");
+    expect(buildVersion2MigrationPlan()).toContain(CREATE_MANAGED_ALLOWANCES_TABLE_SQL);
   });
 
   test("assigns representative legacy records to the stable Owner", () => {
@@ -104,11 +107,11 @@ describe("database version 1 migration", () => {
     expect(followedCopy).toContain("'manual'");
   });
 
-  test("does no work when initialization is repeated at version 1", async () => {
+  test("does no work when initialization is repeated at the latest version", async () => {
     const calls: string[] = [];
     const db = {
       execAsync: async (sql: string): Promise<void> => { calls.push(sql); },
-      getFirstAsync: async <T,>(_sql: string): Promise<T | null> => ({ user_version: 1 } as T),
+      getFirstAsync: async <T,>(_sql: string): Promise<T | null> => ({ user_version: DATABASE_SCHEMA_VERSION } as T),
       getAllAsync: async <T,>(): Promise<T[]> => [],
     };
     await migrateDatabase(db);
@@ -133,11 +136,46 @@ describe("database version 1 migration", () => {
     expect(visibleRows).toEqual(originalRows);
   });
 
+  test("migrates version 1 profiles additively without changing profile-owned content", async () => {
+    const database = new Database(":memory:");
+    try {
+      const adapter = sqliteAdapter(database);
+      await executeMigrationTransaction(adapter, buildVersion1MigrationPlan({}));
+      database.query("INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES ('standard-old','Standard','standard',1,1)").run();
+      database.query("INSERT INTO saved_videos VALUES ('standard-old','video-old','Saved','channel','Channel','thumb','2026-01-01',60,NULL,1)").run();
+      await migrateDatabase(adapter);
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+      expect(database.query("SELECT name, role, sortOrder FROM profiles WHERE id = 'standard-old'").get()).toEqual({ name: "Standard", role: "standard", sortOrder: 1 });
+      expect(database.query("SELECT title FROM saved_videos WHERE profileId = 'standard-old'").get()).toEqual({ title: "Saved" });
+      expect(database.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'managed_allowances'").get()).toEqual({ name: "managed_allowances" });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("supports Managed create, rename, reorder, and cascade delete without touching Owner", async () => {
+    const database = new Database(":memory:");
+    try {
+      await migrateDatabase(sqliteAdapter(database));
+      database.exec("PRAGMA foreign_keys = ON");
+      database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES ('managed-local','Kid','managed',2,1,1)").run();
+      const day = "2026-09-03";
+      database.query("INSERT INTO managed_allowances VALUES ('managed-local','dailyLimit',30,?,1,1,0,0,0,0,0,1)").run(day);
+      database.query("UPDATE profiles SET name = 'Kid Renamed', sortOrder = 1 WHERE id = 'managed-local'").run();
+      expect(database.query("SELECT name, role, sortOrder FROM profiles WHERE id = 'managed-local'").get()).toEqual({ name: "Kid Renamed", role: "managed", sortOrder: 1 });
+      database.query("DELETE FROM profiles WHERE id = 'managed-local'").run();
+      expect(database.query("SELECT COUNT(*) AS count FROM managed_allowances WHERE profileId = 'managed-local'").get()).toEqual({ count: 0 });
+      expect(database.query("SELECT COUNT(*) AS count FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ count: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
   test("allows two profiles to save the same video independently", async () => {
     const database = new Database(":memory:");
     try {
       await migrateDatabase(sqliteAdapter(database));
-      database.query("INSERT INTO profiles VALUES (?, 'Standard', 'standard', 1, 1)").run("standard");
+      database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?, 'Standard', 'standard', 1, 1, 1)").run("standard");
       const insert = database.query("INSERT INTO saved_videos VALUES (?, 'video-1', ?, 'channel', 'Channel', 'thumb', '2026-01-01', 60, NULL, 1)");
       insert.run(DEFAULT_OWNER_PROFILE_ID, "Owner copy");
       insert.run("standard", "Standard copy");
@@ -152,7 +190,7 @@ describe("database version 1 migration", () => {
     const database = new Database(":memory:");
     try {
       await migrateDatabase(sqliteAdapter(database));
-      database.query("INSERT INTO profiles VALUES (?, 'Managed', 'managed', 1, 1)").run("managed");
+      database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?, 'Managed', 'managed', 1, 1, 1)").run("managed");
       const insert = database.query("INSERT INTO followed_channels VALUES (?, 'channel-1', 'Channel', NULL, 'thumb', 1, 'manual')");
       insert.run(DEFAULT_OWNER_PROFILE_ID);
       insert.run("managed");

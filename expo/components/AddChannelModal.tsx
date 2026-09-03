@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { Link2, Play, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -32,7 +33,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   const watchVideo = (): void => {
     if (!videoId) return;
     close();
-    router.push({ pathname: "/watch/[id]", params: { id: videoId } });
+    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: videoId } });
   };
 
   return (

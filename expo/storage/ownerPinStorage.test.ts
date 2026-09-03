@@ -46,6 +46,14 @@ describe("Owner PIN protected storage", () => {
     expect(await verifier.verify("4827")).toBeFalse();
   });
 
+  test("rejects a malformed protected record instead of treating it as no PIN", async () => {
+    const storage = new MemoryProtectedStorage();
+    storage.values.set(STORAGE_KEY, "{\"version\":1,\"salt\":\"\"}");
+    const verifier = createOwnerPinVerifier(storage, testCrypto, STORAGE_KEY);
+    await expect(verifier.read()).rejects.toThrow("unreadable");
+    await expect(verifier.verify("1234")).rejects.toThrow("unreadable");
+  });
+
   test("changes and removes the verifier without leaving the prior PIN valid", async () => {
     const storage = new MemoryProtectedStorage();
     const verifier = createOwnerPinVerifier(storage, testCrypto, STORAGE_KEY);

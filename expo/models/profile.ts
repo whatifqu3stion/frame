@@ -4,6 +4,7 @@ export type Profile = {
   id: string;
   name: string;
   role: ProfileRole;
+  sortOrder: number;
   createdAt: number;
   updatedAt: number;
 };

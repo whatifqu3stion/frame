@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OWNER_PIN_COOLDOWN_MS, OwnerAuthorizationSession } from "./ownerAuthorization";
+import { OWNER_PIN_COOLDOWN_MS, OwnerAuthorizationSession, requiresOwnerAuthorizationForManagedAction, requiresPinForOwnerEntry } from "./ownerAuthorization";
 
 describe("Owner authorization visit", () => {
   test("authorizes one visit and relocks explicitly", () => {
@@ -15,6 +15,12 @@ describe("Owner authorization visit", () => {
     const session = new OwnerAuthorizationSession();
     session.authorizeWithoutPin();
     expect(session.isAuthorized()).toBeTrue();
+  });
+
+  test("routes every protected Managed action through Owner authorization", () => {
+    expect(["createManaged", "deleteManaged", "changeAllowance", "disableAllowance", "addTimeToday"].every((action) => requiresOwnerAuthorizationForManagedAction(action as Parameters<typeof requiresOwnerAuthorizationForManagedAction>[0]))).toBeTrue();
+    expect(requiresPinForOwnerEntry("managed", true)).toBeTrue();
+    expect(requiresPinForOwnerEntry("managed", false)).toBeFalse();
   });
 
   test("starts a cooldown after five incorrect entries and allows a later retry", () => {

@@ -1,4 +1,4 @@
-import { Check, ChevronRight, LockKeyhole, UserRound, X } from "lucide-react-native";
+import { Check, ChevronRight, Clock3, LockKeyhole, UserRound, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -7,7 +7,7 @@ import { useApp } from "@/providers/AppProvider";
 
 export type ProfileSwitcherModalProps = { visible: boolean; onClose: () => void };
 
-/** Compact household profile chooser; Standard profiles never require a PIN. */
+/** Compact household profile chooser; Standard and Managed profiles are freely enterable. */
 export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitcherModalProps) {
   const { profiles, activeProfileId, profileSwitching, switchProfile, hasOwnerPin } = useApp();
   const { palette, type } = useFrameTheme();
@@ -39,7 +39,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
             </Pressable>
           </View>
           <View style={styles.list}>
-            {profiles.filter((profile) => profile.role !== "managed").map((profile) => {
+            {profiles.map((profile) => {
               const isActive = profile.id === activeProfileId;
               return (
                 <Pressable
@@ -51,15 +51,15 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
                   accessibilityState={{ selected: isActive, disabled: profileSwitching || isActive }}
                   testID={`switch-profile-${profile.id}`}
                 >
-                  <View style={[styles.avatar, isActive && styles.avatarActive]}><UserRound size={19} color={isActive ? palette.active : palette.inkMuted} /></View>
-                  <View style={styles.flex}><Text style={styles.name}>{profile.name}</Text><Text style={styles.role}>{profile.role === "owner" ? "Owner" : "Standard"}{profile.role === "owner" && hasOwnerPin ? " · PIN" : ""}</Text></View>
+                  <View style={[styles.avatar, isActive && styles.avatarActive]}>{profile.role === "managed" ? <Clock3 size={19} color={isActive ? palette.active : palette.inkMuted} /> : <UserRound size={19} color={isActive ? palette.active : palette.inkMuted} />}</View>
+                  <View style={styles.flex}><Text style={styles.name}>{profile.name}</Text><Text style={styles.role}>{profile.role === "owner" ? "Owner" : profile.role === "managed" ? "Managed · Daily Frame time" : "Standard"}{profile.role === "owner" && hasOwnerPin ? " · PIN" : ""}</Text></View>
                   {profileSwitching && !isActive ? <ActivityIndicator size="small" color={palette.active} /> : isActive ? <Check size={18} color={palette.active} /> : profile.role === "owner" && hasOwnerPin ? <LockKeyhole size={16} color={palette.inkMuted} /> : <ChevronRight size={17} color={palette.inkMuted} />}
                 </Pressable>
               );
             })}
           </View>
           {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-          <Text style={styles.note}>Each profile keeps its own sources, library, progress, interests, and appearance on this device.</Text>
+          <Text style={styles.note}>Each profile keeps its own sources, library, progress, interests, appearance, and viewing allowance on this device.</Text>
         </Pressable>
       </Pressable>
     </Modal>
