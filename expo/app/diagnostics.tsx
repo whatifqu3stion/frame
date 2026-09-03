@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ACTIVE_PROFILE_ID,
   APP_ENV,
   IS_CLOSED_BETA,
   RELEASE_CHANNEL_LABEL,
@@ -28,7 +27,7 @@ function DiagnosticsScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { premiumAccessState } = useApp();
+  const { premiumAccessState, activeProfileId } = useApp();
   const databaseQuery = useQuery<DatabaseDiagnostics>({
     queryKey: ["diagnostics", "database"],
     queryFn: getDatabaseDiagnostics,
@@ -58,7 +57,7 @@ function DiagnosticsScreen() {
         <DiagnosticRow label="App version" value={Constants.expoConfig?.version ?? "unknown"} styles={styles} type={type} />
         <DiagnosticRow label="Environment" value={APP_ENV} styles={styles} type={type} />
         <DiagnosticRow label="Release channel" value={RELEASE_CHANNEL_LABEL} styles={styles} type={type} />
-        <DiagnosticRow label="Active profile ID" value={ACTIVE_PROFILE_ID} styles={styles} type={type} />
+        <DiagnosticRow label="Active profile ID" value={activeProfileId} styles={styles} type={type} />
         <DiagnosticRow label="Entitlement" value={entitlementState} styles={styles} type={type} />
       </DiagnosticSection>
 

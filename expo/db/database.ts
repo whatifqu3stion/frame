@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { Platform } from "react-native";
 import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
-import type { Profile } from "@/models/profile";
+import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -32,7 +32,16 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+const webOwner: Profile = {
+  id: DEFAULT_OWNER_PROFILE_ID,
+  name: DEFAULT_OWNER_PROFILE_NAME,
+  role: "owner",
+  createdAt: 0,
+  updatedAt: 0,
+};
+
 const webStore = {
+  profiles: new Map<string, Profile>([[webOwner.id, webOwner]]),
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
@@ -68,9 +77,65 @@ export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
 }
 
 export async function listProfiles(): Promise<Profile[]> {
-  if (Platform.OS === "web") return [];
+  if (Platform.OS === "web") return Array.from(webStore.profiles.values()).sort((a, b) => a.createdAt - b.createdAt);
   const db = await getDb();
-  return db.getAllAsync<Profile>("SELECT * FROM profiles ORDER BY createdAt ASC");
+  return db.getAllAsync<Profile>("SELECT * FROM profiles ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, createdAt ASC");
+}
+
+/** Adds one local Standard profile without copying another profile's records. */
+export async function insertStandardProfile(profile: Profile): Promise<void> {
+  if (profile.role !== "standard") throw new Error("Only Standard profiles can be created.");
+  if (Platform.OS === "web") {
+    if (webStore.profiles.has(profile.id)) throw new Error("That profile already exists.");
+    webStore.profiles.set(profile.id, { ...profile });
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(
+    "INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES (?,?,?,?,?)",
+    [profile.id, profile.name, profile.role, profile.createdAt, profile.updatedAt],
+  );
+}
+
+/** Renames an existing Standard profile while preserving its stable identity. */
+export async function updateStandardProfileName(profileId: string, name: string, updatedAt: number): Promise<void> {
+  if (Platform.OS === "web") {
+    const profile = webStore.profiles.get(profileId);
+    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be renamed.");
+    webStore.profiles.set(profileId, { ...profile, name, updatedAt });
+    return;
+  }
+  const db = await getDb();
+  const result = await db.runAsync(
+    "UPDATE profiles SET name = ?, updatedAt = ? WHERE id = ? AND role = 'standard'",
+    [name, updatedAt, profileId],
+  );
+  if (result.changes !== 1) throw new Error("Only Standard profiles can be renamed.");
+}
+
+/** Deletes one Standard profile and all of its profile-owned SQLite rows atomically. */
+export async function deleteStandardProfile(profileId: string): Promise<void> {
+  if (profileId === DEFAULT_OWNER_PROFILE_ID) throw new Error("The Owner profile cannot be deleted.");
+  if (Platform.OS === "web") {
+    const profile = webStore.profiles.get(profileId);
+    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be deleted.");
+    clearProfileMap(webStore.saved, profileId);
+    clearProfileMap(webStore.resume, profileId);
+    clearProfileMap(webStore.queues, profileId);
+    clearProfileMap(webStore.watchLater, profileId);
+    clearProfileMap(webStore.channels, profileId);
+    webStore.profiles.delete(profileId);
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
+    if (!profile || profile.role !== "standard") throw new Error("Only Standard profiles can be deleted.");
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels"] as const) {
+      await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
+    }
+    await db.runAsync("DELETE FROM profiles WHERE id = ? AND role = 'standard'", [profileId]);
+  });
 }
 
 export async function listSavedVideos(profileId: string): Promise<Video[]> {

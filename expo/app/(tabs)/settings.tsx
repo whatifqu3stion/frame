@@ -1,9 +1,10 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RotateCcw, Shield, Sun, Trash2, UserCircle2 } from "lucide-react-native";
+import { Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RotateCcw, Shield, Sun, Trash2, UserCircle2, UsersRound } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
+import ProfileControlsModal from "@/components/ProfileControlsModal";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -18,9 +19,11 @@ export default function SettingsScreen() {
   const {
     interests, toggleInterest, openPremium, isPremium, premiumAccessState, refreshPremiumAccess,
     wipeAllData, googleConfigured, googleConnected, googleEmail, importing, signInWithGoogle,
-    signOutGoogle, prefs, setTheme, setAccent, requirePurchase,
+    signOutGoogle, prefs, setTheme, setAccent, requirePurchase, activeProfile, profiles,
+    requestOwnerAuthorization,
   } = useApp();
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
+  const [profileControlsOpen, setProfileControlsOpen] = useState<boolean>(false);
 
   const onConnect = async (): Promise<void> => {
     if (!requirePurchase("import")) return;
@@ -41,21 +44,29 @@ export default function SettingsScreen() {
     ]);
   };
   const onWipe = (): void => {
-    Alert.alert("Delete all data?", "This removes saved videos, named sessions, resume positions and preferences.", [
+    const profileName = activeProfile?.name ?? "this profile";
+    Alert.alert(`Delete ${profileName}’s data?`, "This removes only this profile’s sources, saved videos, named sessions, resume positions, interests, searches, and preferences.", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => { void wipeAllData(); } },
     ]);
+  };
+  const openProfileControls = async (): Promise<void> => {
+    const authorized = await requestOwnerAuthorization();
+    if (authorized) setProfileControlsOpen(true);
   };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} /></View>
 
-      <Section label="Profile" hint="The stable local profile that owns your saved data.">
-        <View style={styles.profileCard} accessible accessibilityLabel="Owner profile">
+      <Section label="Profile" hint="Each local profile keeps its own sources, library, progress, interests, and appearance.">
+        <View style={styles.profileCard} accessible accessibilityLabel={`${activeProfile?.name ?? "Owner"} profile`}>
           <View style={styles.profileAvatar}><UserCircle2 size={25} color={palette.active} strokeWidth={1.6} /></View>
-          <View style={styles.flex}><Text style={styles.profileName}>Owner</Text><Text style={styles.supporting}>Default profile · stored on this device</Text></View>
+          <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
         </View>
+        <Pressable onPress={() => { void openProfileControls(); }} style={({ pressed }) => [styles.protectedRow, pressed && styles.pressed]} accessibilityRole="button" testID="open-profile-controls">
+          <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & Protected Controls</Text><Text style={styles.supporting}>Create or rename Standard profiles, remove profiles, and manage the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
+        </Pressable>
         {googleConnected ? (
           <View style={styles.accountBlock}>
             <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google connected"}</Text>
@@ -132,10 +143,11 @@ export default function SettingsScreen() {
         <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Saved videos, interests, sources, Sessions, and progress stay on this device.</Text></View></View>
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
         <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
-        <Pressable onPress={onWipe} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Delete all on-device data</Text><Text style={styles.supporting}>Store purchase records remain with your store account.</Text></View></Pressable>
+        <Pressable onPress={onWipe} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Delete this profile’s on-device data</Text><Text style={styles.supporting}>Store purchase records remain with your store account.</Text></View></Pressable>
       </Section>
 
       <Section label="About"><Text style={styles.infoText}>Frame is an intentional YouTube viewer: a finite inbox from trusted sources, followed by intentional viewing and a genuine stopping point.</Text><Text style={styles.version}>Version 1.0</Text></Section>
+      <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
     </ScrollView>
   );
 }
@@ -162,6 +174,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     section: { paddingHorizontal: spacing.page, paddingTop: spacing.xl, paddingBottom: spacing.md }, sectionHint: { ...type.bodySoft, marginTop: spacing.xs }, sectionContent: { marginTop: spacing.md },
     profileCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
     profileAvatar: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: palette.activeSoft }, profileName: { ...type.heading, fontSize: 18 }, supporting: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
+    protectedRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.sm, padding: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, protectedIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: palette.activeSoft },
     accountBlock: { marginTop: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card }, googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, googleMark: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 17, width: 22, textAlign: "center" }, googleText: { ...type.label, flex: 1, color: palette.onDark },
     chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, chip: { minHeight: 44, justifyContent: "center", paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipDisabled: { opacity: 0.48, borderStyle: "dashed" }, chipText: { ...type.label }, chipTextActive: { color: palette.active },
     choiceRow: { flexDirection: "row", gap: spacing.sm }, appearanceChoice: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, appearanceText: { ...type.label, color: palette.inkMuted, flexShrink: 1 }, appearanceTextActive: { color: palette.active },

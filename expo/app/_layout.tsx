@@ -10,6 +10,7 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
+import OwnerPinModal from "@/components/OwnerPinModal";
 import { fonts, watchPalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { AppProvider, useApp } from "@/providers/AppProvider";
@@ -80,6 +81,7 @@ function ThemedApp() {
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
       <AppContent />
       <PaywallSheet />
+      <OwnerPinModal />
     </View>
   );
 }

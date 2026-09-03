@@ -7,16 +7,29 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
-import { ACTIVE_PROFILE_ID, APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
+import { APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
+import { resolveActiveProfileId } from "@/domain/profiles";
+import { OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
 import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
 import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
 import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
+import { readActiveProfileId, writeActiveProfileId } from "@/storage/activeProfileStorage";
+import {
+  getOwnerPinAvailability,
+  readOwnerPinRecord,
+  removeOwnerPin,
+  setOwnerPin,
+  verifyOwnerPin,
+  type OwnerPinAvailability,
+} from "@/storage/ownerPinStorage";
 import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
+import { profileRepository } from "@/repositories/profileRepository";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
@@ -171,8 +184,51 @@ function parseGoogleCredential(raw: string | null): GoogleCredential | null {
   }
 }
 
+type ProfileSnapshot = {
+  prefs: UserPreferences;
+  interests: InterestTopic[];
+  recentSearches: string[];
+  googleCredential: GoogleCredential | null;
+  rawGoogleCredential: string | null;
+  savedVideos: Awaited<ReturnType<typeof listSavedVideos>>;
+  resumeList: Awaited<ReturnType<typeof listResume>>;
+  sessions: Awaited<ReturnType<typeof listQueues>>;
+  watchLater: Awaited<ReturnType<typeof listWatchLater>>;
+  followedChannels: FollowedChannel[];
+};
+
+async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> {
+  const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, watchLater, followedChannels] = await Promise.all([
+    loadPrefs(profileId),
+    loadInterests(profileId),
+    loadRecentSearches(profileId),
+    readProfileGoogleCredential(SecureStore, profileId).catch(() => null),
+    listSavedVideos(profileId),
+    listResume(profileId),
+    listQueues(profileId),
+    listWatchLater(profileId),
+    followedSourceRepository.listForProfile(profileId),
+  ]);
+  const parsedCredential = parseGoogleCredential(rawGoogleCredential);
+  const googleCredential = parsedCredential && parsedCredential.expiresAt > Date.now() ? parsedCredential : null;
+  return {
+    prefs: googleCredential ? prefs : { ...prefs, googleEmail: null, googleConnectedAt: null },
+    interests,
+    recentSearches,
+    googleCredential,
+    rawGoogleCredential,
+    savedVideos,
+    resumeList,
+    sessions,
+    watchLater,
+    followedChannels,
+  };
+}
+
 export const [AppProvider, useApp] = createContextHook(() => {
-  const activeProfileId = ACTIVE_PROFILE_ID;
+  const [activeProfileId, setActiveProfileId] = useState<string>(DEFAULT_OWNER_PROFILE_ID);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profileSwitching, setProfileSwitching] = useState<boolean>(false);
   const [prefs, setPrefs] = useState<UserPreferences>(defaultPrefs);
   const [interests, setInterests] = useState<InterestTopic[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -180,7 +236,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [paywallOpen, setPaywallOpen] = useState<boolean>(false);
   const [paywallMessage, setPaywallMessage] = useState<string>(PREMIUM_FEATURE_MESSAGES.library);
   const [googleCredential, setGoogleCredential] = useState<GoogleCredential | null>(null);
+  const [ownerPinAvailability, setOwnerPinAvailability] = useState<OwnerPinAvailability>("unavailable");
+  const [hasOwnerPin, setHasOwnerPin] = useState<boolean>(false);
+  const [ownerPinPromptOpen, setOwnerPinPromptOpen] = useState<boolean>(false);
+  const [ownerPinPromptError, setOwnerPinPromptError] = useState<string | null>(null);
+  const [ownerPinCooldownUntil, setOwnerPinCooldownUntil] = useState<number>(0);
+  const [isOwnerAuthorized, setIsOwnerAuthorized] = useState<boolean>(false);
   const importing = false;
+  const activeProfileIdRef = useRef<string>(DEFAULT_OWNER_PROFILE_ID);
   const prefsRef = useRef<UserPreferences>(defaultPrefs);
   const interestsRef = useRef<InterestTopic[]>([]);
   const recentSearchesRef = useRef<string[]>([]);
@@ -188,6 +251,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const prefsWriteRef = useRef<Promise<void>>(Promise.resolve());
   const interestsWriteRef = useRef<Promise<void>>(Promise.resolve());
   const searchesWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const authorizationSessionRef = useRef<OwnerAuthorizationSession>(new OwnerAuthorizationSession());
+  const authorizationResolverRef = useRef<((authorized: boolean) => void) | null>(null);
   const queryClient = useQueryClient();
 
   // `expo-auth-session` throws if the active platform's client ID is missing, so we
@@ -214,36 +279,230 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([
-      followedSourceRepository.initialize(),
-      loadPrefs(activeProfileId),
-      loadInterests(activeProfileId),
-      loadRecentSearches(activeProfileId),
-      readProfileGoogleCredential(SecureStore, activeProfileId).catch(() => null),
-    ])
-      .then(([, p, i, r, rawCredential]) => {
-        if (!mounted) return;
-        const credential = parseGoogleCredential(rawCredential);
-        const activeCredential = credential && credential.expiresAt > Date.now() ? credential : null;
-        const nextPrefs = activeCredential ? p : { ...p, googleEmail: null, googleConnectedAt: null };
-        prefsRef.current = nextPrefs;
-        interestsRef.current = i;
-        recentSearchesRef.current = r;
-        setPrefs(nextPrefs);
-        setInterests(i);
-        setRecentSearches(r);
-        setGoogleCredential(activeCredential);
-        if (!activeCredential && rawCredential) void clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
-        setReady(true);
-      })
-      .catch((err) => {
-        console.warn("[app] init failed", err);
-        if (mounted) setReady(true);
-      });
+    const initialize = async (): Promise<void> => {
+      await followedSourceRepository.initialize();
+      const [availableProfiles, savedProfileId, pinAvailability] = await Promise.all([
+        profileRepository.list(),
+        readActiveProfileId(AsyncStorage),
+        getOwnerPinAvailability(),
+      ]);
+      const resolvedProfileId = resolveActiveProfileId(savedProfileId, availableProfiles);
+      const [snapshot, pinRecord] = await Promise.all([
+        loadProfileSnapshot(resolvedProfileId),
+        pinAvailability === "available" ? readOwnerPinRecord().catch(() => null) : Promise.resolve(null),
+      ]);
+      if (!mounted) return;
+      if (savedProfileId !== resolvedProfileId) await writeActiveProfileId(AsyncStorage, resolvedProfileId);
+      activeProfileIdRef.current = resolvedProfileId;
+      prefsRef.current = snapshot.prefs;
+      interestsRef.current = snapshot.interests;
+      recentSearchesRef.current = snapshot.recentSearches;
+      queryClient.setQueryData(["library", resolvedProfileId, "saved"], snapshot.savedVideos);
+      queryClient.setQueryData(["library", resolvedProfileId, "resume"], snapshot.resumeList);
+      queryClient.setQueryData(["library", resolvedProfileId, "queues"], snapshot.sessions);
+      queryClient.setQueryData(["library", resolvedProfileId, "watchLater"], snapshot.watchLater);
+      queryClient.setQueryData(["library", resolvedProfileId, "channels"], snapshot.followedChannels);
+      setProfiles(availableProfiles);
+      setActiveProfileId(resolvedProfileId);
+      setPrefs(snapshot.prefs);
+      setInterests(snapshot.interests);
+      setRecentSearches(snapshot.recentSearches);
+      setGoogleCredential(snapshot.googleCredential);
+      setOwnerPinAvailability(pinAvailability);
+      setHasOwnerPin(Boolean(pinRecord));
+      if (!snapshot.googleCredential && snapshot.rawGoogleCredential) {
+        void clearProfileGoogleCredential(SecureStore, resolvedProfileId).catch(() => {});
+      }
+      setReady(true);
+    };
+    void initialize().catch((err: unknown) => {
+      console.warn("[app] init failed", err instanceof Error ? err.message : "unknown error");
+      if (mounted) setReady(true);
+    });
     return () => {
       mounted = false;
+      authorizationResolverRef.current?.(false);
+      authorizationResolverRef.current = null;
     };
+  }, [queryClient]);
+
+  const relockOwnerAccess = useCallback((): void => {
+    authorizationSessionRef.current.relock();
+    setIsOwnerAuthorized(false);
+    setOwnerPinPromptOpen(false);
+    setOwnerPinPromptError(null);
+    authorizationResolverRef.current?.(false);
+    authorizationResolverRef.current = null;
   }, []);
+
+  const requestOwnerAuthorization = useCallback(async (): Promise<boolean> => {
+    if (authorizationSessionRef.current.isAuthorized()) return true;
+    if (!hasOwnerPin || ownerPinAvailability !== "available") {
+      authorizationSessionRef.current.authorizeWithoutPin();
+      setIsOwnerAuthorized(true);
+      return true;
+    }
+    if (authorizationResolverRef.current) return false;
+    setOwnerPinPromptError(null);
+    setOwnerPinCooldownUntil(authorizationSessionRef.current.getCooldownUntil());
+    setOwnerPinPromptOpen(true);
+    return new Promise<boolean>((resolve) => {
+      authorizationResolverRef.current = resolve;
+    });
+  }, [hasOwnerPin, ownerPinAvailability]);
+
+  const cancelOwnerAuthorization = useCallback((): void => {
+    setOwnerPinPromptOpen(false);
+    setOwnerPinPromptError(null);
+    authorizationResolverRef.current?.(false);
+    authorizationResolverRef.current = null;
+  }, []);
+
+  const submitOwnerAuthorization = useCallback(async (pin: string): Promise<void> => {
+    const now = Date.now();
+    if (authorizationSessionRef.current.getCooldownUntil() > now) {
+      setOwnerPinCooldownUntil(authorizationSessionRef.current.getCooldownUntil());
+      setOwnerPinPromptError("Too many attempts. Wait a moment, then try again.");
+      return;
+    }
+    const isCorrect = await verifyOwnerPin(pin).catch(() => false);
+    const result = authorizationSessionRef.current.attempt(isCorrect, now);
+    if (result.status === "authorized") {
+      setIsOwnerAuthorized(true);
+      setOwnerPinPromptOpen(false);
+      setOwnerPinPromptError(null);
+      authorizationResolverRef.current?.(true);
+      authorizationResolverRef.current = null;
+      return;
+    }
+    if (result.status === "cooldown") {
+      setOwnerPinCooldownUntil(result.retryAt);
+      setOwnerPinPromptError("Too many attempts. Wait 30 seconds, then try again.");
+      return;
+    }
+    setOwnerPinPromptError(`That PIN didn’t match. ${result.remainingAttempts} ${result.remainingAttempts === 1 ? "try" : "tries"} left.`);
+  }, []);
+
+  const applyProfileSnapshot = useCallback((profileId: string, snapshot: ProfileSnapshot): void => {
+    activeProfileIdRef.current = profileId;
+    prefsRef.current = snapshot.prefs;
+    interestsRef.current = snapshot.interests;
+    recentSearchesRef.current = snapshot.recentSearches;
+    queryClient.setQueryData(["library", profileId, "saved"], snapshot.savedVideos);
+    queryClient.setQueryData(["library", profileId, "resume"], snapshot.resumeList);
+    queryClient.setQueryData(["library", profileId, "queues"], snapshot.sessions);
+    queryClient.setQueryData(["library", profileId, "watchLater"], snapshot.watchLater);
+    queryClient.setQueryData(["library", profileId, "channels"], snapshot.followedChannels);
+    setPrefs(snapshot.prefs);
+    setInterests(snapshot.interests);
+    setRecentSearches(snapshot.recentSearches);
+    setGoogleCredential(snapshot.googleCredential);
+    setActiveProfileId(profileId);
+  }, [queryClient]);
+
+  const switchProfile = useCallback(async (profileId: string): Promise<AddChannelResult> => {
+    if (profileId === activeProfileIdRef.current) return { ok: true, message: "Already using this profile." };
+    const target = profiles.find((profile) => profile.id === profileId);
+    if (!target) return { ok: false, message: "That profile is no longer available." };
+    if (target.role === "owner" && activeProfileIdRef.current !== DEFAULT_OWNER_PROFILE_ID) {
+      const authorized = await requestOwnerAuthorization();
+      if (!authorized) return { ok: false, message: "Profile switch cancelled." };
+    }
+    setProfileSwitching(true);
+    const previousProfileId = activeProfileIdRef.current;
+    storageGenerationRef.current += 1;
+    try {
+      await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
+      await queryClient.cancelQueries({ queryKey: ["library", previousProfileId] });
+      const snapshot = await loadProfileSnapshot(profileId);
+      await writeActiveProfileId(AsyncStorage, profileId);
+      applyProfileSnapshot(profileId, snapshot);
+      queryClient.removeQueries({ queryKey: ["today"] });
+      if (!snapshot.googleCredential && snapshot.rawGoogleCredential) {
+        void clearProfileGoogleCredential(SecureStore, profileId).catch(() => {});
+      }
+      relockOwnerAccess();
+      return { ok: true, message: `Switched to ${target.name}.` };
+    } catch (error) {
+      console.warn("[profiles] switch failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, message: "Frame couldn’t switch profiles. Try again." };
+    } finally {
+      setProfileSwitching(false);
+    }
+  }, [applyProfileSnapshot, profiles, queryClient, relockOwnerAccess, requestOwnerAuthorization]);
+
+  const createStandardProfile = useCallback(async (name: string): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    let createdProfile: Profile | null = null;
+    try {
+      createdProfile = await profileRepository.createStandard(name);
+      await writeProfileStorage(AsyncStorage, "preferences", createdProfile.id, JSON.stringify({ ...defaultPrefs, hasCompletedOnboarding: true }));
+      setProfiles(await profileRepository.list());
+      return { ok: true, message: `${createdProfile.name} is ready.` };
+    } catch (error) {
+      if (createdProfile) await profileRepository.deleteStandard(createdProfile.id).catch(() => {});
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that profile." };
+    }
+  }, []);
+
+  const renameStandardProfile = useCallback(async (profileId: string, name: string): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    try {
+      const updated = await profileRepository.renameStandard(profileId, name);
+      setProfiles((current) => current.map((profile) => profile.id === updated.id ? updated : profile));
+      return { ok: true, message: "Profile renamed." };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t rename that profile." };
+    }
+  }, []);
+
+  const deleteLocalProfile = useCallback(async (profileId: string): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    const target = profiles.find((profile) => profile.id === profileId);
+    if (!target || target.role !== "standard") return { ok: false, message: "Only Standard profiles can be deleted." };
+    if (activeProfileIdRef.current === profileId) {
+      const switchResult = await switchProfile(DEFAULT_OWNER_PROFILE_ID);
+      if (!switchResult.ok) return switchResult;
+      authorizationSessionRef.current.authorizeWithoutPin();
+      setIsOwnerAuthorized(true);
+    }
+    try {
+      await profileRepository.deleteStandard(profileId);
+      await Promise.all([
+        clearProfileStorage(AsyncStorage, profileId),
+        clearProfileGoogleCredential(SecureStore, profileId).catch(() => {}),
+      ]);
+      setProfiles(await profileRepository.list());
+      queryClient.removeQueries({ queryKey: ["library", profileId] });
+      return { ok: true, message: `${target.name} was removed.` };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t delete that profile." };
+    }
+  }, [profiles, queryClient, switchProfile]);
+
+  const saveOwnerPin = useCallback(async (pin: string): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    if (ownerPinAvailability !== "available") return { ok: false, message: "Set an Owner PIN in the iPhone or Android app." };
+    try {
+      await setOwnerPin(pin);
+      setHasOwnerPin(true);
+      return { ok: true, message: hasOwnerPin ? "Owner PIN changed." : "Owner PIN added." };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t save the PIN." };
+    }
+  }, [hasOwnerPin, ownerPinAvailability]);
+
+  const clearOwnerPin = useCallback(async (): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
+    if (ownerPinAvailability !== "available") return { ok: false, message: "PIN controls require the iPhone or Android app." };
+    try {
+      await removeOwnerPin();
+      setHasOwnerPin(false);
+      return { ok: true, message: "Owner PIN removed." };
+    } catch {
+      return { ok: false, message: "Frame couldn’t remove the PIN." };
+    }
+  }, [ownerPinAvailability]);
 
   useEffect(() => {
     if (!ready) return;
@@ -251,10 +510,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queueSourceLeaseReconciliation("launch");
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && previousState !== "active") queueSourceLeaseReconciliation("foreground");
+      if (nextState !== "active") relockOwnerAccess();
       previousState = nextState;
     });
     return () => subscription.remove();
-  }, [ready]);
+  }, [ready, relockOwnerAccess]);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>): Promise<void> => {
     const next = { ...prefsRef.current, ...patch };
@@ -266,7 +526,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     prefsWriteRef.current = write.catch(() => {});
     await write;
-  }, []);
+  }, [activeProfileId]);
 
   const setTheme = useCallback((mode: ThemeMode) => updatePrefs({ theme: mode }), [updatePrefs]);
   const setAccent = useCallback((accent: AccentMode) => updatePrefs({ accent }), [updatePrefs]);
@@ -281,7 +541,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     interestsWriteRef.current = write.catch(() => {});
     await write;
-  }, []);
+  }, [activeProfileId]);
 
   const persistSearches = useCallback(async (items: string[]): Promise<void> => {
     const generation = storageGenerationRef.current;
@@ -292,7 +552,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     searchesWriteRef.current = write.catch(() => {});
     await write;
-  }, []);
+  }, [activeProfileId]);
 
   const addRecentSearch = useCallback((term: string) => {
     const trimmed = term.trim();
@@ -391,12 +651,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (premiumAccessState !== "active") return;
     await upsertResume(activeProfileId, video, timestampSeconds);
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
-  }, [premiumAccessState, queryClient]);
+  }, [activeProfileId, premiumAccessState, queryClient]);
 
   const clearVideoResume = useCallback(async (videoId: string): Promise<void> => {
     await clearResume(activeProfileId, videoId);
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
-  }, [queryClient]);
+  }, [activeProfileId, queryClient]);
 
   const queuesQuery = useQuery({
     queryKey: ["library", activeProfileId, "queues"],
@@ -418,7 +678,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const invalidateLibrary = useCallback(async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId] });
-  }, [queryClient]);
+  }, [activeProfileId, queryClient]);
 
   const saveMutation = useMutation({
     mutationFn: async (video: Video) => {
@@ -443,7 +703,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await upsertQueue(activeProfileId, { ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [queuesQuery.data, invalidateLibrary, requirePurchase],
+    [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
   );
 
   const renameSession = useCallback(
@@ -454,7 +714,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await upsertQueue(activeProfileId, { ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [queuesQuery.data, invalidateLibrary, requirePurchase],
+    [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
   );
 
   const watchLaterMutation = useMutation({
@@ -500,7 +760,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await invalidateLibrary();
       return session;
     },
-    [invalidateLibrary, requirePurchase],
+    [activeProfileId, invalidateLibrary, requirePurchase],
   );
 
   const duplicateSession = useCallback(
@@ -519,7 +779,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await deleteQueue(activeProfileId, id);
       await invalidateLibrary();
     },
-    [invalidateLibrary, requirePurchase],
+    [activeProfileId, invalidateLibrary, requirePurchase],
   );
 
   // Google authorization is separate from following. Round 1 never imports automatically.
@@ -555,7 +815,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       console.warn("[google] sign-in failed", err instanceof Error ? err.message : "unknown error");
       return { ok: false, message: "Sign-in failed. Please try again." };
     }
-  }, [promptGoogle, requirePurchase, updatePrefs]);
+  }, [activeProfileId, promptGoogle, requirePurchase, updatePrefs]);
 
   const refreshSubscriptions = useCallback(async (): Promise<AddChannelResult> => {
     if (!requirePurchase("import")) return { ok: false, message: "Google connection is part of Frame Premium." };
@@ -566,7 +826,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return { ok: false, message: "Your Google connection expired. Sign in again to refresh." };
     }
     return getGoogleImportAvailability();
-  }, [googleCredential, requirePurchase, updatePrefs]);
+  }, [activeProfileId, googleCredential, requirePurchase, updatePrefs]);
 
   const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (googleCredential) {
@@ -577,7 +837,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     await updatePrefs({ googleEmail: null, googleConnectedAt: null });
     return { ok: true, message: "Google access was revoked. Imported creators remain on this device." };
-  }, [googleCredential, updatePrefs]);
+  }, [activeProfileId, googleCredential, updatePrefs]);
 
   const addChannelByLink = useCallback(
     async (input: string): Promise<AddChannelResult> => {
@@ -594,6 +854,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const wipeAllData = useCallback(async (): Promise<void> => {
+    const authorized = await requestOwnerAuthorization();
+    if (!authorized) return;
     storageGenerationRef.current += 1;
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
     await clearAllData(activeProfileId);
@@ -608,12 +870,31 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setInterests([]);
     setRecentSearches([]);
     invalidateLibrary();
-  }, [invalidateLibrary]);
+  }, [activeProfileId, invalidateLibrary, requestOwnerAuthorization]);
 
   return useMemo(
     () => ({
       ready,
       activeProfileId,
+      activeProfile: profiles.find((profile) => profile.id === activeProfileId) ?? profiles.find((profile) => profile.role === "owner") ?? null,
+      profiles,
+      profileSwitching,
+      switchProfile,
+      createStandardProfile,
+      renameStandardProfile,
+      deleteLocalProfile,
+      requestOwnerAuthorization,
+      relockOwnerAccess,
+      ownerPinAvailability,
+      hasOwnerPin,
+      isOwnerAuthorized,
+      ownerPinPromptOpen,
+      ownerPinPromptError,
+      ownerPinCooldownUntil,
+      submitOwnerAuthorization,
+      cancelOwnerAuthorization,
+      saveOwnerPin,
+      clearOwnerPin,
       prefs,
       interests,
       paywallOpen,
@@ -684,6 +965,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }),
     [
       ready,
+      activeProfileId,
+      profiles,
+      profileSwitching,
+      switchProfile,
+      createStandardProfile,
+      renameStandardProfile,
+      deleteLocalProfile,
+      requestOwnerAuthorization,
+      relockOwnerAccess,
+      ownerPinAvailability,
+      hasOwnerPin,
+      isOwnerAuthorized,
+      ownerPinPromptOpen,
+      ownerPinPromptError,
+      ownerPinCooldownUntil,
+      submitOwnerAuthorization,
+      cancelOwnerAuthorization,
+      saveOwnerPin,
+      clearOwnerPin,
       prefs,
       interests,
       paywallOpen,
