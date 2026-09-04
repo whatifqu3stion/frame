@@ -21,7 +21,7 @@ describe("Round 1C product shell", () => {
 
   test("routes every playback origin through the centralized watch allowance boundary", () => {
     expect(FRAME_PLAYBACK_ROUTE).toBe("/watch/[id]");
-    expect(FRAME_PLAYBACK_ENTRY_PATHS).toEqual(["pastedLink", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"]);
+    expect(FRAME_PLAYBACK_ENTRY_PATHS).toEqual(["pastedLink", "sources", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"]);
     expect(PLAYER_AND_RECOVERY_ROUTES[0]).toBe(FRAME_PLAYBACK_ROUTE);
   });
 

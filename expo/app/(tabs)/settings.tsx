@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
 import ProfileControlsModal from "@/components/ProfileControlsModal";
+import FullResetModal from "@/components/FullResetModal";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -18,12 +19,13 @@ export default function SettingsScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
     interests, toggleInterest, openPremium, isPremium, premiumAccessState, refreshPremiumAccess,
-    wipeAllData, googleConfigured, googleConnected, googleEmail, importing, signInWithGoogle,
+    googleConfigured, googleConnected, googleEmail, importing, signInWithGoogle,
     signOutGoogle, prefs, setTheme, setAccent, requirePurchase, activeProfile, profiles,
     requestOwnerAuthorization,
   } = useApp();
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
   const [profileControlsOpen, setProfileControlsOpen] = useState<boolean>(false);
+  const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
 
   const onConnect = async (): Promise<void> => {
     if (!requirePurchase("import")) return;
@@ -43,13 +45,7 @@ export default function SettingsScreen() {
       } },
     ]);
   };
-  const onWipe = (): void => {
-    const profileName = activeProfile?.name ?? "this profile";
-    Alert.alert(`Delete ${profileName}’s data?`, "This removes only this profile’s sources, saved videos, named sessions, resume positions, interests, searches, and preferences.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { void wipeAllData(); } },
-    ]);
-  };
+  const onWipe = (): void => { setFullResetOpen(true); };
   const openProfileControls = async (): Promise<void> => {
     const authorized = await requestOwnerAuthorization();
     if (authorized) setProfileControlsOpen(true);
@@ -143,11 +139,12 @@ export default function SettingsScreen() {
         <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Saved videos, interests, sources, Sessions, and progress stay on this device.</Text></View></View>
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
         <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
-        <Pressable onPress={onWipe} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Delete this profile’s on-device data</Text><Text style={styles.supporting}>Store purchase records remain with your store account.</Text></View></Pressable>
+        <Pressable onPress={onWipe} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, allowance, usage record, and library item.</Text></View></Pressable>
       </Section>
 
       <Section label="About"><Text style={styles.infoText}>Frame is an intentional YouTube viewer: a finite inbox from trusted sources, followed by intentional viewing and a genuine stopping point.</Text><Text style={styles.version}>Version 1.0</Text></Section>
       <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
+      <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />
     </ScrollView>
   );
 }

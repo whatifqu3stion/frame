@@ -32,13 +32,13 @@ import { getResume } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
 import { formatDuration, formatRelativeDate, getVideo, parseVideoChapters, type VideoChapter } from "@/services/youtube";
-import type { DailyAllowanceStatus, DailyAllowanceWarning } from "@/models/dailyAllowance";
+import type { ViewingAllowanceStatus, ViewingAllowanceWarning } from "@/models/viewingAllowance";
 import type { Video } from "@/types";
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const PLAYER_TIMEOUT_MS = 18000;
 const RESUME_WRITE_INTERVAL_MS = 15000;
-const ALLOWANCE_CHECKPOINT_INTERVAL_MS = 10000;
+const ALLOWANCE_CHECKPOINT_INTERVAL_MS = 15000;
 const FINAL_PROGRESS_DELAY_MS = 250;
 const KEEP_AWAKE_TAG = "frame-video-playback";
 const LANDSCAPE_RAIL_WIDTH = 64;
@@ -84,7 +84,6 @@ export default function WatchScreen() {
   const indexParam = firstParam(params.i);
   const {
     activeProfileId,
-    activeProfile,
     savedVideos,
     watchLater,
     saveVideo,
@@ -100,9 +99,6 @@ export default function WatchScreen() {
     beginAllowancePlayback,
     checkpointAllowancePlayback,
     stopAllowancePlayback,
-    requestOwnerAuthorization,
-    addManagedTimeToday,
-    relockOwnerAccess,
   } = useApp();
 
   const sessionIds = useMemo<string[]>(
@@ -137,10 +133,12 @@ export default function WatchScreen() {
     };
   }, [id, params.channelId, params.channelTitle, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
 
+  const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
+
   const metadataQuery = useQuery({
     queryKey: ["video", id],
     queryFn: () => getVideo(id),
-    enabled: VIDEO_ID_PATTERN.test(id),
+    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true,
     staleTime: 5 * 60_000,
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
@@ -163,7 +161,6 @@ export default function WatchScreen() {
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const [currentSeconds, setCurrentSeconds] = useState<number>(0);
   const [playerDurationSeconds, setPlayerDurationSeconds] = useState<number>(video?.durationSeconds ?? 0);
-  const [allowanceStatus, setAllowanceStatus] = useState<DailyAllowanceStatus | null>(null);
   const allowanceEndingRef = useRef<boolean>(false);
   const chapters = useMemo(() => parseVideoChapters(video?.description, firstPositiveDuration(playerDurationSeconds, video?.durationSeconds)), [playerDurationSeconds, video?.description, video?.durationSeconds]);
   const playerRef = useRef<YouTubePlayerHandle>(null);
@@ -187,12 +184,12 @@ export default function WatchScreen() {
   const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
   const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
 
-  const showAllowanceWarning = useCallback((warning: DailyAllowanceWarning | undefined): void => {
+  const showAllowanceWarning = useCallback((warning: ViewingAllowanceWarning | undefined): void => {
     if (!warning) return;
-    Alert.alert(warning === "fiveMinutes" ? "Five minutes left" : "One minute left", warning === "fiveMinutes" ? "Five minutes of Daily Frame time remain today." : "One minute of Daily Frame time remains today.");
+    Alert.alert(warning === "fiveMinutes" ? "Five minutes left" : "One minute left", warning === "fiveMinutes" ? "Five minutes of viewing time remain today." : "One minute of viewing time remains today.");
   }, []);
 
-  const applyAllowanceStatus = useCallback((status: DailyAllowanceStatus): void => {
+  const applyAllowanceStatus = useCallback((status: ViewingAllowanceStatus): void => {
     setAllowanceStatus(status);
     showAllowanceWarning(status.kind === "limited" ? status.warning : undefined);
   }, [showAllowanceWarning]);
@@ -352,7 +349,7 @@ export default function WatchScreen() {
           void persist();
         }
         return remainingSeconds === 0
-          ? { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: current.allowanceMinutes, addedSeconds: current.addedSeconds }
+          ? { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: current.allowanceMinutes, ...(current.pendingChange ? { pendingChange: current.pendingChange } : {}) }
           : { ...current, remainingSeconds };
       });
     }, 1000);
@@ -519,31 +516,15 @@ export default function WatchScreen() {
     setAction(null);
   }, [beginAction, haptic, setAction]);
 
-  const addTime = useCallback(async (minutes: number): Promise<void> => {
-    if (!activeProfile || activeProfile.role !== "managed") return;
-    const response = await addManagedTimeToday(activeProfile.id, minutes);
-    relockOwnerAccess();
-    if (!response.result.ok || !response.status) {
-      Alert.alert("Couldn’t add time", response.result.message);
-      return;
-    }
-    allowanceEndingRef.current = false;
-    applyAllowanceStatus(response.status);
-    setPlaybackState("paused");
-    setPlayerReady(false);
-    setPlayerKey((value) => value + 1);
-    Alert.alert("Time added", `${minutes} minutes were added for today only. Press play when you’re ready.`);
-  }, [activeProfile, addManagedTimeToday, applyAllowanceStatus, relockOwnerAccess]);
+  const goToToday = useCallback((): void => {
+    pauseAndPersist();
+    router.replace("/(tabs)");
+  }, [pauseAndPersist]);
 
-  const askOwnerToAddTime = useCallback(async (): Promise<void> => {
-    const authorized = await requestOwnerAuthorization();
-    if (!authorized) return;
-    Alert.alert("Add time for today", "This does not change the recurring Daily Frame time.", [
-      { text: "Cancel", style: "cancel", onPress: relockOwnerAccess },
-      { text: "+15 min", onPress: () => { void addTime(15); } },
-      { text: "+30 min", onPress: () => { void addTime(30); } },
-    ]);
-  }, [addTime, relockOwnerAccess, requestOwnerAuthorization]);
+  const goToSaved = useCallback((): void => {
+    pauseAndPersist();
+    router.replace("/(tabs)/saved");
+  }, [pauseAndPersist]);
 
   const openInYouTube = useCallback((): void => {
     haptic();
@@ -657,12 +638,12 @@ export default function WatchScreen() {
 
       {allowanceBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
-          <Text style={styles.endEyebrow}>Daily Frame time</Text>
-          <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : "That’s enough for today."}</Text>
-          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" ? allowanceStatus.reason : "Today’s Frame playback time is complete. Your video place is saved."}</Text>
+          <Text style={styles.endEyebrow}>Daily viewing allowance</Text>
+          <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : "Today’s viewing is complete."}</Text>
+          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" ? allowanceStatus.reason : "Your Frame playback place is saved. Settings and the rest of Frame remain available."}</Text>
           <View style={styles.stateActions}>
-            <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for Now</Text></Pressable>
-            {allowanceStatus.kind === "complete" ? <Pressable onPress={() => { void askOwnerToAddTime(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Ask Owner to Add Time</Text></Pressable> : null}
+            <Pressable onPress={goToToday} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Today</Text></Pressable>
+            <Pressable onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></Pressable>
           </View>
         </View>
       ) : null}
@@ -768,7 +749,7 @@ export default function WatchScreen() {
           <ChevronLeft color={palette.wall} size={22} />
           <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
-        {allowanceStatus?.kind === "limited" ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(allowanceStatus.remainingSeconds)} Daily Frame time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
+        {allowanceStatus?.kind === "limited" ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(allowanceStatus.remainingSeconds)} viewing time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
       </View>
 
       <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>

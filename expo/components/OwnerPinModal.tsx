@@ -1,6 +1,7 @@
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import FullResetModal from "@/components/FullResetModal";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -19,6 +20,7 @@ export default function OwnerPinModal() {
   const [pin, setPin] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
+  const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
   const remainingSeconds = Math.max(0, Math.ceil((ownerPinCooldownUntil - now) / 1000));
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function OwnerPinModal() {
   };
 
   return (
+    <>
     <Modal visible={ownerPinPromptOpen} animationType="fade" transparent statusBarTranslucent onRequestClose={close}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
@@ -84,13 +87,15 @@ export default function OwnerPinModal() {
           >
             {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.buttonText}>Continue</Text>}
           </Pressable>
-          <Pressable onPress={() => { setPin(""); setBusy(false); Alert.alert("No cloud recovery", "Frame cannot recover an Owner PIN, and this version does not offer a household-wide reset."); }} style={styles.forgot} accessibilityRole="button">
+          <Pressable onPress={() => { setPin(""); setBusy(false); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
             <Text style={styles.forgotText}>Forgot PIN?</Text>
           </Pressable>
-          <Text style={styles.recovery}>Frame has no cloud PIN recovery. A household-wide reset is not available in this version.</Text>
+          <Text style={styles.recovery}>The only recovery is to erase all local Frame data and start over.</Text>
         </View>
       </View>
     </Modal>
+    <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />
+    </>
   );
 }
 

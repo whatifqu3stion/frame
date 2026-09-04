@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 2;
+export const DATABASE_SCHEMA_VERSION = 3;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -107,6 +107,28 @@ export const CREATE_MANAGED_ALLOWANCES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS m
   FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
 )`;
 
+export const CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS profile_playback_limits (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  dailyLimitMinutes INTEGER,
+  pendingDailyLimitMinutes INTEGER,
+  pendingActivatesAt INTEGER,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS profile_playback_usage (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  dayKey TEXT NOT NULL,
+  dayStartedAt INTEGER NOT NULL,
+  lastSeenAt INTEGER NOT NULL,
+  timezoneOffsetMinutes INTEGER NOT NULL,
+  consumedSeconds INTEGER NOT NULL,
+  warnedFive INTEGER NOT NULL,
+  warnedOne INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
 export function createProfileOwnedTableSql(table: ProfileOwnedTable, tableName: string = table): string {
   return `CREATE TABLE IF NOT EXISTS ${tableName} (${tableDefinitions[table]})`;
 }
@@ -131,13 +153,26 @@ export function buildVersion1MigrationPlan(metadata: SchemaMetadata): string[] {
   return statements;
 }
 
-/** Adds ordering and explicit Managed allowance state without rewriting profile-owned content. */
+/** Adds ordering and the legacy Managed allowance state without rewriting profile-owned content. */
 export function buildVersion2MigrationPlan(): string[] {
   return [
     "ALTER TABLE profiles ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0",
     `UPDATE profiles SET sortOrder = CASE WHEN role = 'owner' THEN 0 ELSE (SELECT COUNT(*) FROM profiles AS earlier WHERE earlier.role != 'owner' AND (earlier.createdAt < profiles.createdAt OR (earlier.createdAt = profiles.createdAt AND earlier.id < profiles.id))) + 1 END`,
     CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
     "PRAGMA user_version = 2",
+  ];
+}
+
+/** Adds profile-wide playback limits and daily usage while preserving any existing Managed allowance state. */
+export function buildVersion3MigrationPlan(): string[] {
+  return [
+    CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL,
+    CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL,
+    `INSERT OR IGNORE INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt)
+     SELECT profileId, CASE WHEN mode = 'dailyLimit' THEN dailyLimitMinutes ELSE NULL END, NULL, NULL, updatedAt FROM managed_allowances`,
+    `INSERT OR IGNORE INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt)
+     SELECT profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt FROM managed_allowances`,
+    "PRAGMA user_version = 3",
   ];
 }
 
@@ -204,5 +239,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 2) {
     await executeMigrationTransaction(db, buildVersion2MigrationPlan());
+    currentVersion = 2;
+  }
+  if (currentVersion < 3) {
+    await executeMigrationTransaction(db, buildVersion3MigrationPlan());
   }
 }

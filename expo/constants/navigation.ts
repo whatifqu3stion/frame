@@ -23,7 +23,7 @@ export const LEGACY_COMPATIBILITY_ROUTES = {
 
 export const FRAME_PLAYBACK_ROUTE = "/watch/[id]" as const;
 
-export const FRAME_PLAYBACK_ENTRY_PATHS = ["pastedLink", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"] as const;
+export const FRAME_PLAYBACK_ENTRY_PATHS = ["pastedLink", "sources", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"] as const;
 
 export const PLAYER_AND_RECOVERY_ROUTES = [
   FRAME_PLAYBACK_ROUTE,

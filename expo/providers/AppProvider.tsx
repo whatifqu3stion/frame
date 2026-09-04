@@ -8,16 +8,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
-import type { DailyAllowanceStatus, ManagedAllowance } from "@/models/dailyAllowance";
+import type { ManagedAllowance } from "@/models/dailyAllowance";
+import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
 import { OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
+import { performFullReset } from "@/domain/fullReset";
 import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
 import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
-import { clearProfileGoogleCredential, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
+import { clearProfileGoogleCredential, LEGACY_GOOGLE_TOKEN_KEY, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
 import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
 import { readActiveProfileId, writeActiveProfileId } from "@/storage/activeProfileStorage";
 import {
@@ -31,7 +33,7 @@ import {
 import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
 import { profileRepository } from "@/repositories/profileRepository";
-import { dailyAllowanceService } from "@/services/dailyAllowanceService";
+import { viewingAllowanceService } from "@/services/viewingAllowanceService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
 import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
@@ -55,6 +57,7 @@ import {
   listSavedVideos,
   listWatchLater,
   removeWatchLater,
+  resetAllFrameDatabaseData,
   saveVideo,
   unsaveVideo,
   upsertQueue,
@@ -329,7 +332,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     return () => {
       mounted = false;
-      void dailyAllowanceService.stopPlaying();
+      void viewingAllowanceService.stopPlaying();
       authorizationResolverRef.current?.(false);
       authorizationResolverRef.current = null;
     };
@@ -437,11 +440,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
       storageGenerationRef.current += 1;
-      await dailyAllowanceService.stopPlaying();
+      await viewingAllowanceService.stopPlaying();
       await queryClient.cancelQueries({ queryKey: ["library", previousProfileId] });
       const [snapshot] = await Promise.all([
         loadProfileSnapshot(profileId),
-        dailyAllowanceService.getStatus(target),
+        viewingAllowanceService.getStatus(target),
       ]);
       await writeActiveProfileId(AsyncStorage, profileId);
       applyProfileSnapshot(profileId, snapshot);
@@ -532,44 +535,46 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [profiles, queryClient, switchProfile]);
 
-  const setManagedProfileAllowance = useCallback(async (profileId: string, allowance: ManagedAllowance): Promise<AddChannelResult> => {
-    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Owner authorization is required to change Daily Frame time." };
+  const setProfileViewingAllowance = useCallback(async (profileId: string, allowance: ViewingAllowance): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Owner authorization is required to change a daily viewing allowance." };
+    if (!hasOwnerPin) return { ok: false, message: "Create an Owner PIN before enabling or changing viewing allowances." };
     const profile = profiles.find((candidate) => candidate.id === profileId);
-    if (!profile || profile.role !== "managed") return { ok: false, message: "That Managed profile is no longer available." };
+    if (!profile) return { ok: false, message: "That profile is no longer available." };
     try {
-      await dailyAllowanceService.setRecurringAllowance(profile, allowance);
-      return { ok: true, message: allowance.mode === "unlimited" ? "Daily Frame time is now explicitly Unlimited." : `Daily Frame time is now ${allowance.minutes} minutes.` };
+      const status = await viewingAllowanceService.setAllowance(profile, allowance);
+      if ("pendingChange" in status && status.pendingChange) return { ok: true, message: "This Owner relaxation will take effect after the 24-hour waiting period." };
+      return { ok: true, message: allowance.mode === "unlimited" ? "Daily viewing is now Unlimited." : `Daily viewing is now ${allowance.minutes} minutes.` };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t update that allowance." };
     }
-  }, [profiles]);
+  }, [hasOwnerPin, profiles]);
 
-  const getPlaybackAllowance = useCallback(async (profileId?: string): Promise<DailyAllowanceStatus> => {
-    const profile = profiles.find((candidate) => candidate.id === (profileId ?? activeProfileIdRef.current));
-    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
-    return dailyAllowanceService.getStatus(profile);
-  }, [profiles]);
-
-  const beginAllowancePlayback = useCallback(async (): Promise<DailyAllowanceStatus> => {
-    const profile = profiles.find((candidate) => candidate.id === activeProfileIdRef.current);
-    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
-    return dailyAllowanceService.beginPlaying(profile);
-  }, [profiles]);
-
-  const checkpointAllowancePlayback = useCallback((): Promise<DailyAllowanceStatus> => dailyAllowanceService.checkpoint(), []);
-  const stopAllowancePlayback = useCallback((): Promise<DailyAllowanceStatus | null> => dailyAllowanceService.stopPlaying(), []);
-
-  const addManagedTimeToday = useCallback(async (profileId: string, minutes: number): Promise<{ result: AddChannelResult; status?: DailyAllowanceStatus }> => {
-    if (!authorizationSessionRef.current.isAuthorized()) return { result: { ok: false, message: "Owner authorization is required to add time." } };
-    const profile = profiles.find((candidate) => candidate.id === profileId);
-    if (!profile || profile.role !== "managed") return { result: { ok: false, message: "That Managed profile is no longer available." } };
+  const cancelPendingOwnerAllowance = useCallback(async (): Promise<AddChannelResult> => {
+    if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Owner authorization is required." };
+    const owner = profiles.find((candidate) => candidate.role === "owner");
+    if (!owner) return { ok: false, message: "The Owner profile is unavailable." };
     try {
-      const status = await dailyAllowanceService.addTimeForToday(profile, minutes);
-      return { result: { ok: true, message: `${minutes} minutes added for today only.` }, status };
+      await viewingAllowanceService.cancelPendingOwnerChange(owner);
+      return { ok: true, message: "Pending Owner allowance change cancelled." };
     } catch (error) {
-      return { result: { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t add time today." } };
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t cancel that change." };
     }
   }, [profiles]);
+
+  const getPlaybackAllowance = useCallback(async (profileId?: string): Promise<ViewingAllowanceStatus> => {
+    const profile = profiles.find((candidate) => candidate.id === (profileId ?? activeProfileIdRef.current));
+    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
+    return viewingAllowanceService.getStatus(profile);
+  }, [profiles]);
+
+  const beginAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus> => {
+    const profile = profiles.find((candidate) => candidate.id === activeProfileIdRef.current);
+    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
+    return viewingAllowanceService.beginPlaying(profile);
+  }, [profiles]);
+
+  const checkpointAllowancePlayback = useCallback((): Promise<ViewingAllowanceStatus> => viewingAllowanceService.checkpoint(), []);
+  const stopAllowancePlayback = useCallback((): Promise<ViewingAllowanceStatus | null> => viewingAllowanceService.stopPlaying(), []);
 
   const saveOwnerPin = useCallback(async (pin: string): Promise<AddChannelResult> => {
     if (!authorizationSessionRef.current.isAuthorized()) return { ok: false, message: "Open protected controls again to continue." };
@@ -604,7 +609,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && previousState !== "active") queueSourceLeaseReconciliation("foreground");
       if (nextState !== "active") {
-        void dailyAllowanceService.stopPlaying();
+        void viewingAllowanceService.stopPlaying();
         relockOwnerAccess();
       }
       previousState = nextState;
@@ -968,6 +973,44 @@ export const [AppProvider, useApp] = createContextHook(() => {
     invalidateLibrary();
   }, [activeProfileId, invalidateLibrary, requestOwnerAuthorization]);
 
+  const eraseAllFrameData = useCallback(async (): Promise<void> => {
+    storageGenerationRef.current += 1;
+    await performFullReset({
+      stopPlayback: async () => { await viewingAllowanceService.stopPlaying(); },
+      flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]); },
+      clearProtectedCredentials: async () => {
+        if (ownerPinAvailability !== "available") return;
+        const [existingProfiles, sources] = await Promise.all([profileRepository.list(), followedSourceRepository.listDistinctSources()]);
+        await Promise.all([
+          ...existingProfiles.map((profile) => clearProfileGoogleCredential(SecureStore, profile.id)),
+          ...sources.map((source) => sourceLeaseTokenStore.remove(source)),
+          SecureStore.deleteItemAsync(LEGACY_GOOGLE_TOKEN_KEY),
+          removeOwnerPin(),
+        ]);
+      },
+      resetDatabase: resetAllFrameDatabaseData,
+      clearKeyValueStorage: async () => { await AsyncStorage.clear(); },
+      restoreOwnerSelection: async () => { await writeActiveProfileId(AsyncStorage, DEFAULT_OWNER_PROFILE_ID); },
+    });
+    const cleanOwner: Profile = { id: DEFAULT_OWNER_PROFILE_ID, name: "Owner", role: "owner", sortOrder: 0, createdAt: 0, updatedAt: 0 };
+    activeProfileIdRef.current = DEFAULT_OWNER_PROFILE_ID;
+    prefsRef.current = defaultPrefs;
+    interestsRef.current = [];
+    recentSearchesRef.current = [];
+    authorizationSessionRef.current.relock();
+    queryClient.clear();
+    setProfiles([cleanOwner]);
+    setActiveProfileId(DEFAULT_OWNER_PROFILE_ID);
+    setPrefs(defaultPrefs);
+    setInterests([]);
+    setRecentSearches([]);
+    setGoogleCredential(null);
+    setHasOwnerPin(false);
+    setIsOwnerAuthorized(false);
+    setOwnerPinPromptOpen(false);
+    setOwnerPinPromptError(null);
+  }, [ownerPinAvailability, queryClient]);
+
   return useMemo(
     () => ({
       ready,
@@ -981,12 +1024,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameLocalProfile,
       reorderLocalProfile,
       deleteLocalProfile,
-      setManagedProfileAllowance,
+      setProfileViewingAllowance,
+      cancelPendingOwnerAllowance,
       getPlaybackAllowance,
       beginAllowancePlayback,
       checkpointAllowancePlayback,
       stopAllowancePlayback,
-      addManagedTimeToday,
       requestOwnerAuthorization,
       relockOwnerAccess,
       ownerPinAvailability,
@@ -1066,6 +1109,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       recordResume,
       clearVideoResume,
       wipeAllData,
+      eraseAllFrameData,
     }),
     [
       ready,
@@ -1078,12 +1122,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameLocalProfile,
       reorderLocalProfile,
       deleteLocalProfile,
-      setManagedProfileAllowance,
+      setProfileViewingAllowance,
+      cancelPendingOwnerAllowance,
       getPlaybackAllowance,
       beginAllowancePlayback,
       checkpointAllowancePlayback,
       stopAllowancePlayback,
-      addManagedTimeToday,
       requestOwnerAuthorization,
       relockOwnerAccess,
       ownerPinAvailability,
@@ -1146,6 +1190,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       recordResume,
       clearVideoResume,
       wipeAllData,
+      eraseAllFrameData,
     ],
   );
 });

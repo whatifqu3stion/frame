@@ -2,20 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
-import type { ManagedAllowance } from "@/models/dailyAllowance";
+import type { ViewingAllowance } from "@/models/viewingAllowance";
 
 type Props = {
-  value: ManagedAllowance;
-  onChange: (allowance: ManagedAllowance) => void;
+  value: ViewingAllowance;
+  onChange: (allowance: ViewingAllowance) => void;
 };
 
-const PRESETS = [15, 30, 60] as const;
+const PRESETS = [15, 30, 45, 60] as const;
 
-/** Compact explicit allowance selector shared by Managed creation and editing. */
+/** Compact profile viewing-allowance selector with validated whole-minute choices. */
 export default function AllowancePicker({ value, onChange }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const isPreset = value.mode === "dailyLimit" && PRESETS.includes(value.minutes as 15 | 30 | 60);
+  const isPreset = value.mode === "dailyLimit" && PRESETS.includes(value.minutes as 15 | 30 | 45 | 60);
   const [custom, setCustom] = useState<string>(value.mode === "dailyLimit" && !isPreset ? String(value.minutes) : "");
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function AllowancePicker({ value, onChange }: Props) {
 
   return (
     <View>
-      <Text style={styles.label}>Daily Frame time</Text>
+      <Text style={styles.label}>Daily viewing allowance</Text>
       <View style={styles.options}>
         {PRESETS.map((minutes) => {
           const selected = value.mode === "dailyLimit" && value.minutes === minutes;
@@ -40,7 +40,7 @@ export default function AllowancePicker({ value, onChange }: Props) {
         <Pressable onPress={() => chooseCustom(custom || "1")} style={[styles.option, value.mode === "dailyLimit" && !isPreset && styles.selected]} accessibilityRole="radio"><Text style={[styles.optionText, value.mode === "dailyLimit" && !isPreset && styles.selectedText]}>Custom</Text></Pressable>
         <Pressable onPress={() => onChange({ mode: "unlimited" })} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ selected: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
       </View>
-      {value.mode === "dailyLimit" && !isPreset ? <TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom Daily Frame time in minutes" /> : null}
+      {value.mode === "dailyLimit" && !isPreset ? <TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" /> : null}
       <Text style={styles.note}>This allowance limits playback only inside Frame. It does not block YouTube, browsers, or other apps.</Text>
     </View>
   );

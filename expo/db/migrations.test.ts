@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
+  CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL,
+  CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL,
   DATABASE_SCHEMA_VERSION,
   PROFILE_OWNED_TABLES,
   buildVersion1MigrationPlan,
   buildVersion2MigrationPlan,
+  buildVersion3MigrationPlan,
   createProfileOwnedTableSql,
   executeMigrationTransaction,
   migrateDatabase,
@@ -60,7 +63,7 @@ describe("database version 1 migration", () => {
       const version = database.query("PRAGMA user_version").get() as { user_version: number };
       const tables = database.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[];
       expect(version.user_version).toBe(DATABASE_SCHEMA_VERSION);
-      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", ...PROFILE_OWNED_TABLES]));
+      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", ...PROFILE_OWNED_TABLES]));
       expect(database.query("SELECT role, sortOrder FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner", sortOrder: 0 });
     } finally {
       database.close();
@@ -94,6 +97,7 @@ describe("database version 1 migration", () => {
     }
     expect(plan.at(-1)).toBe("PRAGMA user_version = 1");
     expect(buildVersion2MigrationPlan()).toContain(CREATE_MANAGED_ALLOWANCES_TABLE_SQL);
+    expect(buildVersion3MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL, CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL]));
   });
 
   test("assigns representative legacy records to the stable Owner", () => {
@@ -144,13 +148,29 @@ describe("database version 1 migration", () => {
       database.query("INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES ('standard-old','Standard','standard',1,1)").run();
       database.query("INSERT INTO saved_videos VALUES ('standard-old','video-old','Saved','channel','Channel','thumb','2026-01-01',60,NULL,1)").run();
       await migrateDatabase(adapter);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
       expect(database.query("SELECT name, role, sortOrder FROM profiles WHERE id = 'standard-old'").get()).toEqual({ name: "Standard", role: "standard", sortOrder: 1 });
       expect(database.query("SELECT title FROM saved_videos WHERE profileId = 'standard-old'").get()).toEqual({ title: "Saved" });
       expect(database.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'managed_allowances'").get()).toEqual({ name: "managed_allowances" });
     } finally {
       database.close();
     }
+  });
+
+  test("migrates existing Managed allowance and usage into profile-wide storage", async () => {
+    const database = new Database(":memory:");
+    try {
+      const adapter = sqliteAdapter(database);
+      await executeMigrationTransaction(adapter, buildVersion1MigrationPlan({}));
+      await executeMigrationTransaction(adapter, buildVersion2MigrationPlan());
+      database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES ('managed-existing','Kid','managed',1,1,1)").run();
+      database.query("INSERT INTO managed_allowances VALUES ('managed-existing','dailyLimit',30,'2026-09-04',1,2,0,321,0,1,0,3)").run();
+      await migrateDatabase(adapter);
+      expect(database.query("SELECT dailyLimitMinutes,pendingActivatesAt FROM profile_playback_limits WHERE profileId='managed-existing'").get()).toEqual({ dailyLimitMinutes: 30, pendingActivatesAt: null });
+      expect(database.query("SELECT consumedSeconds,warnedFive,warnedOne FROM profile_playback_usage WHERE profileId='managed-existing'").get()).toEqual({ consumedSeconds: 321, warnedFive: 1, warnedOne: 0 });
+      await migrateDatabase(adapter);
+      expect(database.query("SELECT COUNT(*) AS count FROM profile_playback_limits WHERE profileId='managed-existing'").get()).toEqual({ count: 1 });
+    } finally { database.close(); }
   });
 
   test("supports Managed create, rename, reorder, and cascade delete without touching Owner", async () => {

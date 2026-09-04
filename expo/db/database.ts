@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
 import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
+import type { ProfilePlaybackLimitRecord, ProfilePlaybackUsageRecord } from "@/models/viewingAllowance";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -45,6 +46,8 @@ const webOwner: Profile = {
 const webStore = {
   profiles: new Map<string, Profile>([[webOwner.id, webOwner]]),
   allowances: new Map<string, ManagedAllowanceRecord>(),
+  playbackLimits: new Map<string, ProfilePlaybackLimitRecord>(),
+  playbackUsage: new Map<string, ProfilePlaybackUsageRecord>(),
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
@@ -69,7 +72,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "managed_allowances", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -92,7 +95,11 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
   if (Platform.OS === "web") {
     if (webStore.profiles.has(profile.id)) throw new Error("That profile already exists.");
     webStore.profiles.set(profile.id, { ...profile });
-    if (allowance) webStore.allowances.set(profile.id, { ...allowance });
+    if (allowance) {
+      webStore.allowances.set(profile.id, { ...allowance });
+      webStore.playbackLimits.set(profile.id, { profileId: profile.id, dailyLimitMinutes: allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, pendingDailyLimitMinutes: null, pendingActivatesAt: null, updatedAt: allowance.updatedAt });
+      webStore.playbackUsage.set(profile.id, { profileId: profile.id, dayKey: allowance.dayKey, dayStartedAt: allowance.dayStartedAt, lastSeenAt: allowance.lastSeenAt, timezoneOffsetMinutes: allowance.timezoneOffsetMinutes, consumedSeconds: allowance.consumedSeconds, warnedFive: allowance.warnedFive, warnedOne: allowance.warnedOne, updatedAt: allowance.updatedAt });
+    }
     return;
   }
   const db = await getDb();
@@ -101,7 +108,11 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
       "INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?,?,?,?,?,?)",
       [profile.id, profile.name, profile.role, profile.sortOrder, profile.createdAt, profile.updatedAt],
     );
-    if (allowance) await writeManagedAllowanceRecord(allowance, db);
+    if (allowance) {
+      await writeManagedAllowanceRecord(allowance, db);
+      await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt) VALUES (?,?,?,?,?)", [profile.id, allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, null, null, allowance.updatedAt]);
+      await db.runAsync("INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)", [profile.id, allowance.dayKey, allowance.dayStartedAt, allowance.lastSeenAt, allowance.timezoneOffsetMinutes, allowance.consumedSeconds, allowance.warnedFive, allowance.warnedOne, allowance.updatedAt]);
+    }
   });
 }
 
@@ -150,6 +161,8 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     clearProfileMap(webStore.watchLater, profileId);
     clearProfileMap(webStore.channels, profileId);
     webStore.allowances.delete(profileId);
+    webStore.playbackLimits.delete(profileId);
+    webStore.playbackUsage.delete(profileId);
     webStore.profiles.delete(profileId);
     return;
   }
@@ -157,7 +170,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
     if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
     await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
@@ -186,6 +199,38 @@ async function writeManagedAllowanceRecord(record: ManagedAllowanceRecord, datab
 
 export async function upsertManagedAllowanceRecord(record: ManagedAllowanceRecord): Promise<void> {
   await writeManagedAllowanceRecord(record);
+}
+
+export async function readProfilePlaybackLimit(profileId: string): Promise<ProfilePlaybackLimitRecord | null> {
+  if (Platform.OS === "web") return webStore.playbackLimits.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ProfilePlaybackLimitRecord>("SELECT * FROM profile_playback_limits WHERE profileId = ?", [profileId])) ?? null;
+}
+
+export async function upsertProfilePlaybackLimit(record: ProfilePlaybackLimitRecord): Promise<void> {
+  if (Platform.OS === "web") { webStore.playbackLimits.set(record.profileId, { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt) VALUES (?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET dailyLimitMinutes=excluded.dailyLimitMinutes,pendingDailyLimitMinutes=excluded.pendingDailyLimitMinutes,pendingActivatesAt=excluded.pendingActivatesAt,updatedAt=excluded.updatedAt`,
+    [record.profileId, record.dailyLimitMinutes, record.pendingDailyLimitMinutes, record.pendingActivatesAt, record.updatedAt],
+  );
+}
+
+export async function readProfilePlaybackUsage(profileId: string): Promise<ProfilePlaybackUsageRecord | null> {
+  if (Platform.OS === "web") return webStore.playbackUsage.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ProfilePlaybackUsageRecord>("SELECT * FROM profile_playback_usage WHERE profileId = ?", [profileId])) ?? null;
+}
+
+export async function upsertProfilePlaybackUsage(record: ProfilePlaybackUsageRecord): Promise<void> {
+  if (Platform.OS === "web") { webStore.playbackUsage.set(record.profileId, { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET dayKey=excluded.dayKey,dayStartedAt=excluded.dayStartedAt,lastSeenAt=excluded.lastSeenAt,timezoneOffsetMinutes=excluded.timezoneOffsetMinutes,consumedSeconds=excluded.consumedSeconds,warnedFive=excluded.warnedFive,warnedOne=excluded.warnedOne,updatedAt=excluded.updatedAt`,
+    [record.profileId, record.dayKey, record.dayStartedAt, record.lastSeenAt, record.timezoneOffsetMinutes, record.consumedSeconds, record.warnedFive, record.warnedOne, record.updatedAt],
+  );
 }
 
 export async function listSavedVideos(profileId: string): Promise<Video[]> {
@@ -402,7 +447,7 @@ export async function unfollowChannel(profileId: string, id: string): Promise<vo
   await db.runAsync("DELETE FROM followed_channels WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
-/** Clears only the active profile's local records; profiles and other profiles remain intact. */
+/** Clears only the active profile's local content; profiles and allowance state remain intact. */
 export async function clearAllData(profileId: string): Promise<void> {
   if (Platform.OS === "web") {
     clearProfileMap(webStore.saved, profileId);
@@ -417,5 +462,30 @@ export async function clearAllData(profileId: string): Promise<void> {
     for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
+  });
+}
+
+/** Irreversibly restores the local database to one clean Owner profile. */
+export async function resetAllFrameDatabaseData(): Promise<void> {
+  if (Platform.OS === "web") {
+    webStore.profiles.clear();
+    webStore.profiles.set(webOwner.id, { ...webOwner });
+    webStore.allowances.clear();
+    webStore.playbackLimits.clear();
+    webStore.playbackUsage.clear();
+    webStore.saved.clear();
+    webStore.resume.clear();
+    webStore.queues.clear();
+    webStore.watchLater.clear();
+    webStore.channels.clear();
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+      await db.runAsync(`DELETE FROM ${table}`);
+    }
+    await db.runAsync("DELETE FROM profiles");
+    await db.runAsync("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?,?,?,?,?,?)", [webOwner.id, webOwner.name, webOwner.role, webOwner.sortOrder, webOwner.createdAt, webOwner.updatedAt]);
   });
 }
