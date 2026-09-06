@@ -86,6 +86,33 @@ export type Channel = {
   thumbnailUrl: string;
 };
 
+export type ResolvedSource = {
+  provider: "youtube";
+  providerSourceId: string;
+  handle: string | null;
+  displayName: string;
+  description: string;
+  thumbnailUrl: string | null;
+};
+
+export type ResolvedVideo = {
+  provider: "youtube";
+  providerMediaId: string;
+  title: string;
+  description: string;
+  thumbnailUrl: string | null;
+  publishedAt: string | null;
+  durationSeconds: number | null;
+  isLivestream: boolean;
+  isUpcomingPremiere: boolean;
+};
+
+export type SourceResolution = {
+  source: ResolvedSource;
+  video?: ResolvedVideo;
+  provenance: "cache" | "provider";
+};
+
 export type ChannelProvenance = "google" | "link" | "digest" | "manual";
 
 export type FollowedChannel = Channel & {
@@ -123,7 +150,18 @@ export type UserPreferences = {
   googleConnectedAt: number | null;
 };
 
-export type ServiceFailureKind = "offline" | "unauthorized" | "quota" | "unavailable" | "failed";
+export type ServiceFailureKind =
+  | "offline"
+  | "unauthorized"
+  | "quota"
+  | "unavailable"
+  | "failed"
+  | "invalid_request"
+  | "not_found"
+  | "allowance_exhausted"
+  | "quota_exhausted"
+  | "temporarily_unavailable"
+  | "network_error";
 
 /** A truthful result from a network-backed service. */
 export type ServiceResult<T> =

@@ -3,9 +3,11 @@ const generatedNotice = "// AUTO-GENERATED from supabase/functions. Do not edit 
 const files = [
   "_shared/edge-security.ts",
   "_shared/source-leases.ts",
+  "_shared/source-resolution.ts",
   "_shared/weekly-picks-contract.ts",
   "_shared/weekly-picks.ts",
   "source-leases/index.ts",
+  "resolve-source/index.ts",
   "weekly-picks/index.ts",
 ] as const;
 

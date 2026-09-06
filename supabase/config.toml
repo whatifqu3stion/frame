@@ -25,3 +25,6 @@ verify_jwt = false
 
 [functions.source-leases]
 verify_jwt = false
+
+[functions.resolve-source]
+verify_jwt = false

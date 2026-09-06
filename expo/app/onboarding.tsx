@@ -11,6 +11,7 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { isInterestOptionDisabled } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
+import type { SourceResolution } from "@/types";
 
 const { width } = Dimensions.get("window");
 const LAST_STEP = ONBOARDING_STEPS.length - 1;
@@ -120,37 +121,59 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
 function SourceStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { addChannelByLink, googleConnected } = useApp();
+  const { resolveSourceInput, confirmSource, googleConnected } = useApp();
   const [link, setLink] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
+  const [resolution, setResolution] = useState<SourceResolution | null>(null);
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const addSource = async (): Promise<void> => {
+  const resolveSource = async (): Promise<void> => {
     if (!link.trim() || busy) return;
     setBusy(true);
+    setResolution(null);
     setFeedback(null);
-    const result = await addChannelByLink(link.trim());
+    const result = await resolveSourceInput(link.trim());
+    setBusy(false);
+    if (result.status === "success") {
+      setResolution(result.data);
+      setFeedback({ ok: true, message: "Source verified. Confirm to follow it for this profile." });
+    } else {
+      setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
+    }
+  };
+
+  const followSource = async (): Promise<void> => {
+    if (!resolution || busy) return;
+    setBusy(true);
+    const result = await confirmSource(resolution);
     setBusy(false);
     setFeedback(result);
-    if (result.ok) setLink("");
+    if (result.ok) { setLink(""); setResolution(null); }
   };
 
   return (
     <ScrollView style={[styles.step, { width: stepWidth }]} contentContainerStyle={styles.sourceContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>One trusted source</Text>
       <Text style={styles.stepTitle}>Start with{"\n"}someone you trust.</Text>
-      <Text style={styles.stepBody}>Paste a supported channel, handle, or video link. You can skip this and add a source later.</Text>
+      <Text style={styles.stepBody}>Paste a channel ID, @handle, channel URL, or individual YouTube video. You can skip this and add a source later.</Text>
       <View style={styles.inputRow}>
         <Link2 size={17} color={palette.inkMuted} strokeWidth={1.7} />
-        <TextInput value={link} onChangeText={(value) => { setLink(value); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void addSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
+        <TextInput value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
       </View>
-      <Pressable onPress={() => { void addSource(); }} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} disabled={busy || !link.trim()} accessibilityRole="button" testID="onboard-add-source">
-        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>Add source</Text>}
+      {resolution ? (
+        <View style={styles.sourcePreview} testID="onboard-source-preview">
+          <Text style={styles.noticeTitle}>{resolution.source.displayName}</Text>
+          <Text style={styles.noticeBody}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>
+          {resolution.video ? <Text style={styles.noticeBody}>From video: {resolution.video.title}</Text> : null}
+        </View>
+      ) : null}
+      <Pressable onPress={() => { if (resolution) void followSource(); else void resolveSource(); }} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} disabled={busy || (!resolution && !link.trim())} accessibilityRole="button" testID={resolution ? "onboard-confirm-source" : "onboard-resolve-source"}>
+        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>{resolution ? "Follow source" : "Verify source"}</Text>}
       </Pressable>
       {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
       <View style={styles.googleNotice} accessible>
-        <Text style={styles.noticeTitle}>{googleConnected ? "Google connected" : "Google import unavailable"}</Text>
-        <Text style={styles.noticeBody}>Selective subscription import is not available yet. Frame will not follow Google subscriptions automatically.</Text>
+        <Text style={styles.noticeTitle}>{googleConnected ? "Google connected" : "No Google sign-in needed"}</Text>
+        <Text style={styles.noticeBody}>Manual source setup works on its own. Frame never follows Google subscriptions automatically.</Text>
       </View>
     </ScrollView>
   );
@@ -183,6 +206,7 @@ function createStyles(palette: FramePalette, frameType: FrameType) {
     chipScroll: { marginTop: spacing.md }, chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, paddingBottom: spacing.xl }, chip: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active }, chipDisabled: { opacity: 0.48, borderStyle: "dashed" }, chipText: { ...frameType.label }, chipTextActive: { color: palette.active }, chipTextDisabled: { textDecorationLine: "line-through" },
     sourceContent: { paddingBottom: spacing.xxl }, inputRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.xl, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, input: { ...frameType.body, flex: 1, paddingVertical: 0 },
     addButton: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, addButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 }, feedback: { ...frameType.label, marginTop: spacing.sm },
+    sourcePreview: { padding: spacing.md, marginTop: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.active },
     googleNotice: { padding: spacing.md, marginTop: spacing.xl, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, noticeTitle: { ...frameType.label }, noticeBody: { ...frameType.bodySoft, color: palette.inkMuted, marginTop: spacing.xs },
     endMark: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xxl }, endLine: { flex: 1, height: 1, backgroundColor: palette.borderSoft }, endLabel: { ...frameType.caption, color: palette.inkMuted },
     bottomRow: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.page, paddingTop: spacing.sm }, backButton: { minWidth: 72, minHeight: 48, justifyContent: "center" }, nextButton: { minHeight: 52, minWidth: 132, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg, borderRadius: radii.control, backgroundColor: palette.accentDeep }, nextText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },

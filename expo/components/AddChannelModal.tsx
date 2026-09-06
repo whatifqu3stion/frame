@@ -1,39 +1,92 @@
+import { Image } from "expo-image";
 import { router } from "expo-router";
-import { Link2, Play, X } from "lucide-react-native";
+import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { extractYouTubeId } from "@/services/youtube";
+import { resolutionVideoToVideo } from "@/services/youtube";
+import type { SourceResolution } from "@/types";
 
 type Props = { visible: boolean; onClose: () => void };
+type Feedback = { ok: boolean; message: string };
 
-/** A calm sheet for adding a source or explicitly opening a pasted video. */
+/** Resolves a shared source first, then requires an explicit profile-local follow. */
 export default function AddChannelModal({ visible, onClose }: Props) {
-  const { addChannelByLink, requirePurchase } = useApp();
+  const { resolveSourceInput, confirmSource, requirePurchase, saveVideo } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [value, setValue] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
-  const videoId = extractYouTubeId(value);
+  const [resolution, setResolution] = useState<SourceResolution | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const close = (): void => { setValue(""); setBusy(false); setFeedback(null); onClose(); };
+  const close = (): void => {
+    setValue("");
+    setBusy(false);
+    setResolution(null);
+    setFeedback(null);
+    onClose();
+  };
+
   const submit = async (): Promise<void> => {
     if (!value.trim() || busy || !requirePurchase("creators")) return;
     setBusy(true);
+    setResolution(null);
     setFeedback(null);
-    const result = await addChannelByLink(value.trim());
+    const result = await resolveSourceInput(value.trim());
+    setBusy(false);
+    if (result.status === "success") {
+      setResolution(result.data);
+      setFeedback({ ok: true, message: result.data.provenance === "cache" ? "Verified from Frame’s shared catalog." : "Verified with YouTube." });
+      return;
+    }
+    setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
+  };
+
+  const follow = async (): Promise<void> => {
+    if (!resolution || busy) return;
+    setBusy(true);
+    const result = await confirmSource(resolution);
     setBusy(false);
     setFeedback(result);
-    if (result.ok) { setValue(""); setTimeout(close, 900); }
+    if (result.ok) setTimeout(close, 700);
   };
-  const watchVideo = (): void => {
-    if (!videoId) return;
+
+  const watch = (): void => {
+    if (!resolution) return;
+    const video = resolutionVideoToVideo(resolution);
+    if (!video) return;
     close();
-    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: videoId } });
+    router.push({
+      pathname: FRAME_PLAYBACK_ROUTE,
+      params: {
+        id: video.id,
+        title: video.title,
+        channelId: video.channelId,
+        channelTitle: video.channelTitle,
+        thumbnailUrl: video.thumbnailUrl,
+        publishedAt: video.publishedAt,
+        durationSeconds: String(video.durationSeconds),
+      },
+    });
+  };
+
+  const save = async (): Promise<void> => {
+    if (!resolution || busy) return;
+    const video = resolutionVideoToVideo(resolution);
+    if (!video) return;
+    setBusy(true);
+    try {
+      await saveVideo(video);
+      setFeedback({ ok: true, message: `Saved ${video.title}.` });
+    } catch {
+      setFeedback({ ok: false, message: "That video couldn’t be saved. Try again." });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -48,12 +101,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             </Pressable>
           </View>
           <Text style={styles.heading}>Paste a link.</Text>
-          <Text style={styles.body}>Use a supported channel, handle, or video link. A video link can be watched directly or used to follow its source.</Text>
+          <Text style={styles.body}>Use a channel ID, @handle, channel URL, or individual YouTube video. Frame verifies it before anything is followed.</Text>
           <View style={styles.inputRow}>
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
             <TextInput
               value={value}
-              onChangeText={(text) => { setValue(text); setFeedback(null); }}
+              onChangeText={(text) => { setValue(text); setResolution(null); setFeedback(null); }}
               placeholder="youtube.com/@source"
               placeholderTextColor={palette.inkMuted}
               autoCapitalize="none"
@@ -67,15 +120,40 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             />
           </View>
           {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
-          {videoId ? (
-            <Pressable onPress={watchVideo} style={({ pressed }) => [styles.watchButton, pressed && styles.pressed]} accessibilityRole="button" testID="watch-pasted-video">
-              <Play size={16} color={palette.accent} fill={palette.accent} />
-              <Text style={styles.watchButtonText}>Watch this video</Text>
-            </Pressable>
+
+          {resolution ? (
+            <View style={styles.preview} testID="resolved-source-preview">
+              {resolution.source.thumbnailUrl ? <Image source={{ uri: resolution.source.thumbnailUrl }} style={styles.avatar} contentFit="cover" /> : <View style={styles.avatarFallback} />}
+              <View style={styles.previewCopy}>
+                <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
+                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>
+                {resolution.video ? <Text style={styles.videoTitle} numberOfLines={2}>Video · {resolution.video.title}</Text> : null}
+              </View>
+            </View>
           ) : null}
-          <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="add-channel-submit">
-            {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Add source</Text>}
-          </Pressable>
+
+          {resolution?.video ? (
+            <View style={styles.actionRow}>
+              <Pressable onPress={watch} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="watch-resolved-video">
+                <Play size={16} color={palette.accent} fill={palette.accent} />
+                <Text style={styles.secondaryText}>Watch</Text>
+              </Pressable>
+              <Pressable onPress={() => { void save(); }} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="save-resolved-video">
+                <BookmarkPlus size={17} color={palette.accent} />
+                <Text style={styles.secondaryText}>Save</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {resolution ? (
+            <Pressable onPress={() => { void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <View style={styles.buttonContent}><UserPlus size={17} color={palette.onDark} /><Text style={styles.buttonText}>Follow source</Text></View>}
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Verify source</Text>}
+            </Pressable>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -91,13 +169,22 @@ function createStyles(palette: FramePalette, type: FrameType) {
     eyebrow: { ...type.caption, color: palette.accent },
     closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
-    body: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 340 },
+    body: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 350 },
     inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, minHeight: 52, marginTop: spacing.lg, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft },
     input: { flex: 1, ...type.body, paddingVertical: 0, fontSize: 15 },
     feedback: { ...type.label, marginTop: spacing.md },
-    watchButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border },
-    watchButtonText: { ...type.label, color: palette.accent },
+    preview: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    avatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: palette.surfaceDeep },
+    avatarFallback: { width: 54, height: 54, borderRadius: 27, backgroundColor: palette.surfaceDeep },
+    previewCopy: { flex: 1 },
+    previewTitle: { ...type.label, fontSize: 16 },
+    previewMeta: { ...type.caption, color: palette.inkMuted, marginTop: 2 },
+    videoTitle: { ...type.bodySoft, marginTop: spacing.xs },
+    actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+    secondaryButton: { flex: 1, minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border },
+    secondaryText: { ...type.label, color: palette.accent },
     button: { minHeight: 52, marginTop: spacing.md, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: palette.active },
+    buttonContent: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
     buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
     pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   });

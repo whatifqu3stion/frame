@@ -1,6 +1,8 @@
-import { BACKEND_BASE_URL, FEATURE_FLAGS } from "@/constants/config";
+import { APP_ENV, BACKEND_BASE_URL, FEATURE_FLAGS } from "@/constants/config";
+import { parseSourceInput, type ParsedSourceInput } from "@/domain/sourceInput";
 import { isLiveYouTubeSearchEnabled, unavailableSearchResult } from "@/services/searchPolicy";
-import type { Channel, ServiceFailureKind, ServiceResult, Video } from "@/types";
+import { installationIdentityStore } from "@/storage/installationIdentityStorage";
+import type { Channel, ResolvedSource, ResolvedVideo, ServiceFailureKind, ServiceResult, SourceResolution, Video } from "@/types";
 
 const FUNCTIONS_URL = BACKEND_BASE_URL;
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
@@ -88,42 +90,56 @@ export async function getChannel(channelId: string): Promise<ServiceResult<Chann
   return requestBackend<Channel>(`/youtube/channels/${encodeURIComponent(channelId)}`);
 }
 
-export type ParsedLink =
-  | { kind: "channelId"; value: string }
-  | { kind: "handle"; value: string }
-  | { kind: "video"; value: string }
-  | { kind: "unknown"; value: string };
+export type ParsedLink = ParsedSourceInput;
 
-/** Classifies a pasted YouTube link as a channel id, @handle, or video. */
-export function parseYouTubeLink(input: string): ParsedLink {
-  const text = input.trim();
-  if (!text) return { kind: "unknown", value: "" };
+type SourceResolutionEnvelope = {
+  outcome: "success" | "invalid_request" | "not_found" | "allowance_exhausted" | "quota_exhausted" | "temporarily_unavailable" | "network_error";
+  source?: unknown;
+  video?: unknown;
+  provenance?: unknown;
+  message?: unknown;
+};
 
-  const channelId = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})(?:[/?#]|$)/i.exec(text);
-  if (channelId?.[1]) return { kind: "channelId", value: channelId[1] };
-  if (/^UC[A-Za-z0-9_-]{22}$/.test(text)) return { kind: "channelId", value: text };
+/** Backward-compatible name for Frame's strict manual-source parser. */
+export const parseYouTubeLink = parseSourceInput;
 
-  const handle = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/@([A-Za-z0-9_.-]+)(?:[/?#]|$)/i.exec(text);
-  if (handle?.[1]) return { kind: "handle", value: handle[1] };
-  if (/^@[A-Za-z0-9_.-]+$/.test(text)) return { kind: "handle", value: text.slice(1) };
-
-  const legacy = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:c|user)\/([A-Za-z0-9_.-]+)(?:[/?#]|$)/i.exec(text);
-  if (legacy?.[1]) return { kind: "handle", value: legacy[1] };
-
-  const videoId = extractYouTubeId(text);
-  if (videoId) return { kind: "video", value: videoId };
-  return { kind: "unknown", value: text };
-}
-
-/** Resolves a link to a verified stable channel; placeholders are never returned. */
-export async function resolveChannelFromLink(parsed: ParsedLink): Promise<ServiceResult<Channel>> {
+/** Resolves and registers one shared source through Frame's bounded Supabase boundary. */
+export async function resolveSourceFromInput(input: string): Promise<ServiceResult<SourceResolution>> {
+  const parsed = parseYouTubeLink(input);
   if (parsed.kind === "unknown") {
-    return { status: "failed", message: "That doesn't look like a YouTube channel or video link." };
+    return { status: "invalid_request", message: "Use a channel ID, @handle, channel URL, or individual YouTube video URL." };
   }
-  return requestBackend<Channel>("/youtube/resolve", {
-    method: "POST",
-    body: JSON.stringify(parsed),
-  });
+  const supabaseUrl = APP_ENV === "development" ? process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") : undefined;
+  const publishableKey = APP_ENV === "development"
+    ? process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    : undefined;
+  if (!supabaseUrl || !publishableKey) {
+    return { status: "temporarily_unavailable", message: "Source verification is not configured for this build." };
+  }
+
+  try {
+    const installationToken = await installationIdentityStore.getOrCreate();
+    const response = await fetch(`${supabaseUrl}/functions/v1/resolve-source`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", apikey: publishableKey },
+      body: JSON.stringify({ ...parsed, installationToken }),
+    });
+    const envelope = await response.json().catch(() => null) as SourceResolutionEnvelope | null;
+    if (!envelope || !isResolutionOutcome(envelope.outcome)) {
+      return { status: "temporarily_unavailable", message: "Source verification returned an unreadable response." };
+    }
+    if (envelope.outcome !== "success") {
+      return { status: envelope.outcome, message: typeof envelope.message === "string" ? envelope.message : sourceResolutionMessage(envelope.outcome) };
+    }
+    const source = parseResolvedSource(envelope.source);
+    const video = envelope.video === undefined ? undefined : parseResolvedVideo(envelope.video);
+    if (!source || (envelope.video !== undefined && !video) || (envelope.provenance !== "cache" && envelope.provenance !== "provider")) {
+      return { status: "temporarily_unavailable", message: "Source verification returned incomplete metadata." };
+    }
+    return { status: "success", data: { source, ...(video ? { video } : {}), provenance: envelope.provenance } };
+  } catch {
+    return { status: "network_error", message: "Frame is offline. Check your connection and try again." };
+  }
 }
 
 /** Extracts a YouTube video id from a raw URL or returns null. */
@@ -174,6 +190,75 @@ export function parseVideoChapters(description: string | undefined, durationSeco
   const ordered = chapters.slice(0, 24);
   if (ordered.length < 3 || ordered[0]?.startSeconds !== 0) return [];
   return ordered;
+}
+
+function parseResolvedSource(value: unknown): ResolvedSource | null {
+  if (!isRecord(value) || value.provider !== "youtube" || typeof value.providerSourceId !== "string" || !/^UC[A-Za-z0-9_-]{22}$/.test(value.providerSourceId)) return null;
+  if (typeof value.displayName !== "string" || typeof value.description !== "string") return null;
+  if (value.handle !== null && typeof value.handle !== "string") return null;
+  if (value.thumbnailUrl !== null && typeof value.thumbnailUrl !== "string") return null;
+  return {
+    provider: "youtube",
+    providerSourceId: value.providerSourceId,
+    handle: value.handle,
+    displayName: value.displayName,
+    description: value.description,
+    thumbnailUrl: value.thumbnailUrl,
+  };
+}
+
+function parseResolvedVideo(value: unknown): ResolvedVideo | null {
+  if (!isRecord(value) || value.provider !== "youtube" || typeof value.providerMediaId !== "string" || !VIDEO_ID_PATTERN.test(value.providerMediaId)) return null;
+  if (typeof value.title !== "string" || typeof value.description !== "string") return null;
+  if (value.thumbnailUrl !== null && typeof value.thumbnailUrl !== "string") return null;
+  if (value.publishedAt !== null && typeof value.publishedAt !== "string") return null;
+  if (value.durationSeconds !== null && (typeof value.durationSeconds !== "number" || !Number.isInteger(value.durationSeconds))) return null;
+  if (typeof value.isLivestream !== "boolean" || typeof value.isUpcomingPremiere !== "boolean") return null;
+  return {
+    provider: "youtube",
+    providerMediaId: value.providerMediaId,
+    title: value.title,
+    description: value.description,
+    thumbnailUrl: value.thumbnailUrl,
+    publishedAt: value.publishedAt,
+    durationSeconds: value.durationSeconds,
+    isLivestream: value.isLivestream,
+    isUpcomingPremiere: value.isUpcomingPremiere,
+  };
+}
+
+export function resolutionVideoToVideo(resolution: SourceResolution): Video | null {
+  const video = resolution.video;
+  if (!video) return null;
+  return {
+    id: video.providerMediaId,
+    title: video.title,
+    channelId: resolution.source.providerSourceId,
+    channelTitle: resolution.source.displayName,
+    thumbnailUrl: video.thumbnailUrl ?? `https://i.ytimg.com/vi/${video.providerMediaId}/hqdefault.jpg`,
+    publishedAt: video.publishedAt ?? "",
+    durationSeconds: video.durationSeconds ?? 0,
+    description: video.description,
+  };
+}
+
+function isResolutionOutcome(value: unknown): value is SourceResolutionEnvelope["outcome"] {
+  return typeof value === "string" && ["success", "invalid_request", "not_found", "allowance_exhausted", "quota_exhausted", "temporarily_unavailable", "network_error"].includes(value);
+}
+
+function sourceResolutionMessage(outcome: Exclude<SourceResolutionEnvelope["outcome"], "success">): string {
+  switch (outcome) {
+    case "invalid_request": return "Use a supported YouTube source or individual video link.";
+    case "not_found": return "No supported source was found for that link.";
+    case "allowance_exhausted": return "This device has reached today’s source-verification allowance.";
+    case "quota_exhausted": return "Frame’s shared YouTube allowance is reserved for the rest of today.";
+    case "temporarily_unavailable": return "Source verification is temporarily unavailable.";
+    case "network_error": return "Frame could not reach YouTube. Check your connection and try again.";
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function formatDuration(seconds: number): string {

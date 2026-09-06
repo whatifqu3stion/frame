@@ -18,6 +18,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_installation_action_usage: {
+        Row: {
+          action_type: string
+          installation_token_hash: string
+          provider_call_count: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          action_type: string
+          installation_token_hash: string
+          provider_call_count?: number
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          action_type?: string
+          installation_token_hash?: string
+          provider_call_count?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: []
+      }
       daily_provider_usage: {
         Row: {
           estimated_quota_units: number
@@ -144,6 +168,8 @@ export type Database = {
           maintenance_mode: boolean
           reserved_safety_units: number
           source_leases_enabled: boolean
+          source_resolution_daily_installation_call_limit: number
+          source_resolution_enabled: boolean
           updated_at: string
           weekly_picks_enabled: boolean
           youtube_ingestion_enabled: boolean
@@ -154,6 +180,8 @@ export type Database = {
           maintenance_mode?: boolean
           reserved_safety_units: number
           source_leases_enabled?: boolean
+          source_resolution_daily_installation_call_limit?: number
+          source_resolution_enabled?: boolean
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
@@ -164,6 +192,8 @@ export type Database = {
           maintenance_mode?: boolean
           reserved_safety_units?: number
           source_leases_enabled?: boolean
+          source_resolution_daily_installation_call_limit?: number
+          source_resolution_enabled?: boolean
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
@@ -449,6 +479,13 @@ export type Database = {
         Args: { p_lease_token_hash: string }
         Returns: boolean
       }
+      reserve_source_resolution_quota: {
+        Args: { p_installation_token: string; p_provider_call_count: number }
+        Returns: {
+          outcome: string
+          reserved_provider_calls: number
+        }[]
+      }
       user_id: { Args: never; Returns: string }
     }
     Enums: {
@@ -468,12 +505,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -497,11 +534,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -522,11 +559,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -547,11 +584,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -564,11 +601,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

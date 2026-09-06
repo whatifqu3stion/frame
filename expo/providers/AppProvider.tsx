@@ -6,7 +6,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState } from "react-native";
-import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
@@ -31,12 +31,14 @@ import {
   type OwnerPinAvailability,
 } from "@/storage/ownerPinStorage";
 import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
+import { installationIdentityStore } from "@/storage/installationIdentityStorage";
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
 import { profileRepository } from "@/repositories/profileRepository";
 import { viewingAllowanceService } from "@/services/viewingAllowanceService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
-import { parseYouTubeLink, resolveChannelFromLink } from "@/services/youtube";
+import { confirmSourceFollow } from "@/services/sourceResolutionFlow";
+import { resolveSourceFromInput } from "@/services/youtube";
 import {
   getRevenueCatCustomerInfo,
   hasPremiumEntitlement,
@@ -940,16 +942,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return { ok: true, message: "Google access was revoked. Imported creators remain on this device." };
   }, [activeProfileId, googleCredential, updatePrefs]);
 
-  const addChannelByLink = useCallback(
-    async (input: string): Promise<AddChannelResult> => {
-      const result = await resolveChannelFromLink(parseYouTubeLink(input));
-      if (result.status !== "success") {
-        return { ok: false, message: result.message ?? "That creator could not be verified." };
-      }
-      await followedSourceRepository.follow(activeProfileId, { ...result.data, followedAt: Date.now(), source: "link" });
-      queueSourceLeaseReconciliation("local_change");
-      invalidateLibrary();
-      return { ok: true, message: `Added ${result.data.title}.` };
+  const resolveSourceInput = useCallback(
+    async (input: string): Promise<ServiceResult<SourceResolution>> => resolveSourceFromInput(input),
+    [],
+  );
+
+  const confirmSource = useCallback(
+    async (resolution: SourceResolution): Promise<AddChannelResult> => {
+      const result = await confirmSourceFollow(activeProfileId, resolution, {
+        followedSources: followedSourceRepository,
+        reconcile: () => queueSourceLeaseReconciliation("local_change"),
+      });
+      await invalidateLibrary();
+      return result;
     },
     [activeProfileId, invalidateLibrary],
   );
@@ -985,6 +990,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           ...existingProfiles.map((profile) => clearProfileGoogleCredential(SecureStore, profile.id)),
           ...sources.map((source) => sourceLeaseTokenStore.remove(source)),
           SecureStore.deleteItemAsync(LEGACY_GOOGLE_TOKEN_KEY),
+          installationIdentityStore.remove(),
           removeOwnerPin(),
         ]);
       },
@@ -1077,7 +1083,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       signInWithGoogle,
       signOutGoogle,
       refreshSubscriptions,
-      addChannelByLink,
+      resolveSourceInput,
+      confirmSource,
       savedVideos: savedQuery.data ?? [],
       resumeList: resumeQuery.data ?? [],
       sessions: queuesQuery.data ?? [],
@@ -1170,7 +1177,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       signInWithGoogle,
       signOutGoogle,
       refreshSubscriptions,
-      addChannelByLink,
+      resolveSourceInput,
+      confirmSource,
       savedQuery.data,
       resumeQuery.data,
       queuesQuery.data,
