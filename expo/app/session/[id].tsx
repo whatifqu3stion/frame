@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronDown, ChevronUp, Copy, Pencil, Play, Trash2, X } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
@@ -10,6 +11,7 @@ import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
+import { todayRepository } from "@/repositories/todayRepository";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
@@ -18,13 +20,18 @@ export default function SavedSessionScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { sessions, savedVideos, watchLater, duplicateSession, removeSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, sessions, savedVideos, watchLater, duplicateSession, removeSession, updateSessionVideos, requirePurchase } = useApp();
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
+  const todayVideosQuery = useQuery({
+    queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""],
+    queryFn: async () => Promise.all((session?.orderedVideoIds ?? []).map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
+    enabled: Boolean(session),
+  });
   const videoMap = useMemo<Map<string, Video>>(() => {
     const map = new Map<string, Video>();
-    [...watchLater, ...savedVideos].forEach((video) => map.set(video.id, video));
+    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...watchLater, ...savedVideos].forEach((video) => map.set(video.id, video));
     return map;
-  }, [savedVideos, watchLater]);
+  }, [savedVideos, todayVideosQuery.data, watchLater]);
   const totalSeconds = session?.orderedVideoIds.reduce((sum, videoId) => sum + (videoMap.get(videoId)?.durationSeconds ?? 0), 0) ?? 0;
 
   const startAt = useCallback((index: number): void => {
@@ -37,7 +44,7 @@ export default function SavedSessionScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.push({
       pathname: FRAME_PLAYBACK_ROUTE,
-      params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id },
+      params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id, title: videoMap.get(videoId)?.title ?? "", channelId: videoMap.get(videoId)?.channelId ?? "", channelTitle: videoMap.get(videoId)?.channelTitle ?? "", thumbnailUrl: videoMap.get(videoId)?.thumbnailUrl ?? "", publishedAt: videoMap.get(videoId)?.publishedAt ?? "", durationSeconds: String(videoMap.get(videoId)?.durationSeconds ?? 0), cachedMetadata: "1" },
     });
   }, [requirePurchase, session, videoMap]);
 

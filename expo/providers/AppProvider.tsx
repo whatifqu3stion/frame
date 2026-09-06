@@ -443,7 +443,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
       storageGenerationRef.current += 1;
       await viewingAllowanceService.stopPlaying();
-      await queryClient.cancelQueries({ queryKey: ["library", previousProfileId] });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["library", previousProfileId] }),
+        queryClient.cancelQueries({ queryKey: ["today", previousProfileId] }),
+      ]);
       const [snapshot] = await Promise.all([
         loadProfileSnapshot(profileId),
         viewingAllowanceService.getStatus(target),
@@ -780,7 +783,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const invalidateLibrary = useCallback(async (): Promise<void> => {
-    await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["library", activeProfileId] }),
+      queryClient.invalidateQueries({ queryKey: ["today", activeProfileId] }),
+    ]);
   }, [activeProfileId, queryClient]);
 
   const saveMutation = useMutation({

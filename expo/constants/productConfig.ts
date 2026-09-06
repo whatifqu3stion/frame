@@ -7,12 +7,18 @@ export const PRODUCT_LIMITS = {
   sessionDraftMaxItems: 3,
   onboardingInterestMax: 5,
   weeklyDiscoveryDisplayMax: 3,
+  todayResetHour: 4,
+  sourceFeedMaxSources: 25,
+  sourceFeedCandidatesPerSource: 20,
 } as const;
 
 export const TODAY_MAX_ITEMS = PRODUCT_LIMITS.todayMaxItems;
 export const MAX_ITEMS_PER_SOURCE = PRODUCT_LIMITS.maxItemsPerSource;
 export const ONBOARDING_INTEREST_MAX = PRODUCT_LIMITS.onboardingInterestMax;
 export const WEEKLY_DISCOVERY_DISPLAY_MAX = PRODUCT_LIMITS.weeklyDiscoveryDisplayMax;
+export const TODAY_RESET_HOUR = PRODUCT_LIMITS.todayResetHour;
+export const SOURCE_FEED_MAX_SOURCES = PRODUCT_LIMITS.sourceFeedMaxSources;
+export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandidatesPerSource;
 
 /** Round 1 kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
@@ -20,7 +26,7 @@ export const FOUNDATION_CAPABILITIES = {
   finiteSessions: true,
   youtubeDiscovery: false,
   youtubeSearch: false,
-  sharedTodayFeed: false,
+  sharedTodayFeed: true,
   weeklyDiscovery: false,
   googleSelectiveImport: false,
   automaticGoogleFollowing: false,

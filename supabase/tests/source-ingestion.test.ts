@@ -244,45 +244,70 @@ describe("cached source feed", () => {
   test("returns fresh and stale cache without a provider dependency", async () => {
     let reads = 0;
     const repository: SourceFeedRepository = {
-      async readCachedSourceFeed(): Promise<CachedSourceFeedRecord> { reads += 1; return cached; },
+      async readCachedSourceFeeds(): Promise<readonly CachedSourceFeedRecord[]> { reads += 1; return [cached]; },
     };
     const fresh = await executeSourceFeed({ providerSourceId: channelId }, repository, now);
     const stale = await executeSourceFeed(
       { providerSourceId: channelId },
-      { readCachedSourceFeed: async () => ({ ...cached, nextAttemptAt: "2026-09-06T11:00:00.000Z" }) },
+      { readCachedSourceFeeds: async () => [{ ...cached, nextAttemptAt: "2026-09-06T11:00:00.000Z" }] },
       now,
     );
     const failing = await executeSourceFeed(
       { providerSourceId: channelId },
-      { readCachedSourceFeed: async () => ({ ...cached, lastErrorCode: "provider_unavailable" }) },
+      { readCachedSourceFeeds: async () => [{ ...cached, lastErrorCode: "provider_unavailable" }] },
       now,
     );
     expect(fresh.body.state).toBe("fresh");
     expect(stale.body.state).toBe("stale");
     expect(failing.body.state).toBe("stale");
     expect(reads).toBe(1);
-    expect("fetchedAt" in fresh.body ? fresh.body.fetchedAt : null).toBe("2026-09-06T11:00:00.000Z");
+    expect(fresh.body.fetchedAt).toBe("2026-09-06T11:00:00.000Z");
   });
 
   test("returns truthful empty and unavailable states", async () => {
     const empty = await executeSourceFeed(
       { providerSourceId: channelId },
-      { readCachedSourceFeed: async () => ({ ...cached, items: [] }) },
+      { readCachedSourceFeeds: async () => [{ ...cached, items: [] }] },
       now,
     );
     const unavailable = await executeSourceFeed(
       { providerSourceId: channelId },
-      { readCachedSourceFeed: async () => null },
+      { readCachedSourceFeeds: async () => [] },
       now,
     );
     expect(empty.body.state).toBe("empty");
     expect(unavailable.body.state).toBe("unavailable");
+  });
+
+  test("reads a bounded multi-source request once and preserves per-source limits", async () => {
+    const secondId = "UCabcdefghijklmnopqrstu2";
+    let receivedIds: readonly string[] = [];
+    let receivedLimit = 0;
+    const second = { ...cached, source: { ...cached.source, providerSourceId: secondId, displayName: "Second source" } };
+    const result = await executeSourceFeed(
+      { providerSourceIds: [channelId, secondId], limitPerSource: 2 },
+      { readCachedSourceFeeds: async (ids, limit) => { receivedIds = ids; receivedLimit = limit; return [cached, second]; } },
+      now,
+    );
+    expect(receivedIds).toEqual([channelId, secondId]);
+    expect(receivedLimit).toBe(2);
+    expect(result.body.state).toBe("fresh");
+    expect(result.body.feeds).toHaveLength(2);
+  });
+
+  test("rejects duplicate, malformed, excessive, and oversized feed inputs", async () => {
+    const repository: SourceFeedRepository = { readCachedSourceFeeds: async () => { throw new Error("must not read"); } };
+    expect((await executeSourceFeed({ providerSourceIds: [channelId, channelId] }, repository, now)).status).toBe(400);
+    expect((await executeSourceFeed({ providerSourceIds: ["not-a-channel"] }, repository, now)).status).toBe(400);
+    expect((await executeSourceFeed({ providerSourceIds: Array.from({ length: 26 }, (_, index) => `UCabcdefghijklmnopqr${String(index).padStart(4, "0")}`) }, repository, now)).status).toBe(400);
+    expect((await executeSourceFeed({ providerSourceIds: [channelId], limitPerSource: 21 }, repository, now)).status).toBe(400);
   });
 });
 
 const migrationPath = new URL("../migrations/20260906150000_shared_source_ingestion.sql", import.meta.url);
 const workerPath = new URL("../functions/sync-sources/index.ts", import.meta.url);
 const feedPath = new URL("../functions/source-feed/index.ts", import.meta.url);
+const batchedFeedMigrationPath = new URL("../migrations/20260906180000_batched_cached_source_feeds.sql", import.meta.url);
 
 describe("ingestion schema and Edge boundaries", () => {
   test("claims due actively leased sources atomically and recovers expired locks", async () => {
@@ -325,6 +350,12 @@ describe("ingestion schema and Edge boundaries", () => {
     for (const forbidden of ["profile_id", "watch_progress", "viewing_history", "entitlement", "revenuecat"]) {
       expect(migration).not.toContain(forbidden);
     }
+    const batchedMigration = (await Bun.file(batchedFeedMigrationPath).text()).toLowerCase();
     expect(migration).toContain("add column if not exists made_for_kids boolean");
+    expect(feed).toContain('client.rpc("read_cached_source_feed_items"');
+    expect(batchedMigration).toContain("row_number() over");
+    expect(batchedMigration).toContain("cardinality(p_provider_source_ids) between 1 and 25");
+    expect(batchedMigration).not.toContain("youtube.googleapis.com");
+    expect(batchedMigration).not.toContain("generativelanguage.googleapis.com");
   });
 });

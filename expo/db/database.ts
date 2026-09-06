@@ -5,6 +5,7 @@ import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } fr
 import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
 import type { ProfilePlaybackLimitRecord, ProfilePlaybackUsageRecord } from "@/models/viewingAllowance";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
+import type { CachedTodayCandidate, TodayDisposition, TodaySnapshot, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -53,6 +54,8 @@ const webStore = {
   queues: new Map<string, VideoQueue>(),
   watchLater: new Map<string, Video & { addedAt: number }>(),
   channels: new Map<string, FollowedChannel>(),
+  todaySnapshots: new Map<string, TodaySnapshot>(),
+  sourceRules: new Map<string, TodaySourceRule>(),
 };
 
 function profileValues<T>(store: Map<string, T>, profileId: string): T[] {
@@ -72,7 +75,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "resume_positions", "saved_videos", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -160,6 +163,8 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     clearProfileMap(webStore.queues, profileId);
     clearProfileMap(webStore.watchLater, profileId);
     clearProfileMap(webStore.channels, profileId);
+    clearProfileMap(webStore.todaySnapshots, profileId);
+    clearProfileMap(webStore.sourceRules, profileId);
     webStore.allowances.delete(profileId);
     webStore.playbackLimits.delete(profileId);
     webStore.playbackUsage.delete(profileId);
@@ -170,7 +175,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
     if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
     await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
@@ -447,6 +452,143 @@ export async function unfollowChannel(profileId: string, id: string): Promise<vo
   await db.runAsync("DELETE FROM followed_channels WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
+type TodaySnapshotRow = Omit<TodaySnapshot, "items">;
+type TodayItemRow = Omit<TodaySnapshotItem, "id" | "channelId" | "channelTitle" | "isLivestream" | "isUpcomingPremiere" | "madeForKids"> & {
+  mediaId: string;
+  madeForKids: number | null;
+  isLivestream: number;
+  isUpcomingPremiere: number;
+};
+
+export async function readTodaySnapshot(profileId: string, periodKey: string): Promise<TodaySnapshot | null> {
+  if (Platform.OS === "web") {
+    const snapshot = webStore.todaySnapshots.get(profileEntityKey(profileId, periodKey));
+    return snapshot ? { ...snapshot, items: snapshot.items.map((item) => ({ ...item })) } : null;
+  }
+  const db = await getDb();
+  const header = await db.getFirstAsync<TodaySnapshotRow>("SELECT profileId,periodKey,createdAt,cacheFetchedAt,freshness FROM today_snapshots WHERE profileId = ? AND periodKey = ?", [profileId, periodKey]);
+  if (!header) return null;
+  const rows = await db.getAllAsync<TodayItemRow>("SELECT * FROM today_snapshot_items WHERE profileId = ? AND periodKey = ? ORDER BY position ASC", [profileId, periodKey]);
+  return { ...header, items: rows.map(mapTodayItemRow) };
+}
+
+/** Commits an immutable Today membership and order in one local transaction. */
+export async function finalizeTodaySnapshot(snapshot: TodaySnapshot): Promise<TodaySnapshot> {
+  const existing = await readTodaySnapshot(snapshot.profileId, snapshot.periodKey);
+  if (existing) return existing;
+  if (snapshot.items.length > 12 || snapshot.items.some((item, index) => item.position !== index || item.profileId !== snapshot.profileId || item.periodKey !== snapshot.periodKey)) {
+    throw new Error("Invalid Today snapshot membership.");
+  }
+  if (Platform.OS === "web") {
+    webStore.todaySnapshots.set(profileEntityKey(snapshot.profileId, snapshot.periodKey), { ...snapshot, items: snapshot.items.map((item) => ({ ...item })) });
+    return snapshot;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<{ periodKey: string }>("SELECT periodKey FROM today_snapshots WHERE profileId = ? AND periodKey = ?", [snapshot.profileId, snapshot.periodKey]);
+    if (current) return;
+    await db.runAsync("INSERT INTO today_snapshots (profileId,periodKey,createdAt,cacheFetchedAt,freshness) VALUES (?,?,?,?,?)", [snapshot.profileId, snapshot.periodKey, snapshot.createdAt, snapshot.cacheFetchedAt, snapshot.freshness]);
+    for (const item of snapshot.items) {
+      await db.runAsync(
+        `INSERT INTO today_snapshot_items (profileId,periodKey,mediaId,sourceId,sourceTitle,title,thumbnailUrl,publishedAt,durationSeconds,description,madeForKids,isLivestream,isUpcomingPremiere,fetchedAt,position,disposition,dispositionAt,snoozedUntil)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [item.profileId, item.periodKey, item.id, item.sourceId, item.sourceTitle, item.title, item.thumbnailUrl, item.publishedAt, item.durationSeconds, item.description ?? null, item.madeForKids === null || item.madeForKids === undefined ? null : item.madeForKids ? 1 : 0, item.isLivestream ? 1 : 0, item.isUpcomingPremiere ? 1 : 0, item.fetchedAt, item.position, item.disposition, item.dispositionAt, item.snoozedUntil],
+      );
+    }
+  });
+  return (await readTodaySnapshot(snapshot.profileId, snapshot.periodKey)) ?? snapshot;
+}
+
+export async function listTodayHistory(profileId: string): Promise<TodaySnapshotItem[]> {
+  if (Platform.OS === "web") return profileValues(webStore.todaySnapshots, profileId).flatMap((snapshot) => snapshot.items.map((item) => ({ ...item })));
+  const db = await getDb();
+  const rows = await db.getAllAsync<TodayItemRow>("SELECT * FROM today_snapshot_items WHERE profileId = ? ORDER BY periodKey DESC, position ASC", [profileId]);
+  return rows.map(mapTodayItemRow);
+}
+
+export async function updateTodayDisposition(profileId: string, periodKey: string, mediaId: string, disposition: TodayDisposition, dispositionAt: number, snoozedUntil: number | null = null, expected?: TodayDisposition): Promise<boolean> {
+  if (Platform.OS === "web") {
+    const key = profileEntityKey(profileId, periodKey);
+    const snapshot = webStore.todaySnapshots.get(key);
+    if (!snapshot) return false;
+    const item = snapshot.items.find((candidate) => candidate.id === mediaId);
+    if (!item || (expected && item.disposition !== expected)) return false;
+    webStore.todaySnapshots.set(key, { ...snapshot, items: snapshot.items.map((candidate) => candidate.id === mediaId ? { ...candidate, disposition, dispositionAt, snoozedUntil } : candidate) });
+    return true;
+  }
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE today_snapshot_items SET disposition = ?, dispositionAt = ?, snoozedUntil = ? WHERE profileId = ? AND periodKey = ? AND mediaId = ?${expected ? " AND disposition = ?" : ""}`,
+    expected ? [disposition, dispositionAt, snoozedUntil, profileId, periodKey, mediaId, expected] : [disposition, dispositionAt, snoozedUntil, profileId, periodKey, mediaId],
+  );
+  return result.changes === 1;
+}
+
+/** Revalidates only existing members; it never changes membership or order. */
+export async function refreshTodaySnapshotMetadata(profileId: string, periodKey: string, candidates: readonly CachedTodayCandidate[], unavailableSourceIds: ReadonlySet<string>, freshness: "fresh" | "stale", cacheFetchedAt: number | null): Promise<void> {
+  const byId = new Map(candidates.map((item) => [item.id, item]));
+  if (Platform.OS === "web") {
+    const key = profileEntityKey(profileId, periodKey);
+    const snapshot = webStore.todaySnapshots.get(key);
+    if (!snapshot) return;
+    webStore.todaySnapshots.set(key, {
+      ...snapshot,
+      freshness,
+      cacheFetchedAt,
+      items: snapshot.items.map((item) => unavailableSourceIds.has(item.sourceId) ? { ...item, disposition: "unavailable", dispositionAt: Date.now() } : byId.has(item.id) ? { ...item, ...byId.get(item.id), profileId, periodKey, position: item.position, disposition: item.disposition, dispositionAt: item.dispositionAt, snoozedUntil: item.snoozedUntil } : item),
+    });
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("UPDATE today_snapshots SET freshness = ?, cacheFetchedAt = ? WHERE profileId = ? AND periodKey = ?", [freshness, cacheFetchedAt, profileId, periodKey]);
+    for (const item of candidates) {
+      await db.runAsync(
+        `UPDATE today_snapshot_items SET sourceTitle=?,title=?,thumbnailUrl=?,publishedAt=?,durationSeconds=?,description=?,madeForKids=?,isLivestream=?,isUpcomingPremiere=?,fetchedAt=? WHERE profileId=? AND periodKey=? AND mediaId=?`,
+        [item.sourceTitle, item.title, item.thumbnailUrl, item.publishedAt, item.durationSeconds, item.description ?? null, item.madeForKids === null || item.madeForKids === undefined ? null : item.madeForKids ? 1 : 0, item.isLivestream ? 1 : 0, item.isUpcomingPremiere ? 1 : 0, item.fetchedAt, profileId, periodKey, item.id],
+      );
+    }
+    for (const sourceId of unavailableSourceIds) {
+      await db.runAsync("UPDATE today_snapshot_items SET disposition='unavailable', dispositionAt=? WHERE profileId=? AND periodKey=? AND sourceId=? AND disposition IN ('pending','snoozed')", [Date.now(), profileId, periodKey, sourceId]);
+    }
+  });
+}
+
+export async function getLatestTodayVideo(profileId: string, mediaId: string): Promise<Video | null> {
+  const history = await listTodayHistory(profileId);
+  const item = history.find((candidate) => candidate.id === mediaId);
+  return item ? { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids } : null;
+}
+
+export async function listTodaySourceRules(profileId: string): Promise<TodaySourceRule[]> {
+  if (Platform.OS === "web") return profileValues(webStore.sourceRules, profileId).map((rule) => ({ ...rule }));
+  const db = await getDb();
+  const rows = await db.getAllAsync<Omit<TodaySourceRule, "hideLivestreams" | "hideUpcomingPremieres"> & { hideLivestreams: number; hideUpcomingPremieres: number }>("SELECT * FROM source_rules WHERE profileId = ?", [profileId]);
+  return rows.map((row) => ({ ...row, hideLivestreams: row.hideLivestreams === 1, hideUpcomingPremieres: row.hideUpcomingPremieres === 1 }));
+}
+
+export async function upsertTodaySourceRule(rule: TodaySourceRule): Promise<void> {
+  if (Platform.OS === "web") { webStore.sourceRules.set(profileEntityKey(rule.profileId, rule.sourceId), { ...rule }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO source_rules (profileId,sourceId,minimumDurationSeconds,hideLivestreams,hideUpcomingPremieres,todayContributionLimit,mutedUntil,updatedAt) VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,sourceId) DO UPDATE SET minimumDurationSeconds=excluded.minimumDurationSeconds,hideLivestreams=excluded.hideLivestreams,hideUpcomingPremieres=excluded.hideUpcomingPremieres,todayContributionLimit=excluded.todayContributionLimit,mutedUntil=excluded.mutedUntil,updatedAt=excluded.updatedAt`,
+    [rule.profileId, rule.sourceId, rule.minimumDurationSeconds, rule.hideLivestreams ? 1 : 0, rule.hideUpcomingPremieres ? 1 : 0, rule.todayContributionLimit, rule.mutedUntil, rule.updatedAt],
+  );
+}
+
+function mapTodayItemRow(row: TodayItemRow): TodaySnapshotItem {
+  return {
+    ...row,
+    id: row.mediaId,
+    channelId: row.sourceId,
+    channelTitle: row.sourceTitle,
+    madeForKids: row.madeForKids === null ? null : row.madeForKids === 1,
+    isLivestream: row.isLivestream === 1,
+    isUpcomingPremiere: row.isUpcomingPremiere === 1,
+  };
+}
+
 /** Clears only the active profile's local content; profiles and allowance state remain intact. */
 export async function clearAllData(profileId: string): Promise<void> {
   if (Platform.OS === "web") {
@@ -455,11 +597,13 @@ export async function clearAllData(profileId: string): Promise<void> {
     clearProfileMap(webStore.queues, profileId);
     clearProfileMap(webStore.watchLater, profileId);
     clearProfileMap(webStore.channels, profileId);
+    clearProfileMap(webStore.todaySnapshots, profileId);
+    clearProfileMap(webStore.sourceRules, profileId);
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
   });
@@ -478,11 +622,13 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     webStore.queues.clear();
     webStore.watchLater.clear();
     webStore.channels.clear();
+    webStore.todaySnapshots.clear();
+    webStore.sourceRules.clear();
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
     await db.runAsync("DELETE FROM profiles");

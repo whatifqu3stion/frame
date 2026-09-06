@@ -4,11 +4,15 @@ import {
   CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL,
+  CREATE_SOURCE_RULES_TABLE_SQL,
+  CREATE_TODAY_SNAPSHOTS_TABLE_SQL,
+  CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL,
   DATABASE_SCHEMA_VERSION,
   PROFILE_OWNED_TABLES,
   buildVersion1MigrationPlan,
   buildVersion2MigrationPlan,
   buildVersion3MigrationPlan,
+  buildVersion4MigrationPlan,
   createProfileOwnedTableSql,
   executeMigrationTransaction,
   migrateDatabase,
@@ -63,7 +67,7 @@ describe("database version 1 migration", () => {
       const version = database.query("PRAGMA user_version").get() as { user_version: number };
       const tables = database.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[];
       expect(version.user_version).toBe(DATABASE_SCHEMA_VERSION);
-      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", ...PROFILE_OWNED_TABLES]));
+      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "today_snapshots", "today_snapshot_items", "source_rules", ...PROFILE_OWNED_TABLES]));
       expect(database.query("SELECT role, sortOrder FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner", sortOrder: 0 });
     } finally {
       database.close();
@@ -98,6 +102,7 @@ describe("database version 1 migration", () => {
     expect(plan.at(-1)).toBe("PRAGMA user_version = 1");
     expect(buildVersion2MigrationPlan()).toContain(CREATE_MANAGED_ALLOWANCES_TABLE_SQL);
     expect(buildVersion3MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL, CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL]));
+    expect(buildVersion4MigrationPlan()).toEqual(expect.arrayContaining([CREATE_TODAY_SNAPSHOTS_TABLE_SQL, CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL, CREATE_SOURCE_RULES_TABLE_SQL]));
   });
 
   test("assigns representative legacy records to the stable Owner", () => {
@@ -148,7 +153,7 @@ describe("database version 1 migration", () => {
       database.query("INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES ('standard-old','Standard','standard',1,1)").run();
       database.query("INSERT INTO saved_videos VALUES ('standard-old','video-old','Saved','channel','Channel','thumb','2026-01-01',60,NULL,1)").run();
       await migrateDatabase(adapter);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       expect(database.query("SELECT name, role, sortOrder FROM profiles WHERE id = 'standard-old'").get()).toEqual({ name: "Standard", role: "standard", sortOrder: 1 });
       expect(database.query("SELECT title FROM saved_videos WHERE profileId = 'standard-old'").get()).toEqual({ title: "Saved" });
       expect(database.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'managed_allowances'").get()).toEqual({ name: "managed_allowances" });
@@ -204,6 +209,30 @@ describe("database version 1 migration", () => {
     } finally {
       database.close();
     }
+  });
+
+  test("stores finite Today snapshots with profile isolation and transactional cascade", async () => {
+    const database = new Database(":memory:");
+    try {
+      await migrateDatabase(sqliteAdapter(database));
+      database.exec("PRAGMA foreign_keys = ON");
+      database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES ('standard','Standard','standard',1,1,1)").run();
+      const insertSnapshot = database.query("INSERT INTO today_snapshots VALUES (?, '2026-09-06', 1, 1, 'fresh')");
+      insertSnapshot.run(DEFAULT_OWNER_PROFILE_ID);
+      insertSnapshot.run("standard");
+      const insertItem = database.query("INSERT INTO today_snapshot_items VALUES (?, '2026-09-06','video000001','source','Source','Title','https://example.com/thumb.jpg','2026-09-06',60,NULL,NULL,0,0,1,0,'pending',NULL,NULL)");
+      insertItem.run(DEFAULT_OWNER_PROFILE_ID);
+      insertItem.run("standard");
+      expect(database.query("SELECT COUNT(*) AS count FROM today_snapshot_items WHERE mediaId='video000001'").get()).toEqual({ count: 2 });
+      database.query("UPDATE today_snapshot_items SET disposition='dismissed',dispositionAt=2 WHERE profileId=? AND periodKey='2026-09-06' AND mediaId='video000001'").run(DEFAULT_OWNER_PROFILE_ID);
+      const firstUndo = database.query("UPDATE today_snapshot_items SET disposition='pending',dispositionAt=3 WHERE profileId=? AND periodKey='2026-09-06' AND mediaId='video000001' AND disposition='dismissed'").run(DEFAULT_OWNER_PROFILE_ID) as { changes: number };
+      const secondUndo = database.query("UPDATE today_snapshot_items SET disposition='pending' WHERE profileId=? AND periodKey='2026-09-06' AND mediaId='video000001' AND disposition='dismissed'").run(DEFAULT_OWNER_PROFILE_ID) as { changes: number };
+      expect(firstUndo.changes).toBe(1);
+      expect(secondUndo.changes).toBe(0);
+      database.query("DELETE FROM profiles WHERE id='standard'").run();
+      expect(database.query("SELECT COUNT(*) AS count FROM today_snapshots WHERE profileId='standard'").get()).toEqual({ count: 0 });
+      expect(database.query("SELECT COUNT(*) AS count FROM today_snapshots WHERE profileId=?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ count: 1 });
+    } finally { database.close(); }
   });
 
   test("allows two profiles to follow the same source independently", async () => {

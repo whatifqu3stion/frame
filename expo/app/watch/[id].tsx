@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
@@ -29,6 +29,7 @@ import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { getResume } from "@/db/database";
+import { todayRepository } from "@/repositories/todayRepository";
 import { useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
 import { formatDuration, formatRelativeDate, getVideo, parseVideoChapters, type VideoChapter } from "@/services/youtube";
@@ -67,6 +68,7 @@ function formatAllowanceRemaining(seconds: number): string {
 
 export default function WatchScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { width, height } = useWindowDimensions();
   const params = useLocalSearchParams<{
     id: string | string[];
@@ -78,9 +80,16 @@ export default function WatchScreen() {
     thumbnailUrl?: string | string[];
     publishedAt?: string | string[];
     durationSeconds?: string | string[];
+    cachedMetadata?: string | string[];
+    origin?: string | string[];
+    todayProfileId?: string | string[];
+    todayPeriodKey?: string | string[];
   }>();
   const id = firstParam(params.id) ?? "";
   const session = firstParam(params.session);
+  const usesCachedMetadata = firstParam(params.cachedMetadata) === "1";
+  const todayProfileId = firstParam(params.todayProfileId);
+  const todayPeriodKey = firstParam(params.todayPeriodKey);
   const indexParam = firstParam(params.i);
   const {
     activeProfileId,
@@ -138,7 +147,7 @@ export default function WatchScreen() {
   const metadataQuery = useQuery({
     queryKey: ["video", id],
     queryFn: () => getVideo(id),
-    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true,
+    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true && !usesCachedMetadata,
     staleTime: 5 * 60_000,
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
@@ -171,6 +180,7 @@ export default function WatchScreen() {
   const pendingActionRef = useRef<PendingAction>(null);
   const navigationLockedRef = useRef<boolean>(false);
   const isFullscreenRef = useRef<boolean>(false);
+  const todayWatchedRef = useRef<boolean>(false);
 
   const isLandscape = width > height;
   const isImmersiveLandscape = isLandscape && (Platform.OS !== "web" || width < 900);
@@ -233,6 +243,7 @@ export default function WatchScreen() {
     durationRef.current = video?.durationSeconds ?? 0;
     didEndRef.current = false;
     navigationLockedRef.current = false;
+    todayWatchedRef.current = false;
 
     if (!id || !isPremium) {
       setResumeReady(true);
@@ -415,13 +426,20 @@ export default function WatchScreen() {
           allowanceEndingRef.current = true;
           playerRef.current?.pause();
           void persist();
+          return;
+        }
+        if (!todayWatchedRef.current && todayProfileId === activeProfileId && todayPeriodKey) {
+          todayWatchedRef.current = true;
+          void todayRepository.setDisposition(activeProfileId, todayPeriodKey, id, "watched", Date.now()).then((changed) => {
+            if (changed) void queryClient.invalidateQueries({ queryKey: ["today", activeProfileId] });
+          });
         }
       }).catch(failClosedAllowance);
       return;
     }
     void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
     if (state === "paused") void persist();
-  }, [applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, persist, stopAllowancePlayback]);
+  }, [activeProfileId, applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, id, persist, queryClient, stopAllowancePlayback, todayPeriodKey, todayProfileId]);
 
   const handleConnectivityChange = useCallback((nextOnline: boolean): void => {
     setIsOnline(nextOnline);

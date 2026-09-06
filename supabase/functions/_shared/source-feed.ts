@@ -1,4 +1,5 @@
-export const SOURCE_FEED_MAX_ITEMS = 20;
+export const SOURCE_FEED_MAX_SOURCES = 25;
+export const SOURCE_FEED_MAX_ITEMS_PER_SOURCE = 20;
 
 export interface CachedSourceFeedItem {
   provider: "youtube";
@@ -32,91 +33,139 @@ export interface CachedSourceFeedRecord {
 }
 
 export interface SourceFeedRepository {
-  readCachedSourceFeed(providerSourceId: string, limit: number): Promise<CachedSourceFeedRecord | null>;
+  readCachedSourceFeeds(providerSourceIds: readonly string[], limitPerSource: number): Promise<readonly CachedSourceFeedRecord[]>;
 }
+
+export type SourceFeedEntry = {
+  source: CachedSourceFeedSource;
+  freshness: "fresh" | "stale" | "empty";
+  items: readonly CachedSourceFeedItem[];
+};
 
 export type SourceFeedResponse =
   | {
-    state: "fresh" | "stale";
+    state: "fresh" | "stale" | "empty";
     freshness: "fresh" | "stale";
-    source: CachedSourceFeedSource;
-    items: readonly CachedSourceFeedItem[];
-    fetchedAt: string;
+    feeds: readonly SourceFeedEntry[];
+    unavailableSourceIds: readonly string[];
+    fetchedAt: string | null;
+    message?: string;
   }
   | {
-    state: "empty" | "unavailable";
-    items: readonly [];
+    state: "unavailable";
+    feeds: readonly [];
+    unavailableSourceIds: readonly string[];
+    fetchedAt: null;
     message: string;
   };
 
-/** Reads a sanitized bounded feed entirely from Frame's shared cache. */
+type ParsedInput = { providerSourceIds: string[]; limitPerSource: number };
+
+/** Reads multiple sanitized, bounded feeds entirely from Frame's shared cache. */
 export async function executeSourceFeed(
   input: unknown,
   repository: SourceFeedRepository,
   now: Date = new Date(),
 ): Promise<{ status: number; cacheControl: string; body: SourceFeedResponse }> {
-  const providerSourceId = parseInput(input);
-  if (!providerSourceId) {
+  const parsed = parseInput(input);
+  if (!parsed) {
     return response(400, "no-store", {
       state: "unavailable",
-      items: [],
-      message: "A valid registered YouTube source id is required.",
+      feeds: [],
+      unavailableSourceIds: [],
+      fetchedAt: null,
+      message: "A bounded list of registered YouTube source ids is required.",
     });
   }
 
-  let cached: CachedSourceFeedRecord | null;
+  let cached: readonly CachedSourceFeedRecord[];
   try {
-    cached = await repository.readCachedSourceFeed(providerSourceId, SOURCE_FEED_MAX_ITEMS);
+    cached = await repository.readCachedSourceFeeds(parsed.providerSourceIds, parsed.limitPerSource);
   } catch {
     return response(503, "no-store", {
       state: "unavailable",
-      items: [],
-      message: "This source feed is temporarily unavailable.",
+      feeds: [],
+      unavailableSourceIds: [],
+      fetchedAt: null,
+      message: "Cached source feeds are temporarily unavailable.",
     });
   }
 
-  if (!cached || cached.sourceStatus !== "active") {
+  const requested = new Set(parsed.providerSourceIds);
+  const validRecords = cached.filter((record) => requested.has(record.source.providerSourceId));
+  const bySourceId = new Map(validRecords.map((record) => [record.source.providerSourceId, record]));
+  const unavailableSourceIds = parsed.providerSourceIds.filter((id) => {
+    const record = bySourceId.get(id);
+    return !record || record.sourceStatus !== "active";
+  });
+  const feeds: SourceFeedEntry[] = [];
+
+  for (const providerSourceId of parsed.providerSourceIds) {
+    const record = bySourceId.get(providerSourceId);
+    if (!record || record.sourceStatus !== "active") continue;
+    const items = record.items.slice(0, parsed.limitPerSource);
+    feeds.push({
+      source: record.source,
+      freshness: items.length === 0 ? "empty" : isFresh(record, now) ? "fresh" : "stale",
+      items,
+    });
+  }
+
+  if (feeds.length === 0) {
     return response(200, "private, max-age=60", {
       state: "unavailable",
-      items: [],
-      message: "No available cached feed exists for this source.",
-    });
-  }
-  if (cached.items.length === 0) {
-    return response(200, "private, max-age=60", {
-      state: "empty",
-      items: [],
-      message: "No cached videos are available for this source yet.",
+      feeds: [],
+      unavailableSourceIds,
+      fetchedAt: null,
+      message: "No available cached feed exists for these sources.",
     });
   }
 
-  const items = cached.items.slice(0, SOURCE_FEED_MAX_ITEMS);
+  const items = feeds.flatMap((feed) => feed.items);
   const fetchedAt = newestFetchedAt(items);
-  const nextAttemptTime = cached.nextAttemptAt ? Date.parse(cached.nextAttemptAt) : Number.NaN;
-  const freshness: "fresh" | "stale" = cached.lastSuccessAt
-    && !cached.lastErrorCode
-    && Number.isFinite(nextAttemptTime)
-    && nextAttemptTime > now.getTime()
-    ? "fresh"
-    : "stale";
-  return response(200, freshness === "fresh" ? "private, max-age=300" : "private, max-age=60", {
-    state: freshness,
-    freshness,
-    source: cached.source,
-    items,
+  const hasStale = feeds.some((feed) => feed.freshness === "stale");
+  const state: "fresh" | "stale" | "empty" = items.length === 0 ? "empty" : hasStale ? "stale" : "fresh";
+  return response(200, state === "fresh" ? "private, max-age=300" : "private, max-age=60", {
+    state,
+    freshness: hasStale ? "stale" : "fresh",
+    feeds,
+    unavailableSourceIds,
     fetchedAt,
+    ...(state === "empty" ? { message: "No cached videos are available for these sources yet." } : {}),
   });
 }
 
-function parseInput(input: unknown): string | null {
-  if (!isRecord(input) || Object.keys(input).length !== 1 || typeof input.providerSourceId !== "string") return null;
-  return /^UC[A-Za-z0-9_-]{22}$/.test(input.providerSourceId) ? input.providerSourceId : null;
+function parseInput(input: unknown): ParsedInput | null {
+  if (!isRecord(input)) return null;
+  const keys = Object.keys(input);
+  if (keys.some((key) => key !== "providerSourceIds" && key !== "providerSourceId" && key !== "limitPerSource")) return null;
+  const rawIds = Array.isArray(input.providerSourceIds)
+    ? input.providerSourceIds
+    : typeof input.providerSourceId === "string"
+      ? [input.providerSourceId]
+      : null;
+  if (!rawIds || rawIds.length === 0 || rawIds.length > SOURCE_FEED_MAX_SOURCES) return null;
+  if (rawIds.some((value) => typeof value !== "string" || !/^UC[A-Za-z0-9_-]{22}$/.test(value))) return null;
+  const providerSourceIds = [...new Set(rawIds as string[])];
+  if (providerSourceIds.length !== rawIds.length) return null;
+  const limitPerSource = input.limitPerSource === undefined ? SOURCE_FEED_MAX_ITEMS_PER_SOURCE : input.limitPerSource;
+  if (!Number.isInteger(limitPerSource) || (limitPerSource as number) < 1 || (limitPerSource as number) > SOURCE_FEED_MAX_ITEMS_PER_SOURCE) return null;
+  return { providerSourceIds, limitPerSource: limitPerSource as number };
 }
 
-function newestFetchedAt(items: readonly CachedSourceFeedItem[]): string {
-  return items.reduce((newest: string, item: CachedSourceFeedItem) => {
-    return Date.parse(item.fetchedAt) > Date.parse(newest) ? item.fetchedAt : newest;
-  }, items[0]?.fetchedAt ?? new Date(0).toISOString());
+function isFresh(record: CachedSourceFeedRecord, now: Date): boolean {
+  const nextAttemptTime = record.nextAttemptAt ? Date.parse(record.nextAttemptAt) : Number.NaN;
+  return Boolean(record.lastSuccessAt)
+    && !record.lastErrorCode
+    && Number.isFinite(nextAttemptTime)
+    && nextAttemptTime > now.getTime();
+}
+
+function newestFetchedAt(items: readonly CachedSourceFeedItem[]): string | null {
+  return items.reduce<string | null>((newest, item) => {
+    if (!newest || Date.parse(item.fetchedAt) > Date.parse(newest)) return item.fetchedAt;
+    return newest;
+  }, null);
 }
 
 function response(

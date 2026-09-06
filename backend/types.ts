@@ -595,6 +595,23 @@ export type Database = {
         }[]
       }
       purge_expired_source_demand_leases: { Args: never; Returns: number }
+      read_cached_source_feed_items: {
+        Args: { p_limit_per_source?: number; p_provider_source_ids: string[] }
+        Returns: {
+          description: string
+          duration_seconds: number
+          is_livestream: boolean
+          is_upcoming_premiere: boolean
+          made_for_kids: boolean
+          metadata_fetched_at: string
+          provider: string
+          provider_media_id: string
+          published_at: string
+          source_id: string
+          thumbnail_url: string
+          title: string
+        }[]
+      }
       record_youtube_ingestion_halt: {
         Args: { p_error_code: string; p_halted_until: string }
         Returns: boolean

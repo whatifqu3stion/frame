@@ -1,107 +1,210 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ArrowRight, CircleCheck } from "lucide-react-native";
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import { ArrowRight, CircleCheck, CloudOff, RotateCcw } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
+import SnoozeModal from "@/components/SnoozeModal";
+import TodaySessionModal from "@/components/TodaySessionModal";
+import TodayVideoCard from "@/components/TodayVideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { MAX_ITEMS_PER_SOURCE, TODAY_MAX_ITEMS } from "@/constants/productConfig";
+import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
+import { MAX_ITEMS_PER_SOURCE, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
-import { resolveTodayShellState, shellProfileQueryKeys } from "@/domain/productShell";
+import { getTodayPeriod, nextSnoozedReturn, performTodayAction, visibleTodayItems } from "@/domain/today";
+import type { TodayDisposition, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 import { useApp } from "@/providers/AppProvider";
-import { discoveryService } from "@/services/discovery";
+import { todayRepository } from "@/repositories/todayRepository";
+import { todayService } from "@/services/todayServiceInstance";
+import { listTodaySourceRules } from "@/db/database";
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, followedChannels, sourcesLoading, sourcesError } = useApp();
-  const keys = shellProfileQueryKeys(activeProfileId);
+  const { activeProfileId, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, ready } = useApp();
+  const [clock, setClock] = useState<number>(Date.now());
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [snoozeItem, setSnoozeItem] = useState<TodaySnapshotItem | null>(null);
+  const [sessionItem, setSessionItem] = useState<TodaySnapshotItem | null>(null);
+  const [undo, setUndo] = useState<{ item: TodaySnapshotItem; previous: TodayDisposition; snoozedUntil: number | null } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const checkedPeriodRef = useRef<string | null>(null);
+  const activeProfileRef = useRef<string>(activeProfileId);
+  activeProfileRef.current = activeProfileId;
+  const period = getTodayPeriod(clock);
+  const sourceIds = useMemo<string[]>(() => followedChannels.map((source) => source.id), [followedChannels]);
+  const sourceIdentity = sourceIds.join(",");
+  const queryKey = useMemo(() => ["today", activeProfileId, period.key] as const, [activeProfileId, period.key]);
+  const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], queryFn: () => listTodaySourceRules(activeProfileId), enabled: ready, staleTime: Infinity });
+  const rules = useMemo<Map<string, TodaySourceRule>>(() => new Map((rulesQuery.data ?? []).map((rule) => [rule.sourceId, rule])), [rulesQuery.data]);
   const todayQuery = useQuery({
-    queryKey: keys.today,
-    queryFn: () => discoveryService.getTodayFeed(activeProfileId),
-    enabled: followedChannels.length > 0,
+    queryKey,
+    queryFn: () => todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: clock }),
+    enabled: ready && !sourcesLoading,
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
-  const state = resolveTodayShellState({
-    followedSourceCount: followedChannels.length,
-    isLoading: sourcesLoading || (todayQuery.isLoading && todayQuery.fetchStatus !== "idle"),
-    isError: sourcesError || todayQuery.isError,
-    status: todayQuery.data?.status,
-    itemCount: todayQuery.data?.items.length ?? 0,
-  });
+  const snapshot = todayQuery.data?.snapshot ?? null;
+  const visible = useMemo(() => visibleTodayItems(snapshot?.items ?? [], new Set(sourceIds), rules, clock), [clock, rules, snapshot?.items, sourceIds]);
+  const nextReturn = nextSnoozedReturn(snapshot?.items ?? [], clock);
 
-  const stateContent = state === "loading" ? (
-    <VideoFeedSkeleton count={3} accessibilityLabel="Loading today's finite inbox" />
-  ) : state === "no_sources" ? (
-    <>
-      <EmptyState title="Choose one trusted source" body="Today begins with sources you select. Add one manually—Frame will never fill this space with invented recommendations." />
-      <PrimaryLink label="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />
-    </>
-  ) : state === "offline" ? (
-    <EmptyState title="Today is offline" body="Your saved videos remain available. Today will return when Frame can reach its shared service." />
-  ) : state === "service_error" ? (
-    <EmptyState title="Today couldn't load" body="The service is unavailable right now. No source was polled separately and nothing was substituted." />
-  ) : state === "caught_up" ? (
-    <View accessibilityLabel="Caught up">
-      <EmptyState symbol="✓" title="You’re caught up" body="That is the end of today’s finite inbox. Come back when you choose to." />
-    </View>
-  ) : state === "ready" ? (
-    <EmptyState title="Today is ready" body={`Up to ${TODAY_MAX_ITEMS} items will appear here, with no more than ${MAX_ITEMS_PER_SOURCE} from one source.`} />
-  ) : (
-    <EmptyState title="No qualifying videos today" body={todayQuery.data?.message ?? "Your sources are still here, but the shared Today service is not available yet. Open a source directly whenever you choose."} />
-  );
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const checkKey = snapshot ? `${activeProfileId}:${period.key}:${sourceIdentity}` : null;
+    if (!checkKey || checkedPeriodRef.current === checkKey) return;
+    checkedPeriodRef.current = checkKey;
+    const expectedProfile = activeProfileId;
+    void todayService.load({ profileId: expectedProfile, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: true }).then((result) => {
+      if (activeProfileRef.current === expectedProfile) queryClient.setQueryData(queryKey, result);
+    });
+  }, [activeProfileId, period.key, queryClient, queryKey, snapshot, sourceIdentity, sourceIds]);
+
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 5_000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
+  const reloadLocal = useCallback(async (): Promise<void> => {
+    const result = await todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
+    if (activeProfileRef.current === activeProfileId) queryClient.setQueryData(queryKey, result);
+  }, [activeProfileId, queryClient, queryKey, sourceIds]);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    const expectedProfile = activeProfileId;
+    try {
+      const result = await todayService.load({ profileId: expectedProfile, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: Boolean(snapshot) });
+      if (activeProfileRef.current === expectedProfile) queryClient.setQueryData(queryKey, result);
+    } finally {
+      if (activeProfileRef.current === expectedProfile) setIsRefreshing(false);
+    }
+  }, [activeProfileId, isRefreshing, queryClient, queryKey, snapshot, sourceIds]);
+
+  const handle = useCallback(async (item: TodaySnapshotItem, disposition: TodayDisposition, snoozedUntil: number | null = null): Promise<boolean> => {
+    const changed = await todayRepository.setDisposition(activeProfileId, item.periodKey, item.id, disposition, Date.now(), snoozedUntil);
+    if (changed) await reloadLocal();
+    return changed;
+  }, [activeProfileId, reloadLocal]);
+
+  const watch = useCallback(async (item: TodaySnapshotItem): Promise<void> => {
+    if (busyId || !requirePurchase("library")) return;
+    setBusyId(item.id);
+    try {
+      const allowance = await getPlaybackAllowance(activeProfileId);
+      if (!allowance.canPlay) {
+        Alert.alert("Today’s viewing is complete", allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.");
+        return;
+      }
+      router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: String(item.durationSeconds), cachedMetadata: "1", origin: "today", todayProfileId: activeProfileId, todayPeriodKey: item.periodKey } });
+    } catch {
+      Alert.alert("Couldn’t open video", "The player did not open. This item is still in Today.");
+    } finally { setBusyId(null); }
+  }, [activeProfileId, busyId, getPlaybackAllowance, requirePurchase]);
+
+  const save = useCallback(async (item: TodaySnapshotItem): Promise<void> => {
+    if (busyId || !requirePurchase("save")) return;
+    setBusyId(item.id);
+    try {
+      await performTodayAction(async () => { await saveVideo(item); return true; }, () => handle(item, "saved"));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch { Alert.alert("Couldn’t save", "This item is still in Today. Try again when you’re ready."); }
+    finally { setBusyId(null); }
+  }, [busyId, handle, requirePurchase, saveVideo]);
+
+  const addToSession = useCallback(async (sessionId: string): Promise<void> => {
+    const item = sessionItem;
+    if (!item || busyId || !requirePurchase("sessions")) return;
+    const session = sessions.find((candidate) => candidate.id === sessionId);
+    if (!session || session.orderedVideoIds.includes(item.id) || session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return;
+    setBusyId(item.id);
+    try {
+      await performTodayAction(async () => { await updateSessionVideos(session.id, [...session.orderedVideoIds, item.id]); return true; }, () => handle(item, "session"));
+      setSessionItem(null);
+    } catch { Alert.alert("Couldn’t add to Session", "Nothing changed. This item is still in Today."); }
+    finally { setBusyId(null); }
+  }, [busyId, handle, requirePurchase, sessionItem, sessions, updateSessionVideos]);
+
+  const createTodaySession = useCallback(async (): Promise<void> => {
+    const item = sessionItem;
+    if (!item || busyId || !requirePurchase("sessions")) return;
+    setBusyId(item.id);
+    try {
+      const handled = await performTodayAction(async () => Boolean(await createSession("Today", [item.id])), () => handle(item, "session"));
+      if (!handled) return;
+      setSessionItem(null);
+    } catch { Alert.alert("Couldn’t create Session", "Nothing changed. This item is still in Today."); }
+    finally { setBusyId(null); }
+  }, [busyId, createSession, handle, requirePurchase, sessionItem]);
+
+  const showMore = useCallback((item: TodaySnapshotItem): void => {
+    Alert.alert(item.title, "Choose what happens to this Today card.", [
+      { text: "Snooze", onPress: () => setSnoozeItem(item) },
+      { text: "Dismiss", style: "destructive", onPress: () => { void handle(item, "dismissed").then((changed) => { if (changed) setUndo({ item, previous: item.disposition, snoozedUntil: item.snoozedUntil }); }); } },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [handle]);
+
+  const snooze = useCallback(async (until: number): Promise<void> => {
+    if (!snoozeItem || until <= Date.now()) return;
+    const item = snoozeItem;
+    setSnoozeItem(null);
+    await handle(item, "snoozed", until);
+  }, [handle, snoozeItem]);
+
+  const undoDismiss = useCallback(async (): Promise<void> => {
+    if (!undo) return;
+    const restored = await todayRepository.setDisposition(activeProfileId, undo.item.periodKey, undo.item.id, undo.previous, Date.now(), undo.snoozedUntil, "dismissed");
+    if (restored) { setUndo(null); await reloadLocal(); void AccessibilityInfo.announceForAccessibility("Dismiss undone."); }
+  }, [activeProfileId, reloadLocal, undo]);
+
+  const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · local copy" : snapshot?.freshness === "stale" ? "Cached · refresh delayed" : isRefreshing ? "Checking shared cache…" : null;
+  const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
+  const initialLoading = !snapshot && (sourcesLoading || todayQuery.isLoading);
+  let content;
+  if (initialLoading) content = <VideoFeedSkeleton count={3} accessibilityLabel="Loading today's finite inbox" />;
+  else if (sourceIds.length === 0) content = <StateBlock title="Choose one trusted source" body="Today begins with sources you select. Follow one source and this inbox can fill immediately." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
+  else if (visible.length > 0) content = visible.map((item) => <TodayVideoCard key={item.id} item={item} busy={busyId === item.id} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} />);
+  else if (hasOnlySnoozed) content = <StateBlock title="Resting for now" body={`Your next snoozed item returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}. Nothing else will replace it.`} styles={styles} />;
+  else if (snapshot && snapshot.items.length > 0) content = <StateBlock title="You’re caught up" body="That is the end of today’s finite inbox. Frame will not refill it behind you." styles={styles} success />;
+  else if (snapshot) content = <StateBlock title="No eligible uploads today" body="Your sources are here, but their cached videos did not match your local rules. This is a valid empty inbox." styles={styles} success />;
+  else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="There is no local snapshot yet. Reconnect, then retry the shared cache once." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
+  else if (todayQuery.data?.state === "no_cache") content = <StateBlock title="Cache is still being prepared" body={todayQuery.data.message ?? "Your followed sources have no shared cached media yet. Retry after ingestion has run."} action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
+  else content = <StateBlock title="Today couldn’t load" body={todayQuery.data?.message ?? "The shared cache is unavailable right now. No provider was contacted from this screen."} action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.page}>
-        <ScreenHeader eyebrow="Today" title={"A finite\ninbox."} subtitle="Trusted sources, a small number of choices, and a real stopping point." />
-        <View style={styles.boundaryRow} accessible accessibilityLabel={`Today is limited to ${TODAY_MAX_ITEMS} videos, with at most ${MAX_ITEMS_PER_SOURCE} per source`}>
-          <CircleCheck size={17} color={palette.active} strokeWidth={1.8} />
-          <Text style={styles.boundaryText}>Up to {TODAY_MAX_ITEMS} videos · no more than {MAX_ITEMS_PER_SOURCE} per source</Text>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
+        <View style={styles.page}>
+          <ScreenHeader eyebrow="Today" title={"A finite\ninbox."} subtitle="Trusted sources, a small number of choices, and a real stopping point." />
+          <View style={styles.boundaryRow} accessible accessibilityLabel={`Today is limited to ${TODAY_MAX_ITEMS} videos, with at most ${MAX_ITEMS_PER_SOURCE} per source`}><CircleCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>Up to {TODAY_MAX_ITEMS} videos · no more than {MAX_ITEMS_PER_SOURCE} per source</Text></View>
+          {status ? <View style={styles.status}><CloudOff size={14} color={palette.inkMuted} /><Text style={styles.statusText}>{status}</Text></View> : null}
+          <View style={styles.content}>{content}</View>
+          {sourceIds.length > 0 ? <Pressable onPress={() => router.push("/(tabs)/sources")} style={styles.secondaryLink} accessibilityRole="button"><Text style={styles.secondaryText}>Open a source directly</Text><ArrowRight size={16} color={palette.accent} /></Pressable> : null}
         </View>
-        <View style={styles.content}>{stateContent}</View>
-        {followedChannels.length > 0 ? (
-          <Pressable onPress={() => router.push("/(tabs)/sources")} style={styles.secondaryLink} accessibilityRole="button" accessibilityLabel="Open followed sources">
-            <Text style={styles.secondaryText}>Open a source directly</Text>
-            <ArrowRight size={16} color={palette.accent} />
-          </Pressable>
-        ) : null}
-      </View>
-    </ScrollView>
+      </ScrollView>
+      {undo ? <View style={[styles.undo, { bottom: insets.bottom + 84 }]} accessibilityLiveRegion="polite"><Text style={styles.undoText}>Dismissed from Today</Text><Pressable onPress={() => { void undoDismiss(); }} style={styles.undoButton} accessibilityRole="button"><RotateCcw size={15} color={palette.onDark} /><Text style={styles.undoButtonText}>Undo</Text></Pressable></View> : null}
+      <SnoozeModal visible={Boolean(snoozeItem)} title={snoozeItem?.title ?? ""} onClose={() => setSnoozeItem(null)} onSnooze={(until) => { void snooze(until); }} />
+      <TodaySessionModal visible={Boolean(sessionItem)} title={sessionItem?.title ?? ""} sessions={sessions} onClose={() => setSessionItem(null)} onPick={(id) => { void addToSession(id); }} onCreate={() => { void createTodaySession(); }} />
+    </View>
   );
 }
 
-function PrimaryLink({ label, onPress, styles }: { label: string; onPress: () => void; styles: ReturnType<typeof createStyles> }) {
-  const { palette } = useFrameTheme();
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]} accessibilityRole="button">
-      <Text style={styles.primaryButtonText}>{label}</Text>
-      <ArrowRight size={17} color={palette.onDark} />
-    </Pressable>
-  );
+function StateBlock({ title, body, action, onPress, styles, success = false }: { title: string; body: string; action?: string; onPress?: () => void; styles: ReturnType<typeof createStyles>; success?: boolean }) {
+  return <View accessibilityLabel={title}><EmptyState symbol={success ? "✓" : undefined} title={title} body={body} />{action && onPress ? <Pressable onPress={onPress} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]} accessibilityRole="button"><Text style={styles.primaryButtonText}>{action}</Text><ArrowRight size={17} color="#FFFDF9" /></Pressable> : null}</View>;
 }
-
 function createStyles(palette: FramePalette, type: FrameType) {
-  return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: palette.wall },
-    page: { paddingHorizontal: spacing.page },
-    boundaryRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.borderSoft },
-    boundaryText: { ...type.label, flex: 1, color: palette.active },
-    content: { marginTop: spacing.lg },
-    primaryButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: -spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
-    primaryButtonText: { ...type.label, color: palette.onDark },
-    secondaryLink: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.md },
-    secondaryText: { ...type.label, color: palette.accent },
-    pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
-  });
+  return StyleSheet.create({ screen: { flex: 1, backgroundColor: palette.wall }, page: { paddingHorizontal: spacing.page }, boundaryRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.borderSoft }, boundaryText: { ...type.label, flex: 1, color: palette.active }, status: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.sm }, statusText: { ...type.bodySoft, color: palette.inkMuted }, content: { marginTop: spacing.lg }, primaryButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginTop: -spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep }, primaryButtonText: { ...type.label, color: palette.onDark }, secondaryLink: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.md }, secondaryText: { ...type.label, color: palette.accent }, undo: { position: "absolute", left: spacing.page, right: spacing.page, minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep }, undoText: { ...type.label, color: palette.onDark }, undoButton: { minHeight: 44, flexDirection: "row", gap: spacing.sm, alignItems: "center", paddingHorizontal: spacing.sm }, undoButtonText: { ...type.label, color: palette.onDark }, pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] } });
 }

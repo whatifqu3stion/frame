@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 3;
+export const DATABASE_SCHEMA_VERSION = 4;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -129,6 +129,53 @@ export const CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL = `CREATE TABLE IF NOT EXIS
   FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
 )`;
 
+export const CREATE_TODAY_SNAPSHOTS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS today_snapshots (
+  profileId TEXT NOT NULL,
+  periodKey TEXT NOT NULL,
+  createdAt INTEGER NOT NULL,
+  cacheFetchedAt INTEGER,
+  freshness TEXT NOT NULL CHECK (freshness IN ('fresh', 'stale', 'offline')),
+  PRIMARY KEY (profileId, periodKey),
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS today_snapshot_items (
+  profileId TEXT NOT NULL,
+  periodKey TEXT NOT NULL,
+  mediaId TEXT NOT NULL,
+  sourceId TEXT NOT NULL,
+  sourceTitle TEXT NOT NULL,
+  title TEXT NOT NULL,
+  thumbnailUrl TEXT NOT NULL,
+  publishedAt TEXT NOT NULL,
+  durationSeconds INTEGER NOT NULL,
+  description TEXT,
+  madeForKids INTEGER,
+  isLivestream INTEGER NOT NULL,
+  isUpcomingPremiere INTEGER NOT NULL,
+  fetchedAt INTEGER NOT NULL,
+  position INTEGER NOT NULL CHECK (position BETWEEN 0 AND 11),
+  disposition TEXT NOT NULL CHECK (disposition IN ('pending','saved','session','watched','snoozed','dismissed','unavailable')),
+  dispositionAt INTEGER,
+  snoozedUntil INTEGER,
+  PRIMARY KEY (profileId, periodKey, mediaId),
+  UNIQUE (profileId, periodKey, position),
+  FOREIGN KEY (profileId, periodKey) REFERENCES today_snapshots(profileId, periodKey) ON DELETE CASCADE
+)`;
+
+export const CREATE_SOURCE_RULES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS source_rules (
+  profileId TEXT NOT NULL,
+  sourceId TEXT NOT NULL,
+  minimumDurationSeconds INTEGER NOT NULL DEFAULT 0 CHECK (minimumDurationSeconds BETWEEN 0 AND 86400),
+  hideLivestreams INTEGER NOT NULL DEFAULT 1 CHECK (hideLivestreams IN (0,1)),
+  hideUpcomingPremieres INTEGER NOT NULL DEFAULT 1 CHECK (hideUpcomingPremieres IN (0,1)),
+  todayContributionLimit INTEGER NOT NULL DEFAULT 2 CHECK (todayContributionLimit BETWEEN 1 AND 2),
+  mutedUntil INTEGER,
+  updatedAt INTEGER NOT NULL,
+  PRIMARY KEY (profileId, sourceId),
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
 export function createProfileOwnedTableSql(table: ProfileOwnedTable, tableName: string = table): string {
   return `CREATE TABLE IF NOT EXISTS ${tableName} (${tableDefinitions[table]})`;
 }
@@ -173,6 +220,18 @@ export function buildVersion3MigrationPlan(): string[] {
     `INSERT OR IGNORE INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt)
      SELECT profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt FROM managed_allowances`,
     "PRAGMA user_version = 3",
+  ];
+}
+
+/** Adds finite profile-local Today snapshots and local source rules. */
+export function buildVersion4MigrationPlan(): string[] {
+  return [
+    CREATE_TODAY_SNAPSHOTS_TABLE_SQL,
+    CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL,
+    CREATE_SOURCE_RULES_TABLE_SQL,
+    "CREATE INDEX IF NOT EXISTS today_snapshot_items_profile_disposition_idx ON today_snapshot_items(profileId, disposition, dispositionAt)",
+    "CREATE INDEX IF NOT EXISTS today_snapshot_items_profile_snooze_idx ON today_snapshot_items(profileId, snoozedUntil) WHERE disposition = 'snoozed'",
+    "PRAGMA user_version = 4",
   ];
 }
 
@@ -243,5 +302,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 3) {
     await executeMigrationTransaction(db, buildVersion3MigrationPlan());
+    currentVersion = 3;
+  }
+  if (currentVersion < 4) {
+    await executeMigrationTransaction(db, buildVersion4MigrationPlan());
   }
 }
