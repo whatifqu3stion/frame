@@ -1,0 +1,130 @@
+import { createClient } from "@supabase/supabase-js";
+import {
+  executeSourceFeed,
+  type CachedSourceFeedItem,
+  type CachedSourceFeedRecord,
+  type CachedSourceFeedSource,
+  type SourceFeedRepository,
+} from "../_shared/source-feed.ts";
+import { getSupabaseSecretKey, hasValidPublishableKey, readBoundedJsonBody } from "../_shared/edge-security.ts";
+
+const corsHeaders: Readonly<Record<string, string>> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "apikey, authorization, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
+const maxRequestBytes = 512;
+
+Deno.serve(async (request: Request): Promise<Response> => {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (request.method !== "POST") return jsonResponse(405, "no-store", { state: "unavailable", items: [], message: "Use POST." });
+  if (!hasValidPublishableKey(request, Deno.env.get)) {
+    return jsonResponse(401, "no-store", { state: "unavailable", items: [], message: "A valid client API key is required." });
+  }
+  const body = await readBoundedJsonBody(request, maxRequestBytes);
+  if (!body.ok) return jsonResponse(body.status, "no-store", { state: "unavailable", items: [], message: body.message });
+
+  const repository = createRepository();
+  if (!repository) return jsonResponse(503, "no-store", { state: "unavailable", items: [], message: "This source feed is unavailable." });
+  const result = await executeSourceFeed(body.value, repository);
+  return jsonResponse(result.status, result.cacheControl, result.body);
+});
+
+function createRepository(): SourceFeedRepository | null {
+  const url = Deno.env.get("SUPABASE_URL");
+  const secretKey = getSupabaseSecretKey(Deno.env.get);
+  if (!url || !secretKey) return null;
+  const client = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  return {
+    async readCachedSourceFeed(providerSourceId, limit): Promise<CachedSourceFeedRecord | null> {
+      const { data: sourceRow, error: sourceError } = await client
+        .from("sources")
+        .select("id,provider,provider_source_id,handle,display_name,thumbnail_url,status")
+        .eq("provider", "youtube")
+        .eq("provider_source_id", providerSourceId)
+        .maybeSingle();
+      if (sourceError) throw new Error("source cache unavailable");
+      const source = mapSource(sourceRow);
+      if (!source || !isRecord(sourceRow) || typeof sourceRow.id !== "string") return null;
+
+      const { data: syncRow, error: syncError } = await client
+        .from("source_sync_state")
+        .select("last_success_at,next_attempt_at,last_error_code")
+        .eq("source_id", sourceRow.id)
+        .maybeSingle();
+      if (syncError) throw new Error("source freshness unavailable");
+
+      const { data: mediaRows, error: mediaError } = await client
+        .from("media_items")
+        .select("provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere,made_for_kids,metadata_fetched_at")
+        .eq("source_id", sourceRow.id)
+        .eq("provider", "youtube")
+        .eq("status", "active")
+        .not("metadata_fetched_at", "is", null)
+        .order("published_at", { ascending: false, nullsFirst: false })
+        .limit(Math.min(limit, 20));
+      if (mediaError) throw new Error("media cache unavailable");
+
+      return {
+        source,
+        sourceStatus: sourceRow.status === "active" || sourceRow.status === "unavailable" || sourceRow.status === "deleted"
+          ? sourceRow.status
+          : "unavailable",
+        lastSuccessAt: isRecord(syncRow) ? optionalString(syncRow.last_success_at) : null,
+        nextAttemptAt: isRecord(syncRow) ? optionalString(syncRow.next_attempt_at) : null,
+        lastErrorCode: isRecord(syncRow) ? optionalString(syncRow.last_error_code) : null,
+        items: Array.isArray(mediaRows) ? mediaRows.flatMap(mapItem) : [],
+      };
+    },
+  };
+}
+
+function mapSource(value: unknown): CachedSourceFeedSource | null {
+  if (!isRecord(value) || value.provider !== "youtube" || typeof value.provider_source_id !== "string" || typeof value.display_name !== "string") return null;
+  return {
+    provider: "youtube",
+    providerSourceId: value.provider_source_id,
+    handle: optionalString(value.handle),
+    displayName: value.display_name,
+    thumbnailUrl: optionalString(value.thumbnail_url),
+  };
+}
+
+function mapItem(value: unknown): CachedSourceFeedItem[] {
+  if (!isRecord(value) || value.provider !== "youtube" || typeof value.provider_media_id !== "string" || typeof value.title !== "string") return [];
+  if (typeof value.metadata_fetched_at !== "string") return [];
+  return [{
+    provider: "youtube",
+    providerMediaId: value.provider_media_id,
+    title: value.title,
+    description: optionalString(value.description) ?? "",
+    thumbnailUrl: optionalString(value.thumbnail_url),
+    publishedAt: optionalString(value.published_at),
+    durationSeconds: typeof value.duration_seconds === "number" ? value.duration_seconds : null,
+    isLivestream: value.is_livestream === true,
+    isUpcomingPremiere: value.is_upcoming_premiere === true,
+    madeForKids: typeof value.made_for_kids === "boolean" ? value.made_for_kids : null,
+    fetchedAt: value.metadata_fetched_at,
+  }];
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function jsonResponse(status: number, cacheControl: string, body: unknown): Response {
+  return Response.json(body, {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Cache-Control": cacheControl,
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Vary": "Accept-Encoding",
+    },
+  });
+}

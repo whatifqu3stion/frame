@@ -28,3 +28,9 @@ verify_jwt = false
 
 [functions.resolve-source]
 verify_jwt = false
+
+[functions.sync-sources]
+verify_jwt = false
+
+[functions.source-feed]
+verify_jwt = false

@@ -214,6 +214,7 @@ function parseResolvedVideo(value: unknown): ResolvedVideo | null {
   if (value.publishedAt !== null && typeof value.publishedAt !== "string") return null;
   if (value.durationSeconds !== null && (typeof value.durationSeconds !== "number" || !Number.isInteger(value.durationSeconds))) return null;
   if (typeof value.isLivestream !== "boolean" || typeof value.isUpcomingPremiere !== "boolean") return null;
+  if (value.madeForKids !== null && typeof value.madeForKids !== "boolean") return null;
   return {
     provider: "youtube",
     providerMediaId: value.providerMediaId,
@@ -224,6 +225,7 @@ function parseResolvedVideo(value: unknown): ResolvedVideo | null {
     durationSeconds: value.durationSeconds,
     isLivestream: value.isLivestream,
     isUpcomingPremiere: value.isUpcomingPremiere,
+    madeForKids: value.madeForKids,
   };
 }
 
@@ -239,6 +241,7 @@ export function resolutionVideoToVideo(resolution: SourceResolution): Video | nu
     publishedAt: video.publishedAt ?? "",
     durationSeconds: video.durationSeconds ?? 0,
     description: video.description,
+    madeForKids: video.madeForKids,
   };
 }
 

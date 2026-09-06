@@ -77,6 +77,7 @@ export type Video = {
   publishedAt: string;
   durationSeconds: number;
   description?: string;
+  madeForKids?: boolean | null;
 };
 
 export type Channel = {
@@ -105,6 +106,7 @@ export type ResolvedVideo = {
   durationSeconds: number | null;
   isLivestream: boolean;
   isUpcomingPremiere: boolean;
+  madeForKids: boolean | null;
 };
 
 export type SourceResolution = {

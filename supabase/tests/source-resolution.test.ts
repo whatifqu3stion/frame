@@ -30,6 +30,7 @@ const video: ProviderVideo = {
   durationSeconds: 120,
   isLivestream: false,
   isUpcomingPremiere: false,
+  madeForKids: false,
 };
 
 class MemoryRepository implements SourceResolutionRepository {
@@ -146,6 +147,7 @@ describe("bounded shared-source resolution", () => {
     if (result.outcome !== "success") return;
     expect(Object.keys(result).sort()).toEqual(["outcome", "provenance", "source", "video"]);
     expect(Object.keys(result.source).sort()).toEqual(["description", "displayName", "handle", "provider", "providerSourceId", "thumbnailUrl"]);
+    expect(result.video?.madeForKids).toBe(false);
     expect(result.source.thumbnailUrl).toBeNull();
     expect(JSON.stringify(result)).not.toContain(installationToken);
   });

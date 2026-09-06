@@ -1,0 +1,353 @@
+import { createClient } from "@supabase/supabase-js";
+import {
+  executeSourceIngestion,
+  type IngestionChannel,
+  type IngestionServiceState,
+  type IngestionVideo,
+  type ProviderResult,
+  type ReservationOutcome,
+  type SourceIngestionRepository,
+  type SourceSyncClaim,
+  type YouTubeIngestionProvider,
+} from "../_shared/source-ingestion.ts";
+import { getSupabaseSecretKey } from "../_shared/edge-security.ts";
+
+const providerTimeoutMs = 8_000;
+const workerTokenPattern = /^[0-9a-f]{64}$/;
+
+Deno.serve(async (request: Request): Promise<Response> => {
+  if (request.method !== "POST") return jsonResponse(405, { state: "unavailable", message: "Use POST." });
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const secretKey = getSupabaseSecretKey(Deno.env.get);
+  const apiKey = Deno.env.get("YOUTUBE_API_KEY");
+  if (!url || !secretKey || !apiKey) {
+    return jsonResponse(503, { state: "unavailable", message: "Source ingestion is not configured." });
+  }
+
+  const token = request.headers.get("x-frame-worker-token")?.trim() ?? "";
+  if (!workerTokenPattern.test(token)) return jsonResponse(401, { state: "unavailable", message: "Unauthorized." });
+
+  const client = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: authorized, error: authorizationError } = await client.rpc("authorize_source_sync_worker", { p_token: token });
+  if (authorizationError || authorized !== true) return jsonResponse(401, { state: "unavailable", message: "Unauthorized." });
+
+  const report = await executeSourceIngestion(createRepository(url, secretKey), createYouTubeProvider(apiKey));
+  return jsonResponse(report.state === "unavailable" ? 503 : 200, report);
+});
+
+function createRepository(url: string, secretKey: string): SourceIngestionRepository {
+  const client = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  return {
+    async getServiceState(): Promise<IngestionServiceState> {
+      const { data, error } = await client
+        .from("service_controls")
+        .select("youtube_ingestion_enabled,maintenance_mode,youtube_ingestion_halted_until")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+      if (error || !isRecord(data)) throw new Error("service controls unavailable");
+      return {
+        ingestionEnabled: data.youtube_ingestion_enabled === true,
+        maintenanceMode: data.maintenance_mode === true,
+        haltedUntil: optionalString(data.youtube_ingestion_halted_until),
+      };
+    },
+
+    async claimDueSources(claimToken, limit): Promise<readonly SourceSyncClaim[]> {
+      const { data, error } = await client.rpc("claim_due_source_syncs", {
+        p_claim_token: claimToken,
+        p_requested_limit: limit,
+      });
+      if (error) throw new Error("source claims unavailable");
+      return Array.isArray(data) ? data.flatMap(mapClaim) : [];
+    },
+
+    async reserveProviderQuota(requestCount, quotaUnits): Promise<ReservationOutcome> {
+      const { data, error } = await client.rpc("reserve_youtube_ingestion_quota", {
+        p_request_count: requestCount,
+        p_quota_units: quotaUnits,
+      });
+      if (error || !Array.isArray(data) || !isRecord(data[0])) throw new Error("quota reservation unavailable");
+      const outcome = data[0].outcome;
+      return outcome === "reserved" || outcome === "quota_exhausted" ? outcome : "temporarily_unavailable";
+    },
+
+    async upsertSources(channels, fetchedAt, expiresAt): Promise<void> {
+      if (channels.length === 0) return;
+      const rows = channels.map((channel: IngestionChannel) => ({
+        provider: "youtube",
+        provider_source_id: channel.providerSourceId,
+        handle: channel.handle,
+        display_name: channel.displayName,
+        description: channel.description,
+        thumbnail_url: channel.thumbnailUrl,
+        status: "active",
+        metadata_fetched_at: fetchedAt.toISOString(),
+        metadata_expires_at: expiresAt.toISOString(),
+      }));
+      const { error } = await client.from("sources").upsert(rows, { onConflict: "provider,provider_source_id" });
+      if (error) throw new Error("source catalog write unavailable");
+    },
+
+    async upsertVideos(videos, fetchedAt, expiresAt): Promise<void> {
+      if (videos.length === 0) return;
+      const providerSourceIds = [...new Set(videos.map((video: IngestionVideo) => video.providerSourceId))];
+      const { data: sources, error: sourcesError } = await client
+        .from("sources")
+        .select("id,provider_source_id")
+        .eq("provider", "youtube")
+        .in("provider_source_id", providerSourceIds);
+      if (sourcesError || !Array.isArray(sources)) throw new Error("source identities unavailable");
+      const sourceIds = new Map<string, string>();
+      for (const source of sources) {
+        if (isRecord(source) && typeof source.id === "string" && typeof source.provider_source_id === "string") {
+          sourceIds.set(source.provider_source_id, source.id);
+        }
+      }
+      const rows = videos.flatMap((video: IngestionVideo) => {
+        const sourceId = sourceIds.get(video.providerSourceId);
+        if (!sourceId) return [];
+        return [{
+          provider: "youtube",
+          provider_media_id: video.providerMediaId,
+          source_id: sourceId,
+          title: video.title,
+          description: video.description,
+          thumbnail_url: video.thumbnailUrl,
+          published_at: video.publishedAt,
+          duration_seconds: video.durationSeconds,
+          is_livestream: video.isLivestream,
+          is_upcoming_premiere: video.isUpcomingPremiere,
+          made_for_kids: video.madeForKids,
+          status: video.availability,
+          metadata_fetched_at: fetchedAt.toISOString(),
+          metadata_expires_at: expiresAt.toISOString(),
+        }];
+      });
+      if (rows.length !== videos.length) throw new Error("source identity mismatch");
+      const { error } = await client.from("media_items").upsert(rows, { onConflict: "provider,provider_media_id" });
+      if (error) throw new Error("media catalog write unavailable");
+    },
+
+    async markVideosUnavailable(sourceId, providerMediaIds): Promise<void> {
+      if (providerMediaIds.length === 0) return;
+      const { error } = await client
+        .from("media_items")
+        .update({ status: "unavailable" })
+        .eq("source_id", sourceId)
+        .eq("provider", "youtube")
+        .in("provider_media_id", [...providerMediaIds]);
+      if (error) throw new Error("media status update unavailable");
+    },
+
+    async completeClaim(sourceId, claimToken, outcome, errorCode, uploadsPlaylistId): Promise<void> {
+      const { data, error } = await client.rpc("complete_source_sync_claim", {
+        p_source_id: sourceId,
+        p_claim_token: claimToken,
+        p_outcome: outcome,
+        p_error_code: errorCode,
+        p_uploads_playlist_id: uploadsPlaylistId,
+      });
+      if (error || data !== true) throw new Error("source claim completion unavailable");
+    },
+
+    async haltIngestion(errorCode, until): Promise<void> {
+      const { data, error } = await client.rpc("record_youtube_ingestion_halt", {
+        p_error_code: errorCode,
+        p_halted_until: until.toISOString(),
+      });
+      if (error || data !== true) throw new Error("ingestion halt unavailable");
+    },
+
+    async expireStaleMetadata(limit): Promise<void> {
+      const { error } = await client.rpc("expire_stale_youtube_metadata", { p_limit: limit });
+      if (error) throw new Error("metadata maintenance unavailable");
+    },
+  };
+}
+
+function createYouTubeProvider(apiKey: string): YouTubeIngestionProvider {
+  return {
+    async getChannels(providerSourceIds): Promise<ProviderResult<readonly IngestionChannel[]>> {
+      const response = await youtubeRequest("channels", {
+        part: "snippet,contentDetails",
+        id: providerSourceIds.join(","),
+        maxResults: String(Math.min(providerSourceIds.length, 5)),
+      }, apiKey);
+      if (response.outcome !== "success") return response;
+      const items = arrayRecords(response.data.items);
+      return { outcome: "success", data: items.flatMap(mapChannel) };
+    },
+
+    async getUploadsPage(uploadsPlaylistId, maxResults): Promise<ProviderResult<readonly string[]>> {
+      const response = await youtubeRequest("playlistItems", {
+        part: "contentDetails,status",
+        playlistId: uploadsPlaylistId,
+        maxResults: String(Math.min(maxResults, 20)),
+      }, apiKey);
+      if (response.outcome !== "success") return response;
+      const ids = arrayRecords(response.data.items).flatMap((item: Record<string, unknown>) => {
+        const details = recordValue(item, "contentDetails");
+        const id = details ? stringValue(details, "videoId") : null;
+        return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? [id] : [];
+      });
+      return { outcome: "success", data: [...new Set(ids)].slice(0, 20) };
+    },
+
+    async getVideos(providerMediaIds): Promise<ProviderResult<readonly IngestionVideo[]>> {
+      const response = await youtubeRequest("videos", {
+        part: "snippet,contentDetails,status,liveStreamingDetails",
+        id: providerMediaIds.join(","),
+      }, apiKey);
+      if (response.outcome !== "success") return response;
+      return { outcome: "success", data: arrayRecords(response.data.items).flatMap(mapVideo) };
+    },
+  };
+}
+
+async function youtubeRequest(
+  resource: "channels" | "playlistItems" | "videos",
+  parameters: Readonly<Record<string, string>>,
+  apiKey: string,
+): Promise<ProviderResult<Record<string, unknown>>> {
+  const url = new URL(`https://www.googleapis.com/youtube/v3/${resource}`);
+  for (const [key, value] of Object.entries(parameters)) url.searchParams.set(key, value);
+  url.searchParams.set("key", apiKey);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), providerTimeoutMs);
+  try {
+    const response = await fetch(url, { headers: { Accept: "application/json" }, signal: controller.signal });
+    if (response.status === 401) return { outcome: "auth" };
+    if (response.status === 404) return { outcome: "not_found" };
+    if (response.status === 429) return { outcome: "circuit" };
+    if (response.status === 403) {
+      const body = await response.json().catch(() => null) as unknown;
+      return { outcome: isQuotaError(body) ? "quota" : "auth" };
+    }
+    if (response.status >= 500) return { outcome: "transient" };
+    if (!response.ok) return { outcome: "transient" };
+    const data = await response.json().catch(() => null) as unknown;
+    return isRecord(data) ? { outcome: "success", data } : { outcome: "transient" };
+  } catch {
+    return { outcome: "transient" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function mapClaim(value: unknown): SourceSyncClaim[] {
+  if (!isRecord(value) || typeof value.source_id !== "string" || typeof value.provider_source_id !== "string") return [];
+  return [{
+    sourceId: value.source_id,
+    providerSourceId: value.provider_source_id,
+    uploadsPlaylistId: optionalString(value.uploads_playlist_id),
+    sourceMetadataFetchedAt: optionalString(value.source_metadata_fetched_at),
+    sourceMetadataExpiresAt: optionalString(value.source_metadata_expires_at),
+  }];
+}
+
+function mapChannel(item: Record<string, unknown>): IngestionChannel[] {
+  const providerSourceId = stringValue(item, "id");
+  const snippet = recordValue(item, "snippet");
+  const contentDetails = recordValue(item, "contentDetails");
+  const relatedPlaylists = contentDetails ? recordValue(contentDetails, "relatedPlaylists") : null;
+  const uploadsPlaylistId = relatedPlaylists ? stringValue(relatedPlaylists, "uploads") : null;
+  const displayName = snippet ? stringValue(snippet, "title") : null;
+  if (!providerSourceId || !/^UC[A-Za-z0-9_-]{22}$/.test(providerSourceId) || !uploadsPlaylistId || !/^[A-Za-z0-9_-]{1,255}$/.test(uploadsPlaylistId) || !displayName) return [];
+  const customUrl = snippet ? stringValue(snippet, "customUrl") : null;
+  return [{
+    provider: "youtube",
+    providerSourceId,
+    handle: customUrl?.startsWith("@") ? `@${customUrl.slice(1).toLowerCase()}` : null,
+    displayName,
+    description: snippet ? stringValue(snippet, "description") ?? "" : "",
+    thumbnailUrl: thumbnailFrom(snippet),
+    uploadsPlaylistId,
+  }];
+}
+
+function mapVideo(item: Record<string, unknown>): IngestionVideo[] {
+  const providerMediaId = stringValue(item, "id");
+  const snippet = recordValue(item, "snippet");
+  const details = recordValue(item, "contentDetails");
+  const status = recordValue(item, "status");
+  const providerSourceId = snippet ? stringValue(snippet, "channelId") : null;
+  const title = snippet ? stringValue(snippet, "title") : null;
+  if (!providerMediaId || !/^[A-Za-z0-9_-]{11}$/.test(providerMediaId) || !providerSourceId || !title) return [];
+  const liveState = snippet ? stringValue(snippet, "liveBroadcastContent") : null;
+  const privacyStatus = status ? stringValue(status, "privacyStatus") : null;
+  const uploadStatus = status ? stringValue(status, "uploadStatus") : null;
+  const unavailable = privacyStatus === "private" || ["deleted", "failed", "rejected"].includes(uploadStatus ?? "");
+  return [{
+    provider: "youtube",
+    providerMediaId,
+    providerSourceId,
+    title,
+    description: snippet ? stringValue(snippet, "description") ?? "" : "",
+    thumbnailUrl: thumbnailFrom(snippet),
+    publishedAt: snippet ? stringValue(snippet, "publishedAt") : null,
+    durationSeconds: parseYouTubeDuration(details ? stringValue(details, "duration") : null),
+    isLivestream: liveState === "live",
+    isUpcomingPremiere: liveState === "upcoming",
+    madeForKids: status && typeof status.madeForKids === "boolean" ? status.madeForKids : null,
+    availability: unavailable ? "unavailable" : "active",
+  }];
+}
+
+export function parseYouTubeDuration(value: string | null): number | null {
+  if (!value) return null;
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(value);
+  if (!match || !match.slice(1).some(Boolean)) return null;
+  const seconds = Number(match[1] ?? 0) * 86_400
+    + Number(match[2] ?? 0) * 3_600
+    + Number(match[3] ?? 0) * 60
+    + Number(match[4] ?? 0);
+  return Number.isSafeInteger(seconds) && seconds >= 0 && seconds <= 31_536_000 ? seconds : null;
+}
+
+function isQuotaError(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const error = recordValue(value, "error");
+  const errors = error && Array.isArray(error.errors) ? error.errors : [];
+  return errors.some((entry: unknown) => {
+    if (!isRecord(entry) || typeof entry.reason !== "string") return false;
+    return ["quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"].includes(entry.reason);
+  });
+}
+
+function thumbnailFrom(snippet: Record<string, unknown> | null): string | null {
+  const thumbnails = snippet ? recordValue(snippet, "thumbnails") : null;
+  if (!thumbnails) return null;
+  for (const quality of ["maxres", "standard", "high", "medium", "default"] as const) {
+    const candidate = recordValue(thumbnails, quality);
+    const url = candidate ? stringValue(candidate, "url") : null;
+    if (url?.startsWith("https://")) return url;
+  }
+  return null;
+}
+
+function arrayRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+function recordValue(value: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  return isRecord(value[key]) ? value[key] : null;
+}
+function stringValue(value: Record<string, unknown>, key: string): string | null {
+  return typeof value[key] === "string" ? value[key] : null;
+}
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function jsonResponse(status: number, body: unknown): Response {
+  return Response.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}

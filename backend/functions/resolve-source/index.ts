@@ -54,7 +54,7 @@ function createRepository(): SourceResolutionRepository | null {
       if (input.kind === "video") {
         const { data: media, error: mediaError } = await client
           .from("media_items")
-          .select("source_id,provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere")
+          .select("source_id,provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere,made_for_kids")
           .eq("provider", "youtube")
           .eq("provider_media_id", input.value)
           .eq("status", "active")
@@ -145,11 +145,12 @@ function createRepository(): SourceResolutionRepository | null {
           duration_seconds: video.durationSeconds,
           is_livestream: video.isLivestream,
           is_upcoming_premiere: video.isUpcomingPremiere,
+          made_for_kids: video.madeForKids,
           status: "active",
           metadata_fetched_at: fetchedAt.toISOString(),
           metadata_expires_at: expiresAt.toISOString(),
         }, { onConflict: "provider,provider_media_id" })
-        .select("provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere")
+        .select("provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere,made_for_kids")
         .single();
       if (error) throw new Error("video registration unavailable");
       const mapped = mapVideoRow(data);
@@ -175,8 +176,10 @@ function createRepository(): SourceResolutionRepository | null {
 function createYouTubeProvider(apiKey: string): YouTubeResolutionProvider {
   return {
     async getChannel(kind, value): Promise<ProviderResult<ProviderChannel>> {
-      const params = kind === "channelId" ? { id: value } : { forHandle: `@${value}` };
-      const response = await youtubeRequest("channels", { part: "snippet", ...params }, apiKey);
+      const parameters: Readonly<Record<string, string>> = kind === "channelId"
+        ? { part: "snippet", id: value }
+        : { part: "snippet", forHandle: `@${value}` };
+      const response = await youtubeRequest("channels", parameters, apiKey);
       if (response.outcome !== "success") return response;
       const item = firstItem(response.data);
       if (!item) return { outcome: "not_found" };
@@ -199,12 +202,13 @@ function createYouTubeProvider(apiKey: string): YouTubeResolutionProvider {
     },
 
     async getVideo(videoId): Promise<ProviderResult<ProviderVideo>> {
-      const response = await youtubeRequest("videos", { part: "snippet,contentDetails", id: videoId }, apiKey);
+      const response = await youtubeRequest("videos", { part: "snippet,contentDetails,status", id: videoId }, apiKey);
       if (response.outcome !== "success") return response;
       const item = firstItem(response.data);
       if (!item) return { outcome: "not_found" };
       const snippet = recordValue(item, "snippet");
       const details = recordValue(item, "contentDetails");
+      const status = recordValue(item, "status");
       const id = stringValue(item, "id");
       const channelId = snippet ? stringValue(snippet, "channelId") : null;
       const title = snippet ? stringValue(snippet, "title") : null;
@@ -223,6 +227,7 @@ function createYouTubeProvider(apiKey: string): YouTubeResolutionProvider {
           durationSeconds: parseYouTubeDuration(details ? stringValue(details, "duration") : null),
           isLivestream: liveState === "live",
           isUpcomingPremiere: liveState === "upcoming",
+          madeForKids: status && typeof status.madeForKids === "boolean" ? status.madeForKids : null,
         },
       };
     },
@@ -282,6 +287,7 @@ function mapVideoRow(value: unknown): SanitizedVideo | null {
     durationSeconds: typeof value.duration_seconds === "number" ? value.duration_seconds : null,
     isLivestream: value.is_livestream === true,
     isUpcomingPremiere: value.is_upcoming_premiere === true,
+    madeForKids: typeof value.made_for_kids === "boolean" ? value.made_for_kids : null,
   };
 }
 

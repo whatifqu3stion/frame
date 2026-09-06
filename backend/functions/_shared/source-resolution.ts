@@ -38,6 +38,7 @@ export interface SanitizedVideo {
   durationSeconds: number | null;
   isLivestream: boolean;
   isUpcomingPremiere: boolean;
+  madeForKids: boolean | null;
 }
 
 export interface SourceResolutionSuccess {
@@ -171,10 +172,11 @@ export function sanitizeVideo(video: SanitizedVideo): SanitizedVideo {
     thumbnailUrl: safeHttpsUrl(video.thumbnailUrl),
     publishedAt: safeIsoDate(video.publishedAt),
     durationSeconds: typeof video.durationSeconds === "number" && Number.isInteger(video.durationSeconds) && video.durationSeconds >= 0
-      ? Math.min(video.durationSeconds, 86_400)
+      ? Math.min(video.durationSeconds, 31_536_000)
       : null,
     isLivestream: video.isLivestream === true,
     isUpcomingPremiere: video.isUpcomingPremiere === true && video.isLivestream !== true,
+    madeForKids: typeof video.madeForKids === "boolean" ? video.madeForKids : null,
   };
 }
 

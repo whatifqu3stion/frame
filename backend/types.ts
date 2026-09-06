@@ -104,6 +104,7 @@ export type Database = {
           id: string
           is_livestream: boolean
           is_upcoming_premiere: boolean
+          made_for_kids: boolean | null
           metadata_expires_at: string | null
           metadata_fetched_at: string | null
           provider: string
@@ -122,6 +123,7 @@ export type Database = {
           id?: string
           is_livestream?: boolean
           is_upcoming_premiere?: boolean
+          made_for_kids?: boolean | null
           metadata_expires_at?: string | null
           metadata_fetched_at?: string | null
           provider: string
@@ -140,6 +142,7 @@ export type Database = {
           id?: string
           is_livestream?: boolean
           is_upcoming_premiere?: boolean
+          made_for_kids?: boolean | null
           metadata_expires_at?: string | null
           metadata_fetched_at?: string | null
           provider?: string
@@ -170,9 +173,14 @@ export type Database = {
           source_leases_enabled: boolean
           source_resolution_daily_installation_call_limit: number
           source_resolution_enabled: boolean
+          source_sync_batch_limit: number
+          source_sync_lock_seconds: number
+          source_sync_success_interval_minutes: number
           updated_at: string
           weekly_picks_enabled: boolean
           youtube_ingestion_enabled: boolean
+          youtube_ingestion_halted_until: string | null
+          youtube_ingestion_last_error_code: string | null
         }
         Insert: {
           daily_youtube_unit_ceiling: number
@@ -182,9 +190,14 @@ export type Database = {
           source_leases_enabled?: boolean
           source_resolution_daily_installation_call_limit?: number
           source_resolution_enabled?: boolean
+          source_sync_batch_limit?: number
+          source_sync_lock_seconds?: number
+          source_sync_success_interval_minutes?: number
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
+          youtube_ingestion_halted_until?: string | null
+          youtube_ingestion_last_error_code?: string | null
         }
         Update: {
           daily_youtube_unit_ceiling?: number
@@ -194,9 +207,14 @@ export type Database = {
           source_leases_enabled?: boolean
           source_resolution_daily_installation_call_limit?: number
           source_resolution_enabled?: boolean
+          source_sync_batch_limit?: number
+          source_sync_lock_seconds?: number
+          source_sync_success_interval_minutes?: number
           updated_at?: string
           weekly_picks_enabled?: boolean
           youtube_ingestion_enabled?: boolean
+          youtube_ingestion_halted_until?: string | null
+          youtube_ingestion_last_error_code?: string | null
         }
         Relationships: []
       }
@@ -279,6 +297,77 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      source_sync_state: {
+        Row: {
+          claim_token: string | null
+          consecutive_failures: number
+          created_at: string
+          last_attempt_at: string | null
+          last_error_code: string | null
+          last_success_at: string | null
+          locked_until: string | null
+          next_attempt_at: string
+          source_id: string
+          updated_at: string
+          uploads_playlist_id: string | null
+        }
+        Insert: {
+          claim_token?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          last_attempt_at?: string | null
+          last_error_code?: string | null
+          last_success_at?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          source_id: string
+          updated_at?: string
+          uploads_playlist_id?: string | null
+        }
+        Update: {
+          claim_token?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          last_attempt_at?: string | null
+          last_error_code?: string | null
+          last_success_at?: string | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          source_id?: string
+          updated_at?: string
+          uploads_playlist_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_sync_state_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: true
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      source_sync_worker_credentials: {
+        Row: {
+          created_at: string
+          id: string
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sources: {
         Row: {
@@ -426,6 +515,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      authorize_source_sync_worker: {
+        Args: { p_token: string }
+        Returns: boolean
+      }
+      claim_due_source_syncs: {
+        Args: { p_claim_token: string; p_requested_limit?: number }
+        Returns: {
+          provider_source_id: string
+          source_id: string
+          source_metadata_expires_at: string
+          source_metadata_fetched_at: string
+          uploads_playlist_id: string
+        }[]
+      }
+      complete_source_sync_claim: {
+        Args: {
+          p_claim_token: string
+          p_error_code?: string
+          p_outcome: string
+          p_source_id: string
+          p_uploads_playlist_id?: string
+        }
+        Returns: boolean
+      }
       create_or_renew_source_demand_lease: {
         Args: {
           p_expires_at: string
@@ -433,6 +546,13 @@ export type Database = {
           p_source_id: string
         }
         Returns: string
+      }
+      expire_stale_youtube_metadata: {
+        Args: { p_limit?: number }
+        Returns: {
+          expired_media_count: number
+          expired_source_count: number
+        }[]
       }
       get_current_weekly_picks: {
         Args: { p_interest_ids: string[] }
@@ -475,6 +595,10 @@ export type Database = {
         }[]
       }
       purge_expired_source_demand_leases: { Args: never; Returns: number }
+      record_youtube_ingestion_halt: {
+        Args: { p_error_code: string; p_halted_until: string }
+        Returns: boolean
+      }
       release_source_demand_lease: {
         Args: { p_lease_token_hash: string }
         Returns: boolean
@@ -484,6 +608,14 @@ export type Database = {
         Returns: {
           outcome: string
           reserved_provider_calls: number
+        }[]
+      }
+      reserve_youtube_ingestion_quota: {
+        Args: { p_quota_units: number; p_request_count: number }
+        Returns: {
+          outcome: string
+          reserved_quota_units: number
+          reserved_request_count: number
         }[]
       }
       user_id: { Args: never; Returns: string }
