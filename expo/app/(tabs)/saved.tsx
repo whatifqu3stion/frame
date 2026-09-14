@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { ArrowRight, Play, Plus } from "lucide-react-native";
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ArrowRight, Play, Plus, Search, X } from "lucide-react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -11,8 +11,14 @@ import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { shellProfileQueryKeys } from "@/domain/productShell";
+import { filterSavedLibrary, resolveSavedCriteria, type SavedFilterCriteria, type SavedViewingFilter } from "@/domain/savedLibrary";
 import { useApp } from "@/providers/AppProvider";
-import type { Video } from "@/types";
+
+const FILTERS: readonly { id: SavedViewingFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "unwatched", label: "Unwatched" },
+  { id: "inProgress", label: "In progress" },
+];
 
 export default function SavedScreen() {
   const insets = useSafeAreaInsets();
@@ -20,9 +26,11 @@ export default function SavedScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { activeProfileId, savedVideos, resumeList, sessions, libraryLoading, requirePurchase } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
-  const saved: Video[] = savedVideos;
+  const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
+  const { query: searchQuery, filter: viewingFilter } = resolveSavedCriteria(criteria, activeProfileId);
+  const filteredSaved = useMemo(() => filterSavedLibrary(savedVideos, resumeList, searchQuery, viewingFilter), [resumeList, savedVideos, searchQuery, viewingFilter]);
   const continueWatching = useMemo(() => resumeList.flatMap((resume) => {
-    const video = saved.find((candidate) => candidate.id === resume.videoId) ?? (resume.title ? {
+    const video = savedVideos.find((candidate) => candidate.id === resume.videoId) ?? (resume.title ? {
       id: resume.videoId,
       fetchedAt: resume.fetchedAt ?? null,
       title: resume.title,
@@ -33,8 +41,9 @@ export default function SavedScreen() {
       durationSeconds: resume.durationSeconds ?? 0,
     } : null);
     return video ? [{ video, progressSeconds: resume.timestampSeconds }] : [];
-  }), [resumeList, saved]);
+  }), [resumeList, savedVideos]);
   const currentSession = sessions[0] ?? null;
+  const hasActiveFilter = searchQuery.trim().length > 0 || viewingFilter !== "all";
 
   const openSessionBuilder = (): void => {
     if (requirePurchase("sessions")) router.push("/session");
@@ -45,6 +54,8 @@ export default function SavedScreen() {
       style={styles.screen}
       contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
       <View style={styles.page}>
         <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="One place for the videos you chose, where you stopped, and the session in front of you." />
@@ -60,9 +71,51 @@ export default function SavedScreen() {
 
         <Text style={type.bodySoft}>Expired details are cleared, not your saved links or playback position.</Text>
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
-        {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : saved.length === 0 ? (
+        <View style={styles.searchField}>
+          <Search size={18} color={palette.inkMuted} strokeWidth={1.8} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={(query) => setCriteria({ profileId: activeProfileId, query, filter: viewingFilter })}
+            placeholder="Search titles or sources"
+            placeholderTextColor={palette.inkMuted}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            accessibilityLabel="Search saved videos by title or source"
+            testID="saved-search"
+          />
+          {searchQuery ? (
+            <Pressable onPress={() => setCriteria({ profileId: activeProfileId, query: "", filter: viewingFilter })} style={styles.clearSearch} accessibilityRole="button" accessibilityLabel="Clear Saved search" testID="clear-saved-search">
+              <X size={17} color={palette.inkMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={styles.filters} accessibilityRole="radiogroup" accessibilityLabel="Saved viewing status">
+          {FILTERS.map((filter) => {
+            const isSelected = viewingFilter === filter.id;
+            return (
+              <Pressable
+                key={filter.id}
+                onPress={() => setCriteria({ profileId: activeProfileId, query: searchQuery, filter: filter.id })}
+                style={[styles.filterChip, isSelected && styles.filterChipSelected]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                testID={`saved-filter-${filter.id}`}
+              >
+                <Text style={[styles.filterText, isSelected && styles.filterTextSelected]}>{filter.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {!libraryLoading && savedVideos.length > 0 ? (
+          <Text style={styles.resultCount} accessibilityLiveRegion="polite">{filteredSaved.length} of {savedVideos.length} saved</Text>
+        ) : null}
+        {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? (
           <EmptyState title="Nothing saved" body="Use Save while watching. Your former Watch Later links are here too—one collection, one Save button." />
-        ) : saved.map((video) => <VideoCard key={video.id} video={video} variant="wide" />)}
+        ) : filteredSaved.length === 0 ? (
+          <EmptyState title="No matches here" body={hasActiveFilter ? "Try another title, source, or viewing status. Your saved videos are unchanged." : "Your saved videos are still here."} />
+        ) : filteredSaved.map((item) => <VideoCard key={item.video.id} video={item.video} variant="wide" progressSeconds={item.progressSeconds} />)}
 
         <SectionTitle label="Current Session" styles={styles} />
         {currentSession ? (
@@ -106,6 +159,15 @@ function createStyles(palette: FramePalette, type: FrameType) {
     flex: { flex: 1 },
     sectionTitle: { ...type.caption, marginTop: spacing.xl, marginBottom: spacing.md },
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
+    searchField: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingLeft: spacing.md, paddingRight: spacing.xs, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    searchInput: { ...type.body, flex: 1, minHeight: 50, paddingVertical: 0 },
+    clearSearch: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
+    filters: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+    filterChip: { minHeight: 44, flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    filterChipSelected: { backgroundColor: palette.activeSoft, borderColor: palette.active },
+    filterText: { ...type.label, color: palette.inkSoft, textAlign: "center" },
+    filterTextSelected: { color: palette.active },
+    resultCount: { ...type.caption, marginTop: spacing.md, marginBottom: spacing.md, color: palette.inkMuted },
     sessionCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     sessionIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: palette.activeSoft },
     sessionName: { ...type.heading, fontSize: 18, lineHeight: 23 },
