@@ -50,6 +50,7 @@ import {
 WebBrowser.maybeCompleteAuthSession();
 import {
   addWatchLater,
+  expireLocalTodayMetadata,
   clearAllData,
   clearResume,
   deleteQueue,
@@ -205,6 +206,7 @@ type ProfileSnapshot = {
 };
 
 async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> {
+  await expireLocalTodayMetadata();
   const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, watchLater, followedChannels] = await Promise.all([
     loadPrefs(profileId),
     loadInterests(profileId),
@@ -612,7 +614,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
     let previousState = AppState.currentState;
     queueSourceLeaseReconciliation("launch");
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" && previousState !== "active") queueSourceLeaseReconciliation("foreground");
+      if (nextState === "active" && previousState !== "active") {
+        queueSourceLeaseReconciliation("foreground");
+        void expireLocalTodayMetadata().then(() => queryClient.invalidateQueries({ queryKey: ["today"] })).catch(() => {
+          console.warn("[retention] Local Today cleanup will retry on the next read.");
+        });
+      }
       if (nextState !== "active") {
         void viewingAllowanceService.stopPlaying();
         relockOwnerAccess();
@@ -620,7 +627,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       previousState = nextState;
     });
     return () => subscription.remove();
-  }, [ready, relockOwnerAccess]);
+  }, [ready, relockOwnerAccess, queryClient]);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>): Promise<void> => {
     const next = { ...prefsRef.current, ...patch };

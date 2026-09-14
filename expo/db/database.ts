@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { EXPIRE_TODAY_METADATA_SQL, METADATA_MAX_AGE_MS, expireTodayItem, isMetadataCurrent } from "@/domain/metadataRetention";
 import { Platform } from "react-native";
 import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
@@ -25,6 +26,8 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         await db.execAsync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF;");
         await migrateDatabase(db);
         await db.execAsync("PRAGMA foreign_keys = ON;");
+        const now = Date.now();
+        await db.runAsync(EXPIRE_TODAY_METADATA_SQL, [now - METADATA_MAX_AGE_MS, now]);
         return db;
       })
       .catch((error) => {
@@ -452,6 +455,18 @@ export async function unfollowChannel(profileId: string, id: string): Promise<vo
   await db.runAsync("DELETE FROM followed_channels WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
+/** Removes expired provider details while retaining every profile-local action and link. */
+export async function expireLocalTodayMetadata(now: number = Date.now()): Promise<void> {
+  if (Platform.OS === "web") {
+    for (const [key, snapshot] of webStore.todaySnapshots) {
+      webStore.todaySnapshots.set(key, { ...snapshot, items: snapshot.items.map((item) => expireTodayItem(item, now)) });
+    }
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(EXPIRE_TODAY_METADATA_SQL, [now - METADATA_MAX_AGE_MS, now]);
+}
+
 type TodaySnapshotRow = Omit<TodaySnapshot, "items">;
 type TodayItemRow = Omit<TodaySnapshotItem, "id" | "channelId" | "channelTitle" | "isLivestream" | "isUpcomingPremiere" | "madeForKids"> & {
   mediaId: string;
@@ -461,6 +476,7 @@ type TodayItemRow = Omit<TodaySnapshotItem, "id" | "channelId" | "channelTitle" 
 };
 
 export async function readTodaySnapshot(profileId: string, periodKey: string): Promise<TodaySnapshot | null> {
+  await expireLocalTodayMetadata();
   if (Platform.OS === "web") {
     const snapshot = webStore.todaySnapshots.get(profileEntityKey(profileId, periodKey));
     return snapshot ? { ...snapshot, items: snapshot.items.map((item) => ({ ...item })) } : null;
@@ -469,11 +485,12 @@ export async function readTodaySnapshot(profileId: string, periodKey: string): P
   const header = await db.getFirstAsync<TodaySnapshotRow>("SELECT profileId,periodKey,createdAt,cacheFetchedAt,freshness FROM today_snapshots WHERE profileId = ? AND periodKey = ?", [profileId, periodKey]);
   if (!header) return null;
   const rows = await db.getAllAsync<TodayItemRow>("SELECT * FROM today_snapshot_items WHERE profileId = ? AND periodKey = ? ORDER BY position ASC", [profileId, periodKey]);
-  return { ...header, items: rows.map(mapTodayItemRow) };
+  return { ...header, items: rows.map((row) => expireTodayItem(mapTodayItemRow(row), Date.now())) };
 }
 
 /** Commits an immutable Today membership and order in one local transaction. */
 export async function finalizeTodaySnapshot(snapshot: TodaySnapshot): Promise<TodaySnapshot> {
+  snapshot = { ...snapshot, items: snapshot.items.map((item) => expireTodayItem(item, Date.now())) };
   const existing = await readTodaySnapshot(snapshot.profileId, snapshot.periodKey);
   if (existing) return existing;
   if (snapshot.items.length > 12 || snapshot.items.some((item, index) => item.position !== index || item.profileId !== snapshot.profileId || item.periodKey !== snapshot.periodKey)) {
@@ -500,10 +517,11 @@ export async function finalizeTodaySnapshot(snapshot: TodaySnapshot): Promise<To
 }
 
 export async function listTodayHistory(profileId: string): Promise<TodaySnapshotItem[]> {
+  await expireLocalTodayMetadata();
   if (Platform.OS === "web") return profileValues(webStore.todaySnapshots, profileId).flatMap((snapshot) => snapshot.items.map((item) => ({ ...item })));
   const db = await getDb();
   const rows = await db.getAllAsync<TodayItemRow>("SELECT * FROM today_snapshot_items WHERE profileId = ? ORDER BY periodKey DESC, position ASC", [profileId]);
-  return rows.map(mapTodayItemRow);
+  return rows.map((row) => expireTodayItem(mapTodayItemRow(row), Date.now()));
 }
 
 export async function updateTodayDisposition(profileId: string, periodKey: string, mediaId: string, disposition: TodayDisposition, dispositionAt: number, snoozedUntil: number | null = null, expected?: TodayDisposition): Promise<boolean> {
@@ -526,6 +544,7 @@ export async function updateTodayDisposition(profileId: string, periodKey: strin
 
 /** Revalidates only existing members; it never changes membership or order. */
 export async function refreshTodaySnapshotMetadata(profileId: string, periodKey: string, candidates: readonly CachedTodayCandidate[], unavailableSourceIds: ReadonlySet<string>, freshness: "fresh" | "stale", cacheFetchedAt: number | null): Promise<void> {
+  candidates = candidates.filter((item) => isMetadataCurrent(item.fetchedAt, Date.now()));
   const byId = new Map(candidates.map((item) => [item.id, item]));
   if (Platform.OS === "web") {
     const key = profileEntityKey(profileId, periodKey);
@@ -556,7 +575,7 @@ export async function refreshTodaySnapshotMetadata(profileId: string, periodKey:
 
 export async function getLatestTodayVideo(profileId: string, mediaId: string): Promise<Video | null> {
   const history = await listTodayHistory(profileId);
-  const item = history.find((candidate) => candidate.id === mediaId);
+  const item = history.find((candidate) => candidate.id === mediaId && isMetadataCurrent(candidate.fetchedAt, Date.now()));
   return item ? { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids } : null;
 }
 

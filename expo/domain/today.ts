@@ -1,3 +1,4 @@
+import { isMetadataCurrent } from "./metadataRetention";
 import { MAX_ITEMS_PER_SOURCE, TODAY_MAX_ITEMS, TODAY_RESET_HOUR } from "@/constants/productConfig";
 import type { CachedTodayCandidate, TodayPeriod, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
@@ -103,7 +104,7 @@ export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[
 
 export function visibleTodayItems(items: readonly TodaySnapshotItem[], followedSourceIds: ReadonlySet<string>, rules: ReadonlyMap<string, TodaySourceRule>, now: number): TodaySnapshotItem[] {
   return items.filter((item) => {
-    if (!followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
+    if (!isMetadataCurrent(item.fetchedAt, now) || !followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
     const rule = rules.get(item.sourceId) ?? defaultTodaySourceRule(item.profileId, item.sourceId);
     if (rule.mutedUntil !== null && rule.mutedUntil > now) return false;
     if (item.disposition === "pending") return true;
@@ -112,7 +113,7 @@ export function visibleTodayItems(items: readonly TodaySnapshotItem[], followedS
 }
 
 export function nextSnoozedReturn(items: readonly TodaySnapshotItem[], now: number): number | null {
-  const future = items.flatMap((item) => item.disposition === "snoozed" && item.snoozedUntil !== null && item.snoozedUntil > now ? [item.snoozedUntil] : []);
+  const future = items.flatMap((item) => isMetadataCurrent(item.fetchedAt, now) && item.disposition === "snoozed" && item.snoozedUntil !== null && item.snoozedUntil > now ? [item.snoozedUntil] : []);
   return future.length > 0 ? Math.min(...future) : null;
 }
 
@@ -138,7 +139,7 @@ function latestHistoryByMedia(history: readonly TodaySnapshotItem[]): Map<string
 }
 
 function isSourceEligible(item: CachedTodayCandidate, input: TodaySelectionInput): boolean {
-  if (!input.followedSourceIds.has(item.sourceId)) return false;
+  if (!isMetadataCurrent(item.fetchedAt, input.now) || !input.followedSourceIds.has(item.sourceId)) return false;
   const rule = input.rules.get(item.sourceId) ?? defaultTodaySourceRule(input.profileId, item.sourceId);
   if (rule.mutedUntil !== null && rule.mutedUntil > input.now) return false;
   if (item.durationSeconds < rule.minimumDurationSeconds) return false;

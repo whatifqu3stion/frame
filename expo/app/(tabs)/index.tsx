@@ -15,6 +15,7 @@ import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { MAX_ITEMS_PER_SOURCE, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+import { isMetadataCurrent } from "@/domain/metadataRetention";
 import { getTodayPeriod, nextSnoozedReturn, performTodayAction, visibleTodayItems } from "@/domain/today";
 import type { TodayDisposition, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 import { useApp } from "@/providers/AppProvider";
@@ -54,6 +55,7 @@ export default function TodayScreen() {
   const snapshot = todayQuery.data?.snapshot ?? null;
   const visible = useMemo(() => visibleTodayItems(snapshot?.items ?? [], new Set(sourceIds), rules, clock), [clock, rules, snapshot?.items, sourceIds]);
   const nextReturn = nextSnoozedReturn(snapshot?.items ?? [], clock);
+  const hasExpiredPending = snapshot?.items.some((item) => ["pending", "snoozed"].includes(item.disposition) && !isMetadataCurrent(item.fetchedAt, clock)) ?? false;
 
   useEffect(() => {
     const timer = setInterval(() => setClock(Date.now()), 60_000);
@@ -178,6 +180,7 @@ export default function TodayScreen() {
   else if (sourceIds.length === 0) content = <StateBlock title="Choose one trusted source" body="Today begins with sources you select. Follow one source and this inbox can fill immediately." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
   else if (visible.length > 0) content = visible.map((item) => <TodayVideoCard key={item.id} item={item} busy={busyId === item.id} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} />);
   else if (hasOnlySnoozed) content = <StateBlock title="Resting for now" body={`Your next snoozed item returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}. Nothing else will replace it.`} styles={styles} />;
+  else if (hasExpiredPending) content = <StateBlock title="Details need refreshing" body="Some cached video details have expired. Your choices are preserved. Pull to refresh from the shared cache; Frame will not replace these items or start a live YouTube lookup." styles={styles} />;
   else if (snapshot && snapshot.items.length > 0) content = <StateBlock title="You’re caught up" body="That is the end of today’s finite inbox. Frame will not refill it behind you." styles={styles} success />;
   else if (snapshot) content = <StateBlock title="No eligible uploads today" body="Your sources are here, but their cached videos did not match your local rules. This is a valid empty inbox." styles={styles} success />;
   else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="There is no local snapshot yet. Reconnect, then retry the shared cache once." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
