@@ -1,3 +1,4 @@
+import { FOUNDATION_CAPABILITIES } from "../constants/productConfig";
 import type { DiscoveryResult, InterestId, TodayFeedResult, WeeklyPickSourceSuggestion } from "../types";
 import {
   weeklyPicksClient,
@@ -14,17 +15,18 @@ export type DiscoveryService = {
 const UNAVAILABLE_MESSAGE = "Shared discovery is not available until Frame's bounded recommendation service is ready.";
 
 /** Prevents Weekly Picks work for profiles that have not chosen interests. */
-export function shouldRequestWeeklyPicks(interestIds: readonly InterestId[]): boolean {
-  return interestIds.length > 0;
+export function shouldRequestWeeklyPicks(interestIds: readonly InterestId[], enabled: boolean = FOUNDATION_CAPABILITIES.weeklyDiscovery): boolean {
+  return enabled && interestIds.length > 0;
 }
 
 /** Creates the service boundary that keeps profile identity separate from the shared request. */
-export function createDiscoveryService(client: WeeklyPicksClient): DiscoveryService {
+export function createDiscoveryService(client: WeeklyPicksClient, enabled: boolean = FOUNDATION_CAPABILITIES.weeklyDiscovery): DiscoveryService {
   return {
     async getWeeklyPicks(_profileId: string, interestIds: readonly InterestId[]): Promise<DiscoveryResult> {
-      if (!shouldRequestWeeklyPicks(interestIds)) {
+      if (interestIds.length === 0) {
         return { status: "success", items: [], reason: "no_interests", message: "Choose interests in Settings to receive occasional source suggestions." };
       }
+      if (!enabled) return { status: "temporarily_unavailable", items: [], reason: "configuration", message: "Weekly Picks are not available in this build yet." };
       const result = await client.getWeeklyPicks(interestIds);
       return mapWeeklyPicksClientResult(result);
     },

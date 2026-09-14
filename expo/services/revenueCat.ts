@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { APP_ENV } from "@/constants/config";
+import { APP_ENV, FEATURE_FLAGS } from "@/constants/config";
 import Purchases, {
   type CustomerInfo,
   type PurchasesOffering,
@@ -25,7 +25,7 @@ function getRevenueCatApiKey(): string | undefined {
 const revenueCatApiKey = getRevenueCatApiKey();
 export const isRevenueCatConfigured = Boolean(revenueCatApiKey);
 
-if (revenueCatApiKey) {
+if (FEATURE_FLAGS.paidAccess && revenueCatApiKey) {
   Purchases.configure({ apiKey: revenueCatApiKey });
 }
 
@@ -36,7 +36,7 @@ export function hasPremiumEntitlement(customerInfo: CustomerInfo | undefined): b
 
 /** Loads the current Frame Premium offering. */
 export async function getPremiumOffering(): Promise<PurchasesOffering> {
-  if (!isRevenueCatConfigured) {
+  if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) {
     throw new Error("RevenueCat is not configured for this build.");
   }
 
@@ -52,7 +52,7 @@ export async function getPremiumOffering(): Promise<PurchasesOffering> {
 export function subscribeToRevenueCatCustomerInfo(
   listener: (customerInfo: CustomerInfo) => void,
 ): () => void {
-  if (!isRevenueCatConfigured) return () => {};
+  if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) return () => {};
   Purchases.addCustomerInfoUpdateListener(listener);
   return () => {
     Purchases.removeCustomerInfoUpdateListener(listener);
@@ -61,7 +61,7 @@ export function subscribeToRevenueCatCustomerInfo(
 
 /** Loads the latest subscription entitlement state from RevenueCat. */
 export async function getRevenueCatCustomerInfo(): Promise<CustomerInfo> {
-  if (!isRevenueCatConfigured) {
+  if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) {
     throw new Error("RevenueCat is not configured for this build.");
   }
   return Purchases.getCustomerInfo();
@@ -69,7 +69,7 @@ export async function getRevenueCatCustomerInfo(): Promise<CustomerInfo> {
 
 /** Purchases one of the packages in the current Frame Premium offering. */
 export async function purchasePremiumPackage(aPackage: PurchasesPackage): Promise<CustomerInfo> {
-  if (Platform.OS === "web" || !isRevenueCatConfigured) {
+  if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured) {
     throw new Error("Premium purchases are available in the iPhone and Android apps.");
   }
   const result = await Purchases.purchasePackage(aPackage);
@@ -78,7 +78,7 @@ export async function purchasePremiumPackage(aPackage: PurchasesPackage): Promis
 
 /** Restores purchases associated with the current store account. */
 export async function restorePremiumPurchases(): Promise<CustomerInfo> {
-  if (Platform.OS === "web" || !isRevenueCatConfigured) {
+  if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured) {
     throw new Error("Purchase restoration is available in the iPhone and Android apps.");
   }
   return Purchases.restorePurchases();

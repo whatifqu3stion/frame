@@ -1,10 +1,13 @@
-import { APP_ENV, BACKEND_BASE_URL, FEATURE_FLAGS } from "@/constants/config";
+import { APP_ENV, FEATURE_FLAGS } from "@/constants/config";
 import { parseSourceInput, type ParsedSourceInput } from "@/domain/sourceInput";
-import { isLiveYouTubeSearchEnabled, unavailableSearchResult } from "@/services/searchPolicy";
+import { unavailableSearchResult } from "@/services/searchPolicy";
 import { installationIdentityStore } from "@/storage/installationIdentityStorage";
 import type { Channel, ResolvedSource, ResolvedVideo, ServiceFailureKind, ServiceResult, SourceResolution, Video } from "@/types";
 
-const FUNCTIONS_URL = BACKEND_BASE_URL;
+import { createCachedContentService } from "@/services/cachedContent";
+import { sourceFeedClient } from "@/services/sourceFeedClientInstance";
+
+export const cachedContentService = createCachedContentService(sourceFeedClient);
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 export type VideoChapter = {
@@ -12,58 +15,15 @@ export type VideoChapter = {
   startSeconds: number;
 };
 
-type BackendEnvelope<T> = {
-  status: "success" | "empty" | "partial" | ServiceFailureKind;
-  data?: T;
-  message?: string;
-};
-
 function failure<T>(status: ServiceFailureKind, message: string): ServiceResult<T> {
   return { status, message };
-}
-
-async function requestBackend<T>(path: string, init?: RequestInit): Promise<ServiceResult<T>> {
-  if (!FUNCTIONS_URL) {
-    return failure("unavailable", "Frame's YouTube service is not configured for this build.");
-  }
-
-  try {
-    const response = await fetch(`${FUNCTIONS_URL}${path}`, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-    });
-    const envelope = (await response.json().catch(() => null)) as BackendEnvelope<T> | null;
-    if (!envelope) return failure("failed", "YouTube returned an unreadable response.");
-
-    if (envelope.status === "success" && envelope.data !== undefined) {
-      return { status: "success", data: envelope.data };
-    }
-    if (envelope.status === "empty" && envelope.data !== undefined) {
-      return { status: "empty", data: envelope.data, message: envelope.message };
-    }
-    if (envelope.status === "partial" && envelope.data !== undefined) {
-      return { status: "partial", data: envelope.data, message: envelope.message ?? "Some results could not be loaded." };
-    }
-    if (["offline", "unauthorized", "quota", "unavailable", "failed"].includes(envelope.status)) {
-      return failure(envelope.status as ServiceFailureKind, envelope.message ?? "YouTube is unavailable right now.");
-    }
-    return failure("failed", "YouTube returned an unexpected response.");
-  } catch (error) {
-    console.warn("[youtube] backend request failed", error instanceof Error ? error.message : "unknown error");
-    return failure("offline", "Frame couldn't reach YouTube. Check your connection and try again.");
-  }
 }
 
 /** Legacy UI boundary. Round 1 disables live search centrally and never calls the backend. */
 export async function searchVideos(query: string): Promise<ServiceResult<Video[]>> {
   const trimmed = query.trim();
   if (!trimmed) return { status: "empty", data: [], message: "Enter something to search for." };
-  if (!isLiveYouTubeSearchEnabled()) return unavailableSearchResult();
-  return requestBackend<Video[]>(`/youtube/search?q=${encodeURIComponent(trimmed)}`);
+  return unavailableSearchResult();
 }
 
 /** Legacy topic boundary. Production discovery remains truthfully unavailable in Round 1. */
@@ -74,20 +34,24 @@ export async function getTopicVideos(topic: string): Promise<ServiceResult<Video
 
 /** Loads recent verified uploads for one stable YouTube channel id. */
 export async function getChannelVideos(channelId: string): Promise<ServiceResult<Video[]>> {
-  return requestBackend<Video[]>(`/youtube/channels/${encodeURIComponent(channelId)}/videos`);
+  try {
+    const shelf = await cachedContentService.getChannelShelf(channelId);
+    return { status: shelf.videos.length ? "success" : "empty", data: shelf.videos };
+  } catch { return failure("unavailable", "Cached uploads are unavailable. Try again later."); }
 }
 
-/** Loads verified metadata for one playable YouTube video, including its creator-provided description. */
+/** Disabled legacy enrichment boundary. Cached/local details remain usable without provider polling. */
 export async function getVideo(videoId: string): Promise<ServiceResult<Video | null>> {
   if (!VIDEO_ID_PATTERN.test(videoId)) {
     return { status: "failed", message: "A valid YouTube video id is required." };
   }
-  return requestBackend<Video | null>(`/youtube/videos/${encodeURIComponent(videoId)}`);
+  return failure("unavailable", "Additional metadata is unavailable. Playback uses the details already saved in Frame.");
 }
 
 /** Loads one real YouTube channel by its stable id. */
 export async function getChannel(channelId: string): Promise<ServiceResult<Channel>> {
-  return requestBackend<Channel>(`/youtube/channels/${encodeURIComponent(channelId)}`);
+  try { return { status: "success", data: (await cachedContentService.getChannelShelf(channelId)).channel }; }
+  catch { return failure("unavailable", "Cached source details are unavailable."); }
 }
 
 export type ParsedLink = ParsedSourceInput;

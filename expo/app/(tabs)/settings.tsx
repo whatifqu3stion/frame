@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
 import ProfileControlsModal from "@/components/ProfileControlsModal";
 import FullResetModal from "@/components/FullResetModal";
+import { FEATURE_FLAGS } from "@/constants/config";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -58,7 +59,7 @@ export default function SettingsScreen() {
       <Section label="Profile" hint="Each local profile keeps its own sources, library, progress, interests, and appearance.">
         <View style={styles.profileCard} accessible accessibilityLabel={`${activeProfile?.name ?? "Owner"} profile`}>
           <View style={styles.profileAvatar}><UserCircle2 size={25} color={palette.active} strokeWidth={1.6} /></View>
-          <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
+          <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : activeProfile?.role === "managed" ? "Managed" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
         </View>
         <Pressable onPress={() => { void openProfileControls(); }} style={({ pressed }) => [styles.protectedRow, pressed && styles.pressed]} accessibilityRole="button" testID="open-profile-controls">
           <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & Protected Controls</Text><Text style={styles.supporting}>Create or rename Standard profiles, remove profiles, and manage the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
@@ -120,7 +121,7 @@ export default function SettingsScreen() {
         </View>
       </Section>
 
-      <Section label="Premium">
+      {FEATURE_FLAGS.paidAccess ? <Section label="Premium">
         {premiumAccessState === "checking" ? <StatusRow title="Checking Premium" body="Confirming your access." loading />
           : isPremium ? <StatusRow title="Premium active" body="Your complete Frame library is unlocked." />
           : premiumAccessState === "inactive" ? (
@@ -133,7 +134,7 @@ export default function SettingsScreen() {
         {premiumAccessState === "inactive" || premiumAccessState === "active" ? (
           <Pressable onPress={() => openPremium("library")} style={styles.inlineAction} accessibilityRole="button" testID="settings-restore-purchases"><RotateCcw size={15} color={palette.inkMuted} /><Text style={styles.inlineActionText}>Restore purchases</Text></Pressable>
         ) : null}
-      </Section>
+      </Section> : null}
 
       <Section label="Privacy and data" hint="Your local data remains under your control.">
         <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Saved videos, interests, sources, Sessions, and progress stay on this device.</Text></View></View>

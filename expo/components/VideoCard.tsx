@@ -31,7 +31,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
     if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds) } });
+    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1" } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
   }, [requirePurchase, video]);
 

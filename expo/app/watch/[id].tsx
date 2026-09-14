@@ -80,6 +80,8 @@ export default function WatchScreen() {
     thumbnailUrl?: string | string[];
     publishedAt?: string | string[];
     durationSeconds?: string | string[];
+    description?: string | string[];
+    madeForKids?: string | string[];
     cachedMetadata?: string | string[];
     origin?: string | string[];
     todayProfileId?: string | string[];
@@ -101,7 +103,7 @@ export default function WatchScreen() {
     removeFromWatchLater,
     isInWatchLater,
     requirePurchase,
-    isPremium,
+    canUseLibrary,
     recordResume,
     clearVideoResume,
     getPlaybackAllowance,
@@ -138,9 +140,11 @@ export default function WatchScreen() {
       channelTitle: optionalText(firstParam(params.channelTitle)),
       thumbnailUrl: optionalText(firstParam(params.thumbnailUrl)) || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       publishedAt: optionalText(firstParam(params.publishedAt)),
+      description: optionalText(firstParam(params.description)).slice(0, 5_000),
+      madeForKids: firstParam(params.madeForKids) === "1" ? true : firstParam(params.madeForKids) === "0" ? false : null,
       durationSeconds: Number.isFinite(routeDuration) && routeDuration > 0 ? routeDuration : 0,
     };
-  }, [id, params.channelId, params.channelTitle, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
+  }, [id, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
 
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
 
@@ -245,7 +249,7 @@ export default function WatchScreen() {
     navigationLockedRef.current = false;
     todayWatchedRef.current = false;
 
-    if (!id || !isPremium) {
+    if (!id || !canUseLibrary) {
       setResumeReady(true);
       return () => { mounted = false; };
     }
@@ -265,10 +269,10 @@ export default function WatchScreen() {
         if (mounted) setResumeReady(true);
       });
     return () => { mounted = false; };
-  }, [activeProfileId, id, isPremium, setAction, video?.durationSeconds]);
+  }, [activeProfileId, id, canUseLibrary, setAction, video?.durationSeconds]);
 
   const persist = useCallback((): Promise<void> => {
-    if (!video || !isPremium || didEndRef.current) return Promise.resolve();
+    if (!video || !canUseLibrary || didEndRef.current) return Promise.resolve();
     const current = currentTimeRef.current;
     const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
     if (current <= 5 || (duration > 0 && current >= duration - 10)) return Promise.resolve();
@@ -282,7 +286,7 @@ export default function WatchScreen() {
       })
       .catch(() => {});
     return writeChainRef.current;
-  }, [isPremium, recordResume, video]);
+  }, [canUseLibrary, recordResume, video]);
 
   const failClosedAllowance = useCallback((): void => {
     playerRef.current?.pause();

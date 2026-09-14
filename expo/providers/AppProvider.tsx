@@ -12,7 +12,7 @@ import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
-import { APP_ENV, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
+import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
 import { OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
@@ -675,7 +675,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const customerInfoQuery = useQuery({
     queryKey: REVENUECAT_CUSTOMER_INFO_KEY,
     queryFn: getRevenueCatCustomerInfo,
-    enabled: ready && isRevenueCatConfigured,
+    enabled: ready && FEATURE_FLAGS.paidAccess && isRevenueCatConfigured,
     staleTime: 1000 * 60 * 5,
   });
   const isPremium = hasPremiumEntitlement(customerInfoQuery.data);
@@ -687,22 +687,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [customerInfoQuery.isError, customerInfoQuery.isLoading, isPremium]);
 
   useEffect(() => {
+    if (!FEATURE_FLAGS.paidAccess) return;
     return subscribeToRevenueCatCustomerInfo((customerInfo) => {
       queryClient.setQueryData(REVENUECAT_CUSTOMER_INFO_KEY, customerInfo);
     });
   }, [queryClient]);
 
   const refreshPremiumAccess = useCallback(async (): Promise<void> => {
+    if (!FEATURE_FLAGS.paidAccess) return;
     await customerInfoQuery.refetch();
   }, [customerInfoQuery]);
 
   const openPremium = useCallback((feature: PremiumFeature = "library"): void => {
+    if (!FEATURE_FLAGS.paidAccess) return;
     setPaywallMessage(PREMIUM_FEATURE_MESSAGES[feature]);
     setPaywallOpen(true);
   }, []);
 
   const requirePurchase = useCallback((feature: PremiumFeature = "library"): boolean => {
-    if (premiumAccessState === "active") return true;
+    if (!FEATURE_FLAGS.paidAccess || premiumAccessState === "active") return true;
     if (premiumAccessState === "inactive") {
       openPremium(feature);
       return false;
@@ -754,7 +757,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
-    if (premiumAccessState !== "active") return;
+    if (FEATURE_FLAGS.paidAccess && premiumAccessState !== "active") return;
     await upsertResume(activeProfileId, video, timestampSeconds);
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
   }, [activeProfileId, premiumAccessState, queryClient]);
@@ -1065,6 +1068,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       finishOnboarding,
       isPremium,
       premiumAccessState,
+      canUseLibrary: !FEATURE_FLAGS.paidAccess || premiumAccessState === "active",
       subscriptionStatusLoading: customerInfoQuery.isLoading,
       subscriptionStatusError: customerInfoQuery.isError,
       refreshPremiumAccess,

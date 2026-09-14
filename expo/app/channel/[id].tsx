@@ -11,7 +11,7 @@ import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { getChannel, getChannelVideos } from "@/services/youtube";
+import { cachedContentService } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function ChannelScreen() {
@@ -19,27 +19,21 @@ export default function ChannelScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { followedChannels, isChannelFollowed, followChannel, unfollowChannel, premiumAccessState, requirePurchase } = useApp();
+  const { activeProfileId, followedChannels, isChannelFollowed, followChannel, unfollowChannel, canUseLibrary, requirePurchase } = useApp();
 
-  const channelQuery = useQuery({
-    queryKey: ["channel", id],
-    queryFn: () => getChannel(id!),
-    enabled: !!id && premiumAccessState === "active",
-  });
   const videosQuery = useQuery({
-    queryKey: ["channel-videos", id],
-    queryFn: () => getChannelVideos(id!),
-    enabled: !!id && premiumAccessState === "active",
+    queryKey: ["cached-channel", activeProfileId, id],
+    queryFn: () => cachedContentService.getChannelShelf(id),
+    enabled: !!id && canUseLibrary,
+    retry: false,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const savedChannel = followedChannels.find((candidate) => candidate.id === id);
-  const channel = channelQuery.data?.status === "success" ? channelQuery.data.data : savedChannel;
-  const videos = videosQuery.data?.status === "success" || videosQuery.data?.status === "partial"
-    ? videosQuery.data.data
-    : [];
-  const videosMessage = videosQuery.data && "message" in videosQuery.data
-    ? videosQuery.data.message
-    : undefined;
+  const channel = videosQuery.data?.channel ?? savedChannel;
+  const videos = videosQuery.data?.videos ?? [];
+  const videosMessage = videosQuery.error instanceof Error ? videosQuery.error.message : videosQuery.data?.message;
   const following = id ? isChannelFollowed(id) : false;
 
   const toggleFollow = useCallback(async (): Promise<void> => {
@@ -92,11 +86,12 @@ export default function ChannelScreen() {
       </View>
       <View style={styles.videoHeading}>
         <Text style={type.caption}>Videos</Text>
+        {videosMessage ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{videosMessage}</Text> : null}
       </View>
     </>
   );
 
-  const empty = premiumAccessState !== "active" ? (
+  const empty = !canUseLibrary ? (
     <View style={styles.premiumGate}>
       <EmptyState title="Creator shelves are part of Premium" body="Follow trusted channels and browse their recent verified uploads without a recommendation feed." />
       <Pressable onPress={() => requirePurchase("creators")} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
@@ -105,8 +100,8 @@ export default function ChannelScreen() {
     </View>
   ) : videosQuery.isLoading ? (
     <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading verified uploads" />
-  ) : videosQuery.data?.status === "empty" ? (
-    <EmptyState title="No playable recent uploads" body={videosQuery.data.message ?? "This channel has nothing public to show right now."} />
+  ) : videosQuery.data && videos.length === 0 ? (
+    <EmptyState title="No playable recent uploads" body={videosQuery.data.message} />
   ) : (
     <View>
       <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "The saved creator is still on your shelf. Check your connection and try again."} />

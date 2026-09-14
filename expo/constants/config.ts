@@ -60,8 +60,8 @@ export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 
 export const FEATURE_FLAGS = {
   ...FOUNDATION_CAPABILITIES,
-  knownYouTubeUrlResolution: Boolean(BACKEND_BASE_URL),
-  googleConnection: Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
+  knownYouTubeUrlResolution: APP_ENV === "development" && Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && (process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)),
+  googleConnection: FOUNDATION_CAPABILITIES.googleSelectiveImport && Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 
 export function isGoogleConfigured(): boolean {
@@ -70,6 +70,7 @@ export function isGoogleConfigured(): boolean {
 
 /** Returns whether the current platform has the OAuth client ID it requires. */
 export function isGooglePlatformConfigured(): boolean {
+  if (!FEATURE_FLAGS.googleConnection) return false;
   if (Platform.OS === "ios") return Boolean(GOOGLE_CONFIG.iosClientId);
   if (Platform.OS === "android") return Boolean(GOOGLE_CONFIG.androidClientId);
   return Boolean(GOOGLE_CONFIG.webClientId);

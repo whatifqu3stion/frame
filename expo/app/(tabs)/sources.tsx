@@ -9,7 +9,7 @@ import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { PRODUCT_LIMITS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
+import { FOUNDATION_CAPABILITIES, PRODUCT_LIMITS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -48,7 +48,7 @@ export default function SourcesScreen() {
       >
         <View style={styles.page}>
           <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle="Follow trusted sources directly. Frame does not expand this list for you." />
-          <View style={styles.segmented} accessibilityRole="tablist">
+          {FOUNDATION_CAPABILITIES.weeklyDiscovery ? <View style={styles.segmented} accessibilityRole="tablist">
             {(["followed", "discover"] as const).map((item) => {
               const selected = section === item;
               return (
@@ -64,7 +64,7 @@ export default function SourcesScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </View> : null}
 
           {section === "followed" ? (
             <View style={styles.section}>

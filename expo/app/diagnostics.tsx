@@ -8,7 +8,6 @@ import {
   APP_ENV,
   IS_CLOSED_BETA,
   RELEASE_CHANNEL_LABEL,
-  BACKEND_BASE_URL,
   FEATURE_FLAGS,
   isGooglePlatformConfigured,
 } from "@/constants/config";
@@ -33,12 +32,12 @@ function DiagnosticsScreen() {
     queryFn: getDatabaseDiagnostics,
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const entitlementState = premiumAccessState === "active" ? "premium active" : premiumAccessState;
+  const entitlementState = !FEATURE_FLAGS.paidAccess ? "free beta; purchases disabled" : premiumAccessState === "active" ? "premium active" : premiumAccessState;
   const database = databaseQuery.data;
   const flags = {
     ...FEATURE_FLAGS,
     googleCurrentPlatform: isGooglePlatformConfigured(),
-    revenueCat: isRevenueCatConfigured,
+    revenueCat: FEATURE_FLAGS.paidAccess && isRevenueCatConfigured,
   };
 
   return (
@@ -73,9 +72,9 @@ function DiagnosticsScreen() {
       </DiagnosticSection>
 
       <DiagnosticSection title="Beta readiness" styles={styles} type={type}>
-        <DiagnosticRow label="Video service" value={BACKEND_BASE_URL ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
+        <DiagnosticRow label="Video service" value={FEATURE_FLAGS.knownYouTubeUrlResolution ? `${APP_ENV} shared cache configured` : "not configured"} styles={styles} type={type} />
         <DiagnosticRow label="Google on this device" value={isGooglePlatformConfigured() ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
-        <DiagnosticRow label="Premium service" value={isRevenueCatConfigured ? `${APP_ENV === "production" ? "production" : "test"} configured` : "not configured"} styles={styles} type={type} />
+        <DiagnosticRow label="Premium service" value={!FEATURE_FLAGS.paidAccess ? "disabled for free beta" : isRevenueCatConfigured ? `${APP_ENV === "production" ? "production" : "test"} configured` : "not configured"} styles={styles} type={type} />
         <DiagnosticRow label="Storage mode" value={database?.storage === "sqlite" ? "persistent on device" : "preview only; resets on refresh"} styles={styles} type={type} />
       </DiagnosticSection>
 

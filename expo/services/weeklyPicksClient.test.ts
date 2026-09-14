@@ -85,6 +85,7 @@ describe("Round 2C Weekly Picks client", () => {
 
     const result = await service.getWeeklyPicks("private-profile-id", []);
     expect(result).toMatchObject({ status: "success", reason: "no_interests", items: [] });
+    expect(await service.getWeeklyPicks("private-profile-id", ["tech"])).toMatchObject({ status: "temporarily_unavailable", reason: "configuration", items: [] });
     expect(requestCount).toBe(0);
   });
 
@@ -142,16 +143,16 @@ describe("Round 2C Weekly Picks client", () => {
       })) as typeof fetch,
     });
 
-    expect((await createDiscoveryService(offlineClient).getWeeklyPicks("profile-a", ["tech"])).status).toBe("network_error");
-    expect((await createDiscoveryService(timeoutClient).getWeeklyPicks("profile-b", ["tech"])).status).toBe("network_error");
+    expect((await createDiscoveryService(offlineClient, true).getWeeklyPicks("profile-a", ["tech"])).status).toBe("network_error");
+    expect((await createDiscoveryService(timeoutClient, true).getWeeklyPicks("profile-b", ["tech"])).status).toBe("network_error");
   });
 
   test("maps fresh, cached, empty, maintenance, and unavailable states truthfully", async () => {
-    expect((await createDiscoveryService(clientReturning(publishedResponse("fresh"))).getWeeklyPicks("p", ["tech"])).status).toBe("success");
-    expect((await createDiscoveryService(clientReturning(publishedResponse("cached"))).getWeeklyPicks("p", ["tech"])).status).toBe("cached_success");
-    expect(await createDiscoveryService(clientReturning({ state: "empty", interests: [], message: "Nothing current." })).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "success", reason: "empty", message: "Nothing current." });
-    expect(await createDiscoveryService(clientReturning(maintenanceResponse)).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "temporarily_unavailable", reason: "maintenance" });
-    expect(await createDiscoveryService(clientReturning({ state: "unavailable", interests: [] })).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "temporarily_unavailable", reason: "backend" });
+    expect((await createDiscoveryService(clientReturning(publishedResponse("fresh")), true).getWeeklyPicks("p", ["tech"])).status).toBe("success");
+    expect((await createDiscoveryService(clientReturning(publishedResponse("cached")), true).getWeeklyPicks("p", ["tech"])).status).toBe("cached_success");
+    expect(await createDiscoveryService(clientReturning({ state: "empty", interests: [], message: "Nothing current." }), true).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "success", reason: "empty", message: "Nothing current." });
+    expect(await createDiscoveryService(clientReturning(maintenanceResponse), true).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "temporarily_unavailable", reason: "maintenance" });
+    expect(await createDiscoveryService(clientReturning({ state: "unavailable", interests: [] }), true).getWeeklyPicks("p", ["tech"])).toMatchObject({ status: "temporarily_unavailable", reason: "backend" });
   });
 
   test("maps authorization, request, server, and invalid-response failures calmly", () => {
@@ -192,7 +193,7 @@ describe("Round 2C Weekly Picks client", () => {
   });
 
   test("source-suggestion mapping exposes only the approved public fields", async () => {
-    const result = await createDiscoveryService(clientReturning(publishedResponse())).getWeeklyPicks("never-transmitted-profile", ["tech"]);
+    const result = await createDiscoveryService(clientReturning(publishedResponse()), true).getWeeklyPicks("never-transmitted-profile", ["tech"]);
     expect(result.items).toHaveLength(1);
     expect(Object.keys(result.items[0]).sort()).toEqual([
       "description",

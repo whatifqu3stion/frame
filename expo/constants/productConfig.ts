@@ -22,6 +22,7 @@ export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandid
 
 /** Round 1 kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
+  paidAccess: false,
   localLibrary: true,
   finiteSessions: true,
   youtubeDiscovery: false,

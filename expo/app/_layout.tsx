@@ -11,6 +11,7 @@ import { View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
 import OwnerPinModal from "@/components/OwnerPinModal";
+import { FEATURE_FLAGS } from "@/constants/config";
 import { fonts, watchPalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { AppProvider, useApp } from "@/providers/AppProvider";
@@ -80,7 +81,7 @@ function ThemedApp() {
     <View style={{ flex: 1, backgroundColor: isWatching ? watchPalette.wall : palette.wall }}>
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
       <AppContent />
-      <PaywallSheet />
+      {FEATURE_FLAGS.paidAccess ? <PaywallSheet /> : null}
       <OwnerPinModal />
     </View>
   );
