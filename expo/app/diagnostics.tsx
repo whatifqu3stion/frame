@@ -16,6 +16,16 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 import { DATABASE_SCHEMA_VERSION, getDatabaseDiagnostics, type DatabaseDiagnostics } from "@/db/database";
 import { useApp } from "@/providers/AppProvider";
 import { isRevenueCatConfigured } from "@/services/revenueCat";
+import { getThumbnailCleanupStatus } from "@/services/thumbnailRetention";
+import type { ThumbnailCleanupStatus } from "@/services/thumbnailCleanup";
+
+const cleanupLabels: Record<ThumbnailCleanupStatus["state"], string> = {
+  "not-run": "Not attempted this launch",
+  running: "Cleanup in progress",
+  succeeded: "Both native APIs reported success",
+  pending: "Incomplete; retries on foreground return",
+  "web-unmanaged": "Browser-managed cache; native cleanup not available",
+};
 
 export default function DiagnosticsRoute() {
   if (!IS_CLOSED_BETA) return <Redirect href="/(tabs)/settings" />;
@@ -32,6 +42,13 @@ function DiagnosticsScreen() {
     queryFn: getDatabaseDiagnostics,
     staleTime: Number.POSITIVE_INFINITY,
   });
+  const cleanupQuery = useQuery({
+    queryKey: ["diagnostics", "thumbnail-cleanup"],
+    queryFn: getThumbnailCleanupStatus,
+    refetchInterval: 2_000,
+    networkMode: "always",
+  });
+  const cleanup = cleanupQuery.data;
   const entitlementState = !FEATURE_FLAGS.paidAccess ? "free beta; purchases disabled" : premiumAccessState === "active" ? "premium active" : premiumAccessState;
   const database = databaseQuery.data;
   const flags = {
@@ -69,6 +86,13 @@ function DiagnosticsScreen() {
         />
         <DiagnosticRow label="Storage" value={database?.storage ?? (databaseQuery.isError ? "unavailable" : "loading")} styles={styles} type={type} />
         <DiagnosticRow label="Tables" value={database?.tables.join(", ") ?? "loading"} styles={styles} type={type} />
+      </DiagnosticSection>
+
+      <DiagnosticSection title="Thumbnail cleanup" styles={styles} type={type}>
+        <DiagnosticRow label="Latest attempt" value={cleanup ? cleanupLabels[cleanup.state] : "Loading"} styles={styles} type={type} />
+        <DiagnosticRow label="Disk / memory" value={cleanup ? `${cleanup.diskCleared === null ? "not confirmed" : cleanup.diskCleared ? "cleared" : "not cleared"} / ${cleanup.memoryCleared === null ? "not confirmed" : cleanup.memoryCleared ? "cleared" : "not cleared"}` : "Loading"} styles={styles} type={type} />
+        <DiagnosticRow label="Attempt time" value={cleanup?.attemptedAt ? new Date(cleanup.attemptedAt).toLocaleString() : "No native attempt this launch"} styles={styles} type={type} />
+        <DiagnosticRow label="Device verification" value="API results are not a full device acceptance test. Confirm retained links, progress and Session order after restart and offline. Videos still require internet." styles={styles} type={type} />
       </DiagnosticSection>
 
       <DiagnosticSection title="Beta readiness" styles={styles} type={type}>

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
 import ProfileControlsModal from "@/components/ProfileControlsModal";
 import FullResetModal from "@/components/FullResetModal";
-import { FEATURE_FLAGS } from "@/constants/config";
+import { FEATURE_FLAGS, IS_CLOSED_BETA } from "@/constants/config";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { accentOptions, createPalette, fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -144,6 +144,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section label="About"><Text style={styles.infoText}>Frame is an intentional YouTube viewer: a finite inbox from trusted sources, followed by intentional viewing and a genuine stopping point.</Text><Text style={styles.version}>Version 1.0</Text></Section>
+      {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
       <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />
     </ScrollView>

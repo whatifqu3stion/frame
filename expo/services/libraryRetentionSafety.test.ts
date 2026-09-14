@@ -9,8 +9,8 @@ describe("library metadata boundaries", () => {
       expect(code).toContain('cachePolicy="none"');
       expect(code).not.toContain('cachePolicy="memory-disk"');
     }
-    expect(await text("./thumbnailRetention.ts")).toContain("await Image.clearDiskCache()");
-    expect(await text("./thumbnailRetention.ts")).toContain("if (!disk || !memory) throw");
+    expect(await text("./thumbnailRetention.ts")).toContain("clearDisk: () => Image.clearDiskCache()");
+    expect(await text("./thumbnailRetention.ts")).toContain("clearMemory: () => Image.clearMemoryCache()");
   });
   test("expired thumbnails cannot be recreated from a saved ID", async () => {
     for (const path of ["../app/watch/[id].tsx","../app/(tabs)/saved.tsx"]) expect(await text(path)).not.toContain("https://i.ytimg.com/vi/");
