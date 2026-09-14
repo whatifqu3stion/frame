@@ -594,6 +594,7 @@ export type Database = {
           usage_date: string
         }[]
       }
+      next_youtube_quota_reset: { Args: { p_now?: string }; Returns: string }
       purge_expired_source_demand_leases: { Args: never; Returns: number }
       read_cached_source_feed_items: {
         Args: { p_limit_per_source?: number; p_provider_source_ids: string[] }
@@ -636,6 +637,7 @@ export type Database = {
         }[]
       }
       user_id: { Args: never; Returns: string }
+      youtube_quota_date: { Args: { p_now?: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

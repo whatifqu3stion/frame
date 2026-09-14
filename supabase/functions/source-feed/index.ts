@@ -44,6 +44,9 @@ function createRepository(): SourceFeedRepository | null {
         .from("sources")
         .select("id,provider,provider_source_id,handle,display_name,thumbnail_url,status")
         .eq("provider", "youtube")
+        .gt("metadata_fetched_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .lte("metadata_fetched_at", new Date().toISOString())
+        .gt("metadata_expires_at", new Date().toISOString())
         .in("provider_source_id", [...providerSourceIds]);
       if (sourceError) throw new Error("source cache unavailable");
 
