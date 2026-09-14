@@ -51,7 +51,6 @@ import {
 
 WebBrowser.maybeCompleteAuthSession();
 import {
-  addWatchLater,
   expireLocalTodayMetadata,
   clearAllData,
   clearResume,
@@ -60,8 +59,6 @@ import {
   listQueues,
   listResume,
   listSavedVideos,
-  listWatchLater,
-  removeWatchLater,
   resetAllFrameDatabaseData,
   saveVideo,
   unsaveVideo,
@@ -203,13 +200,12 @@ type ProfileSnapshot = {
   savedVideos: Awaited<ReturnType<typeof listSavedVideos>>;
   resumeList: Awaited<ReturnType<typeof listResume>>;
   sessions: Awaited<ReturnType<typeof listQueues>>;
-  watchLater: Awaited<ReturnType<typeof listWatchLater>>;
   followedChannels: FollowedChannel[];
 };
 
 async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> {
   await expireLocalTodayMetadata();
-  const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, watchLater, followedChannels] = await Promise.all([
+  const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, followedChannels] = await Promise.all([
     loadPrefs(profileId),
     loadInterests(profileId),
     loadRecentSearches(profileId),
@@ -217,7 +213,6 @@ async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> 
     listSavedVideos(profileId),
     listResume(profileId),
     listQueues(profileId),
-    listWatchLater(profileId),
     followedSourceRepository.listForProfile(profileId),
   ]);
   const parsedCredential = parseGoogleCredential(rawGoogleCredential);
@@ -231,7 +226,6 @@ async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> 
     savedVideos,
     resumeList,
     sessions,
-    watchLater,
     followedChannels,
   };
 }
@@ -317,7 +311,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       queryClient.setQueryData(["library", resolvedProfileId, "saved"], snapshot.savedVideos);
       queryClient.setQueryData(["library", resolvedProfileId, "resume"], snapshot.resumeList);
       queryClient.setQueryData(["library", resolvedProfileId, "queues"], snapshot.sessions);
-      queryClient.setQueryData(["library", resolvedProfileId, "watchLater"], snapshot.watchLater);
       queryClient.setQueryData(["library", resolvedProfileId, "channels"], snapshot.followedChannels);
       setProfiles(availableProfiles);
       setActiveProfileId(resolvedProfileId);
@@ -425,7 +418,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryClient.setQueryData(["library", profileId, "saved"], snapshot.savedVideos);
     queryClient.setQueryData(["library", profileId, "resume"], snapshot.resumeList);
     queryClient.setQueryData(["library", profileId, "queues"], snapshot.sessions);
-    queryClient.setQueryData(["library", profileId, "watchLater"], snapshot.watchLater);
     queryClient.setQueryData(["library", profileId, "channels"], snapshot.followedChannels);
     setPrefs(snapshot.prefs);
     setInterests(snapshot.interests);
@@ -618,7 +610,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queueSourceLeaseReconciliation("launch");
     const refreshRetention = (): void => {
       const now = Date.now();
-      queryClient.setQueriesData<Video[]>({ queryKey: ["library"], predicate: (query) => ["saved", "watchLater"].includes(String(query.queryKey[2])) }, (items) => items?.map((item) => expireVideo(item, now)));
+      queryClient.setQueriesData<Video[]>({ queryKey: ["library"], predicate: (query) => query.queryKey[2] === "saved" }, (items) => items?.map((item) => expireVideo(item, now)));
       queryClient.setQueriesData<FollowedChannel[]>({ queryKey: ["library"], predicate: (query) => query.queryKey[2] === "channels" }, (items) => items?.map((item) => expireChannel(item, now)));
       queryClient.setQueriesData<Awaited<ReturnType<typeof listResume>>>({ queryKey: ["library"], predicate: (query) => query.queryKey[2] === "resume" }, (items) => items?.map((item) => expireResume(item, now)));
       void expireLocalTodayMetadata().then(() => queryClient.invalidateQueries({ queryKey: ["library"] })).catch(() => console.warn("[retention] Local metadata cleanup will retry on the next read."));
@@ -790,12 +782,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     enabled: ready,
   });
 
-  const watchLaterQuery = useQuery({
-    queryKey: ["library", activeProfileId, "watchLater"],
-    queryFn: () => listWatchLater(activeProfileId),
-    enabled: ready,
-  });
-
   const channelsQuery = useQuery({
     queryKey: ["library", activeProfileId, "channels"],
     queryFn: () => followedSourceRepository.listForProfile(activeProfileId),
@@ -845,20 +831,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
   );
-
-  const watchLaterMutation = useMutation({
-    mutationFn: async (video: Video) => {
-      await addWatchLater(activeProfileId, video);
-    },
-    onSuccess: invalidateLibrary,
-  });
-
-  const removeWatchLaterMutation = useMutation({
-    mutationFn: async (videoId: string) => {
-      await removeWatchLater(activeProfileId, videoId);
-    },
-    onSuccess: invalidateLibrary,
-  });
 
   const followMutation = useMutation({
     mutationFn: async (channel: FollowedChannel) => {
@@ -1093,7 +1065,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
         || savedQuery.isLoading
         || resumeQuery.isLoading
         || queuesQuery.isLoading
-        || watchLaterQuery.isLoading
         || channelsQuery.isLoading,
       sourcesLoading: !ready || channelsQuery.isLoading,
       sourcesError: channelsQuery.isError,
@@ -1115,10 +1086,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       savedVideos: savedQuery.data ?? [],
       resumeList: resumeQuery.data ?? [],
       sessions: queuesQuery.data ?? [],
-      watchLater: watchLaterQuery.data ?? [],
       followedChannels: channelsQuery.data ?? [],
       isVideoSaved: (id: string) => (savedQuery.data ?? []).some((v) => v.id === id),
-      isInWatchLater: (id: string) => (watchLaterQuery.data ?? []).some((v) => v.id === id),
       isChannelFollowed: (id: string) => (channelsQuery.data ?? []).some((c) => c.id === id),
       checkIsVideoSaved: (id: string) => dbIsVideoSaved(activeProfileId, id),
       saveVideo: async (v: Video): Promise<void> => {
@@ -1126,11 +1095,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
         await saveMutation.mutateAsync(v);
       },
       unsaveVideo: (id: string) => unsaveMutation.mutateAsync(id),
-      addToWatchLater: async (v: Video): Promise<void> => {
-        if (!requirePurchase("watchLater")) return;
-        await watchLaterMutation.mutateAsync(v);
-      },
-      removeFromWatchLater: (id: string) => removeWatchLaterMutation.mutateAsync(id),
       followChannel: async (c: FollowedChannel): Promise<void> => {
         await followMutation.mutateAsync(c);
       },
@@ -1190,7 +1154,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       savedQuery.isLoading,
       resumeQuery.isLoading,
       queuesQuery.isLoading,
-      watchLaterQuery.isLoading,
       channelsQuery.isLoading,
       channelsQuery.isError,
       replaceInterests,
@@ -1209,12 +1172,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       savedQuery.data,
       resumeQuery.data,
       queuesQuery.data,
-      watchLaterQuery.data,
       channelsQuery.data,
       saveMutation,
       unsaveMutation,
-      watchLaterMutation,
-      removeWatchLaterMutation,
       followMutation,
       unfollowMutation,
       createSession,

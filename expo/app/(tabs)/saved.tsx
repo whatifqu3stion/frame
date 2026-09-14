@@ -18,13 +18,9 @@ export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, savedVideos, watchLater, resumeList, sessions, libraryLoading, requirePurchase } = useApp();
+  const { activeProfileId, savedVideos, resumeList, sessions, libraryLoading, requirePurchase } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
-  const saved = useMemo<Video[]>(() => {
-    const byId = new Map<string, Video>();
-    [...savedVideos, ...watchLater].forEach((video) => byId.set(video.id, video));
-    return Array.from(byId.values());
-  }, [savedVideos, watchLater]);
+  const saved: Video[] = savedVideos;
   const continueWatching = useMemo(() => resumeList.flatMap((resume) => {
     const video = saved.find((candidate) => candidate.id === resume.videoId) ?? (resume.title ? {
       id: resume.videoId,
@@ -65,7 +61,7 @@ export default function SavedScreen() {
         <Text style={type.bodySoft}>Expired details are cleared, not your saved links or playback position.</Text>
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
         {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : saved.length === 0 ? (
-          <EmptyState title="Nothing saved" body="Use Save while watching. Videos you previously set aside remain available here without a competing list." />
+          <EmptyState title="Nothing saved" body="Use Save while watching. Your former Watch Later links are here too—one collection, one Save button." />
         ) : saved.map((video) => <VideoCard key={video.id} video={video} variant="wide" />)}
 
         <SectionTitle label="Current Session" styles={styles} />

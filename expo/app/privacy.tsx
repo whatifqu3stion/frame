@@ -6,7 +6,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 const SECTIONS: { title: string; body: string }[] = [
   {
     title: "Information kept on your device",
-    body: "Frame stores your saved videos, Watch Later items, named sessions, followed creators, viewing progress, interests, preferences, and recent searches on your device. Frame does not use this information for behavioral advertising or to build an endless personalized feed.",
+    body: "Frame stores your saved videos (including former Watch Later links), named sessions, followed creators, viewing progress, interests, preferences, and recent searches on your device. Frame does not use this information for behavioral advertising or to build an endless personalized feed.",
   },
   {
     title: "When you use online features",

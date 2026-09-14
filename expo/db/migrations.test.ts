@@ -80,12 +80,14 @@ describe("database version 1 migration", () => {
       createRepresentativeLegacyDatabase(database);
       const adapter = sqliteAdapter(database);
       await migrateDatabase(adapter);
-      for (const table of PROFILE_OWNED_TABLES) {
+      for (const table of PROFILE_OWNED_TABLES.filter((table) => table !== "watch_later")) {
         const row = database.query(`SELECT profileId FROM ${table} LIMIT 1`).get() as { profileId: string };
         expect(row.profileId).toBe(DEFAULT_OWNER_PROFILE_ID);
       }
+      expect(database.query("SELECT COUNT(*) AS count FROM watch_later").get()).toEqual({ count: 0 });
+      expect(database.query("SELECT savedAt, legacyWatchLaterAddedAt, fetchedAt FROM saved_videos WHERE id = 'video-b'").get()).toEqual({ savedAt: 13, legacyWatchLaterAddedAt: 13, fetchedAt: null });
       await migrateDatabase(adapter);
-      expect(database.query("SELECT COUNT(*) AS count FROM saved_videos").get()).toEqual({ count: 1 });
+      expect(database.query("SELECT COUNT(*) AS count FROM saved_videos").get()).toEqual({ count: 2 });
       expect(database.query("SELECT COUNT(*) AS count FROM followed_channels").get()).toEqual({ count: 1 });
     } finally {
       database.close();

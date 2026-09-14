@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
-import { Bookmark, ChevronLeft, ChevronRight, Clock, ExternalLink, RotateCcw } from "lucide-react-native";
+import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, RotateCcw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -48,7 +48,7 @@ const CONTROL_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
 const DARK_CONTROL_RIPPLE = { color: "rgba(250,249,246,0.16)", borderless: false } as const;
 const LIGHT_CONTROL_RIPPLE = { color: "rgba(21,30,27,0.12)", borderless: false } as const;
 
-type PendingAction = "retry" | "rewatch" | "save" | "later" | null;
+type PendingAction = "retry" | "rewatch" | "save" | null;
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -98,12 +98,8 @@ export default function WatchScreen() {
   const {
     activeProfileId,
     savedVideos,
-    watchLater,
     saveVideo,
     unsaveVideo,
-    addToWatchLater,
-    removeFromWatchLater,
-    isInWatchLater,
     requirePurchase,
     canUseLibrary,
     recordResume,
@@ -129,8 +125,7 @@ export default function WatchScreen() {
   const isSession = sessionIds.length > 0;
 
   const baseVideo = useMemo<Video | undefined>(() => {
-    const stored = savedVideos.find((candidate) => candidate.id === id)
-      ?? watchLater.find((candidate) => candidate.id === id);
+    const stored = savedVideos.find((candidate) => candidate.id === id);
     if (stored) return stored;
     if (!VIDEO_ID_PATTERN.test(id)) return undefined;
 
@@ -147,7 +142,7 @@ export default function WatchScreen() {
       madeForKids: firstParam(params.madeForKids) === "1" ? true : firstParam(params.madeForKids) === "0" ? false : null,
       durationSeconds: Number.isFinite(routeDuration) && routeDuration > 0 ? routeDuration : 0,
     };
-  }, [id, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
+  }, [id, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos]);
 
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
 
@@ -578,7 +573,6 @@ export default function WatchScreen() {
   }, [closePlayer, leaveFullscreen]);
 
   const isSaved = video ? savedVideos.some((candidate) => candidate.id === video.id) : false;
-  const inWatchLater = video ? isInWatchLater(video.id) : false;
 
   const toggleSave = useCallback(async (): Promise<void> => {
     if (!video || !beginAction("save")) return;
@@ -599,26 +593,6 @@ export default function WatchScreen() {
       setAction(null);
     }
   }, [beginAction, haptic, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
-
-  const toggleWatchLater = useCallback(async (): Promise<void> => {
-    if (!video || !beginAction("later")) return;
-    try {
-      if (!inWatchLater) {
-        if (!requirePurchase("watchLater")) return;
-        const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
-        const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
-        await addToWatchLater(normalizedVideo);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      } else {
-        await removeFromWatchLater(video.id);
-        haptic();
-      }
-    } catch {
-      void AccessibilityInfo.announceForAccessibility("Couldn’t update Watch Later. Please try again.");
-    } finally {
-      setAction(null);
-    }
-  }, [addToWatchLater, beginAction, haptic, inWatchLater, removeFromWatchLater, requirePurchase, setAction, video]);
 
   if (!video) {
     return (
@@ -806,20 +780,6 @@ export default function WatchScreen() {
           >
             {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} />}
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
-          </Pressable>
-          <Pressable
-            onPress={toggleWatchLater}
-            hitSlop={CONTROL_HIT_SLOP}
-            android_ripple={DARK_CONTROL_RIPPLE}
-            disabled={pendingAction === "later"}
-            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "later") && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: inWatchLater, busy: pendingAction === "later", disabled: pendingAction === "later" }}
-            accessibilityLabel={inWatchLater ? "Remove from Watch Later" : "Add to Watch Later"}
-            testID="action-watchlater"
-          >
-            {pendingAction === "later" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Clock size={17} color={inWatchLater ? palette.accentSoft : palette.wall} strokeWidth={1.6} />}
-            <Text style={[type.label, styles.actionLabel, inWatchLater && { color: palette.accentSoft }]}>{pendingAction === "later" ? "Updating…" : inWatchLater ? "Added" : "Later"}</Text>
           </Pressable>
         </View>
 

@@ -18,7 +18,7 @@ export default function SessionBuilder() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { savedVideos, watchLater, sessions, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const { savedVideos, sessions, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
   const [name, setName] = useState<string>("");
@@ -32,13 +32,7 @@ export default function SessionBuilder() {
     setDidHydrate(true);
   }, [didHydrate, existingSession, id]);
 
-  const pool = useMemo<Video[]>(() => {
-    const videos = new Map<string, Video>();
-    [...watchLater, ...savedVideos].forEach((video) => {
-      if (!videos.has(video.id)) videos.set(video.id, video);
-    });
-    return Array.from(videos.values());
-  }, [savedVideos, watchLater]);
+  const pool: Video[] = savedVideos;
 
   const totalSeconds = useMemo<number>(
     () => selected.reduce((sum, videoId) => sum + (pool.find((video) => video.id === videoId)?.durationSeconds ?? 0), 0),
@@ -120,7 +114,7 @@ export default function SessionBuilder() {
         data={pool}
         keyExtractor={(video) => video.id}
         ListHeaderComponent={header}
-        ListEmptyComponent={<EmptyState title="Nothing to sit with yet" body="Save videos or add them to Watch Later, then build a named session from them." />}
+        ListEmptyComponent={<EmptyState title="Nothing to sit with yet" body="Save a few videos, then build a named session from them." />}
         renderItem={({ item }) => {
           const isSelected = selected.includes(item.id);
           const order = selected.indexOf(item.id) + 1;

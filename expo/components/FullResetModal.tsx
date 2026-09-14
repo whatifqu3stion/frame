@@ -8,7 +8,7 @@ import { useApp } from "@/providers/AppProvider";
 
 type Props = { visible: boolean; onClose: () => void };
 
-const DELETED_ITEMS = "all profiles; Owner PIN; viewing allowances and daily usage; sources; saved and Watch Later videos; Sessions; progress; interests; searches; appearance; and local Google credentials";
+const DELETED_ITEMS = "all profiles; Owner PIN; viewing allowances and daily usage; sources; saved videos (including former Watch Later links); Sessions; progress; interests; searches; appearance; and local Google credentials";
 
 /** Shared irreversible full-reset recovery used by Privacy & Data and Forgot PIN. */
 export default function FullResetModal({ visible, onClose }: Props) {

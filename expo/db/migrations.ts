@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from "expo-sqlite";
+import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 5;
+export const DATABASE_SCHEMA_VERSION = 6;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -243,6 +244,25 @@ export function buildVersion5MigrationPlan(): string[] {
   ];
 }
 
+/** Merges bookmarks and keeps the freshest valid metadata bundle with its original fetch date. */
+export function buildVersion6MigrationPlan(now: number = Date.now()): string[] {
+  if (!Number.isSafeInteger(now) || now <= 0) throw new Error("Invalid migration time.");
+  return [
+    "ALTER TABLE saved_videos ADD COLUMN legacyWatchLaterAddedAt INTEGER",
+    `UPDATE saved_videos AS saved
+     SET (title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,fetchedAt) =
+       (SELECT title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,fetchedAt FROM watch_later AS later WHERE later.profileId=saved.profileId AND later.id=saved.id)
+     WHERE EXISTS (SELECT 1 FROM watch_later AS later WHERE later.profileId=saved.profileId AND later.id=saved.id
+       AND later.fetchedAt>${now - METADATA_MAX_AGE_MS} AND later.fetchedAt<=${now}
+       AND (saved.fetchedAt IS NULL OR saved.fetchedAt>${now} OR saved.fetchedAt<later.fetchedAt))`,
+    `INSERT INTO saved_videos (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt,fetchedAt,legacyWatchLaterAddedAt)
+     SELECT profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt,fetchedAt,addedAt FROM watch_later WHERE 1
+     ON CONFLICT(profileId,id) DO UPDATE SET legacyWatchLaterAddedAt=excluded.legacyWatchLaterAddedAt`,
+    "DELETE FROM watch_later",
+    "PRAGMA user_version = 6",
+  ];
+}
+
 function seedDefaultOwnerSql(): string {
   return `INSERT OR IGNORE INTO profiles (id, name, role, createdAt, updatedAt) VALUES ('${DEFAULT_OWNER_PROFILE_ID}', '${DEFAULT_OWNER_PROFILE_NAME}', 'owner', 0, 0)`;
 }
@@ -318,5 +338,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 5) {
     await executeMigrationTransaction(db, buildVersion5MigrationPlan());
+    currentVersion = 5;
+  }
+  if (currentVersion < 6) {
+    await executeMigrationTransaction(db, buildVersion6MigrationPlan());
   }
 }

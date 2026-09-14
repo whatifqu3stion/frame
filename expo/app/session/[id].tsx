@@ -21,7 +21,7 @@ export default function SavedSessionScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeProfileId, sessions, savedVideos, watchLater, duplicateSession, removeSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionVideos, requirePurchase } = useApp();
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
     queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""],
@@ -30,9 +30,9 @@ export default function SavedSessionScreen() {
   });
   const videoMap = useMemo<Map<string, Video>>(() => {
     const map = new Map<string, Video>();
-    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...watchLater, ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
+    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
     return map;
-  }, [savedVideos, todayVideosQuery.data, watchLater]);
+  }, [savedVideos, todayVideosQuery.data]);
   const totalSeconds = session?.orderedVideoIds.reduce((sum, videoId) => sum + (videoMap.get(videoId)?.durationSeconds ?? 0), 0) ?? 0;
 
   const startAt = useCallback((index: number): void => {
