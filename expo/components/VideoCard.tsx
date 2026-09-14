@@ -9,11 +9,13 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { ThumbnailSkeleton } from "@/components/VideoSkeleton";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
+import { expireVideo } from "@/domain/metadataRetention";
 import type { Video } from "@/types";
 
 type Props = { video: Video; variant?: "full" | "compact" | "wide"; progressSeconds?: number };
 
 function VideoCard({ video, variant = "full", progressSeconds }: Props) {
+  video = expireVideo(video, Date.now());
   const { palette, type } = useFrameTheme();
   const { requirePurchase } = useApp();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -24,31 +26,31 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const dateLabel = formatRelativeDate(video.publishedAt);
 
   useEffect(() => {
-    setIsThumbnailLoading(true);
+    setIsThumbnailLoading(Boolean(video.thumbnailUrl));
   }, [video.thumbnailUrl]);
 
   const onPress = useCallback((): void => {
     if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1" } });
+    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
   }, [requirePurchase, video]);
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
     <View style={wrapStyle}>
-      <Image
+      {video.thumbnailUrl ? <Image
         source={{ uri: video.thumbnailUrl }}
         style={imageStyle}
         contentFit="cover"
-        cachePolicy="memory-disk"
+        cachePolicy="none"
         recyclingKey={video.id}
         transition={160}
         onLoadStart={() => setIsThumbnailLoading(true)}
         onLoad={() => setIsThumbnailLoading(false)}
         onError={() => setIsThumbnailLoading(false)}
-      />
-      {isThumbnailLoading ? <ThumbnailSkeleton /> : null}
+      /> : <Text style={type.caption}>Details expired · link kept</Text>}
+      {video.thumbnailUrl && isThumbnailLoading ? <ThumbnailSkeleton /> : null}
       {!isThumbnailLoading && video.durationSeconds > 0 ? <View style={styles.durationBadge}><Text style={styles.durationText}>{formatDuration(video.durationSeconds)}</Text></View> : null}
       {!isThumbnailLoading && progressFraction > 0 ? <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progressFraction * 100)} percent watched`}><View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} /></View> : null}
     </View>

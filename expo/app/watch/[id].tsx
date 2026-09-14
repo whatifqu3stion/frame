@@ -28,6 +28,7 @@ import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } fr
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
+import { expireVideo } from "@/domain/metadataRetention";
 import { getResume } from "@/db/database";
 import { todayRepository } from "@/repositories/todayRepository";
 import { useApp } from "@/providers/AppProvider";
@@ -83,6 +84,7 @@ export default function WatchScreen() {
     description?: string | string[];
     madeForKids?: string | string[];
     cachedMetadata?: string | string[];
+    fetchedAt?: string | string[];
     origin?: string | string[];
     todayProfileId?: string | string[];
     todayPeriodKey?: string | string[];
@@ -135,16 +137,17 @@ export default function WatchScreen() {
     const routeDuration = Number(firstParam(params.durationSeconds) ?? 0);
     return {
       id,
+      fetchedAt: Number(firstParam(params.fetchedAt) ?? 0),
       title: optionalText(firstParam(params.title)) || "YouTube video",
       channelId: optionalText(firstParam(params.channelId)),
       channelTitle: optionalText(firstParam(params.channelTitle)),
-      thumbnailUrl: optionalText(firstParam(params.thumbnailUrl)) || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      thumbnailUrl: optionalText(firstParam(params.thumbnailUrl)),
       publishedAt: optionalText(firstParam(params.publishedAt)),
       description: optionalText(firstParam(params.description)).slice(0, 5_000),
       madeForKids: firstParam(params.madeForKids) === "1" ? true : firstParam(params.madeForKids) === "0" ? false : null,
       durationSeconds: Number.isFinite(routeDuration) && routeDuration > 0 ? routeDuration : 0,
     };
-  }, [id, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
+  }, [id, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos, watchLater]);
 
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
 
@@ -155,11 +158,17 @@ export default function WatchScreen() {
     staleTime: 5 * 60_000,
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
+  const [retentionClock, setRetentionClock] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setRetentionClock(Date.now()), 60_000);
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") setRetentionClock(Date.now()); });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
   const video = useMemo<Video | undefined>(() => {
     if (!baseVideo) return undefined;
-    if (!verifiedVideo) return baseVideo;
-    return { ...baseVideo, ...verifiedVideo, description: verifiedVideo.description ?? baseVideo.description };
-  }, [baseVideo, verifiedVideo]);
+    if (!verifiedVideo) return expireVideo(baseVideo, retentionClock);
+    return expireVideo({ ...baseVideo, ...verifiedVideo, description: verifiedVideo.description ?? baseVideo.description }, retentionClock);
+  }, [baseVideo, verifiedVideo, retentionClock]);
 
   const [startAt, setStartAt] = useState<number>(0);
   const [resumeReady, setResumeReady] = useState<boolean>(false);

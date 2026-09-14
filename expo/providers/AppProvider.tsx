@@ -5,6 +5,8 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { clearLegacyThumbnailCaches } from "@/services/thumbnailRetention";
+import { expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
 import { Alert, AppState } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
@@ -290,6 +292,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     let mounted = true;
     const initialize = async (): Promise<void> => {
+      await clearLegacyThumbnailCaches().catch(() => console.warn("[retention] Thumbnail cleanup pending; retrying on foreground."));
       await followedSourceRepository.initialize();
       const [availableProfiles, savedProfileId, pinAvailability] = await Promise.all([
         profileRepository.list(),
@@ -613,12 +616,19 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!ready) return;
     let previousState = AppState.currentState;
     queueSourceLeaseReconciliation("launch");
+    const refreshRetention = (): void => {
+      const now = Date.now();
+      queryClient.setQueriesData<Video[]>({ queryKey: ["library"], predicate: (query) => ["saved", "watchLater"].includes(String(query.queryKey[2])) }, (items) => items?.map((item) => expireVideo(item, now)));
+      queryClient.setQueriesData<FollowedChannel[]>({ queryKey: ["library"], predicate: (query) => query.queryKey[2] === "channels" }, (items) => items?.map((item) => expireChannel(item, now)));
+      queryClient.setQueriesData<Awaited<ReturnType<typeof listResume>>>({ queryKey: ["library"], predicate: (query) => query.queryKey[2] === "resume" }, (items) => items?.map((item) => expireResume(item, now)));
+      void expireLocalTodayMetadata().then(() => queryClient.invalidateQueries({ queryKey: ["library"] })).catch(() => console.warn("[retention] Local metadata cleanup will retry on the next read."));
+    };
+    const timer = setInterval(() => { if (AppState.currentState === "active") refreshRetention(); }, 60_000);
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && previousState !== "active") {
         queueSourceLeaseReconciliation("foreground");
-        void expireLocalTodayMetadata().then(() => queryClient.invalidateQueries({ queryKey: ["today"] })).catch(() => {
-          console.warn("[retention] Local Today cleanup will retry on the next read.");
-        });
+        refreshRetention();
+        void clearLegacyThumbnailCaches().catch(() => console.warn("[retention] Thumbnail cleanup pending; retrying on foreground."));
       }
       if (nextState !== "active") {
         void viewingAllowanceService.stopPlaying();
@@ -626,7 +636,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
       previousState = nextState;
     });
-    return () => subscription.remove();
+    return () => { clearInterval(timer); subscription.remove(); };
   }, [ready, relockOwnerAccess, queryClient]);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>): Promise<void> => {

@@ -47,6 +47,7 @@ describe("manual shared-source mobile flow", () => {
         description: resolution.source.description,
         thumbnailUrl: resolution.source.thumbnailUrl,
         followedAt: 1234,
+        fetchedAt: null,
         source: "link",
       },
     }]);

@@ -95,11 +95,11 @@ export default function SourcesScreen() {
                       testID={`source-${channel.id}`}
                     >
                       <View style={styles.avatar}>
-                        {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" recyclingKey={channel.id} /> : null}
+                        {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="none" recyclingKey={channel.id} /> : null}
                       </View>
                       <View style={styles.flex}>
                         <Text style={styles.sourceName} numberOfLines={2}>{channel.title}</Text>
-                        <Text style={styles.supporting}>Open recent videos</Text>
+                        <Text style={styles.supporting}>{channel.fetchedAt ? "Open recent videos" : `Follow kept · ${channel.id}`}</Text>
                       </View>
                       <ArrowRight size={17} color={palette.inkMuted} />
                     </Pressable>

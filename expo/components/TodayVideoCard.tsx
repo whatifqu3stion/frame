@@ -15,7 +15,7 @@ function TodayVideoCard({ item, busy, onWatch, onSave, onSession, onMore }: { it
     <View style={styles.card} testID={`today-card-${item.id}`}>
       <Pressable onPress={onWatch} disabled={busy} style={({ pressed }) => [styles.media, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Watch ${item.title} by ${item.sourceTitle}`}>
         <View style={styles.thumbnailWrap}>
-          <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" transition={140} />
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="none" transition={140} />
           <View style={styles.duration}><Text style={styles.durationText}>{formatDuration(item.durationSeconds)}</Text></View>
         </View>
         <Text style={styles.source} numberOfLines={1}>{item.sourceTitle}</Text>

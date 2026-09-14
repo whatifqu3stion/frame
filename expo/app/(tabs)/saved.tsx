@@ -28,10 +28,11 @@ export default function SavedScreen() {
   const continueWatching = useMemo(() => resumeList.flatMap((resume) => {
     const video = saved.find((candidate) => candidate.id === resume.videoId) ?? (resume.title ? {
       id: resume.videoId,
+      fetchedAt: resume.fetchedAt ?? null,
       title: resume.title,
       channelId: "",
       channelTitle: resume.channelTitle ?? "",
-      thumbnailUrl: resume.thumbnailUrl ?? `https://i.ytimg.com/vi/${resume.videoId}/hqdefault.jpg`,
+      thumbnailUrl: resume.thumbnailUrl ?? "",
       publishedAt: "",
       durationSeconds: resume.durationSeconds ?? 0,
     } : null);
@@ -61,6 +62,7 @@ export default function SavedScreen() {
           </ScrollView>
         )}
 
+        <Text style={type.bodySoft}>Expired details are cleared, not your saved links or playback position.</Text>
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
         {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : saved.length === 0 ? (
           <EmptyState title="Nothing saved" body="Use Save while watching. Videos you previously set aside remain available here without a competing list." />

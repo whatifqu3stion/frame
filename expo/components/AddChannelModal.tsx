@@ -70,6 +70,8 @@ export default function AddChannelModal({ visible, onClose }: Props) {
         thumbnailUrl: video.thumbnailUrl,
         publishedAt: video.publishedAt,
         durationSeconds: String(video.durationSeconds),
+        fetchedAt: String(video.fetchedAt ?? 0),
+        cachedMetadata: "1",
       },
     });
   };
@@ -123,7 +125,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
 
           {resolution ? (
             <View style={styles.preview} testID="resolved-source-preview">
-              {resolution.source.thumbnailUrl ? <Image source={{ uri: resolution.source.thumbnailUrl }} style={styles.avatar} contentFit="cover" /> : <View style={styles.avatarFallback} />}
+              {resolution.source.thumbnailUrl ? <Image source={{ uri: resolution.source.thumbnailUrl }} style={styles.avatar} contentFit="cover" cachePolicy="none" /> : <View style={styles.avatarFallback} />}
               <View style={styles.previewCopy}>
                 <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
                 <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>

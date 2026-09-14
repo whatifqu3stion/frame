@@ -153,7 +153,7 @@ describe("database version 1 migration", () => {
       database.query("INSERT INTO profiles (id,name,role,createdAt,updatedAt) VALUES ('standard-old','Standard','standard',1,1)").run();
       database.query("INSERT INTO saved_videos VALUES ('standard-old','video-old','Saved','channel','Channel','thumb','2026-01-01',60,NULL,1)").run();
       await migrateDatabase(adapter);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: DATABASE_SCHEMA_VERSION });
       expect(database.query("SELECT name, role, sortOrder FROM profiles WHERE id = 'standard-old'").get()).toEqual({ name: "Standard", role: "standard", sortOrder: 1 });
       expect(database.query("SELECT title FROM saved_videos WHERE profileId = 'standard-old'").get()).toEqual({ title: "Saved" });
       expect(database.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'managed_allowances'").get()).toEqual({ name: "managed_allowances" });
@@ -201,7 +201,7 @@ describe("database version 1 migration", () => {
     try {
       await migrateDatabase(sqliteAdapter(database));
       database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?, 'Standard', 'standard', 1, 1, 1)").run("standard");
-      const insert = database.query("INSERT INTO saved_videos VALUES (?, 'video-1', ?, 'channel', 'Channel', 'thumb', '2026-01-01', 60, NULL, 1)");
+      const insert = database.query("INSERT INTO saved_videos (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt) VALUES (?, 'video-1', ?, 'channel', 'Channel', 'thumb', '2026-01-01', 60, NULL, 1)");
       insert.run(DEFAULT_OWNER_PROFILE_ID, "Owner copy");
       insert.run("standard", "Standard copy");
       expect(database.query("SELECT COUNT(*) AS count FROM saved_videos WHERE id = 'video-1'").get()).toEqual({ count: 2 });
@@ -240,7 +240,7 @@ describe("database version 1 migration", () => {
     try {
       await migrateDatabase(sqliteAdapter(database));
       database.query("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?, 'Managed', 'managed', 1, 1, 1)").run("managed");
-      const insert = database.query("INSERT INTO followed_channels VALUES (?, 'channel-1', 'Channel', NULL, 'thumb', 1, 'manual')");
+      const insert = database.query("INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source) VALUES (?, 'channel-1', 'Channel', NULL, 'thumb', 1, 'manual')");
       insert.run(DEFAULT_OWNER_PROFILE_ID);
       insert.run("managed");
       expect(database.query("SELECT COUNT(*) AS count FROM followed_channels WHERE id = 'channel-1'").get()).toEqual({ count: 2 });

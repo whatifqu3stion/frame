@@ -49,11 +49,11 @@ function createRepository(): SourceResolutionRepository | null {
 
   return {
     async findFresh(input, now): Promise<CachedResolution | null> {
-      const sourceColumns = "provider,provider_source_id,handle,display_name,description,thumbnail_url";
+      const sourceColumns = "provider,provider_source_id,handle,display_name,description,thumbnail_url,metadata_fetched_at";
       if (input.kind === "video") {
         const { data: media, error: mediaError } = await client
           .from("media_items")
-          .select("source_id,provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere,made_for_kids")
+          .select("source_id,provider,provider_media_id,title,description,thumbnail_url,published_at,duration_seconds,is_livestream,is_upcoming_premiere,made_for_kids,metadata_fetched_at")
           .eq("provider", "youtube")
           .eq("provider_media_id", input.value)
           .eq("status", "active")
@@ -71,7 +71,8 @@ function createRepository(): SourceResolutionRepository | null {
         if (sourceError) throw new Error("source cache unavailable");
         const mappedSource = mapSourceRow(source);
         const mappedVideo = mapVideoRow(media);
-        return mappedSource && mappedVideo ? { source: mappedSource, video: mappedVideo } : null;
+        const timestamp = oldestFetchTime([source, media], now);
+        return mappedSource && mappedVideo && timestamp ? { source: mappedSource, video: mappedVideo, metadataFetchedAt: timestamp } : null;
       }
 
       let query = client
@@ -86,7 +87,8 @@ function createRepository(): SourceResolutionRepository | null {
       const { data, error } = await query.maybeSingle();
       if (error) throw new Error("source cache unavailable");
       const source = mapSourceRow(data);
-      return source ? { source } : null;
+      const timestamp = oldestFetchTime([data], now);
+      return source && timestamp ? { source, metadataFetchedAt: timestamp } : null;
     },
 
     async reserve(installationToken, providerCallCount) {
@@ -170,6 +172,12 @@ function createRepository(): SourceResolutionRepository | null {
       if (error) throw new Error("source status unavailable");
     },
   };
+}
+
+function oldestFetchTime(rows: readonly unknown[], now: Date): string | null {
+  const dates = rows.map((row) => isRecord(row) && typeof row.metadata_fetched_at === "string" ? Date.parse(row.metadata_fetched_at) : NaN);
+  if (dates.some((date) => !Number.isFinite(date) || date > now.getTime() || now.getTime() - date >= 30 * 86_400_000)) return null;
+  return new Date(Math.min(...dates)).toISOString();
 }
 
 function createYouTubeProvider(apiKey: string): YouTubeResolutionProvider {

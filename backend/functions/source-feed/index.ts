@@ -12,7 +12,7 @@ import { getSupabaseSecretKey, hasValidPublishableKey, readBoundedJsonBody } fro
 
 const corsHeaders: Readonly<Record<string, string>> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "apikey, authorization, content-type, x-client-info",
+  "Access-Control-Allow-Headers": "apikey, authorization, content-type, x-client-info, x-frame-metadata",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
@@ -30,7 +30,15 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const repository = createRepository();
   if (!repository) return jsonResponse(503, "no-store", { state: "unavailable", feeds: [], unavailableSourceIds: [], fetchedAt: null, message: "Cached source feeds are unavailable." });
   const result = await executeSourceFeed(body.value, repository);
-  return jsonResponse(result.status, result.cacheControl, result.body);
+  // Preserve the original strict response shape for older mobile builds.
+  const bodyWithVersion = request.headers.get("x-frame-metadata") === "1" ? result.body : {
+    ...result.body,
+    feeds: result.body.feeds.map((feed) => {
+      const { fetchedAt: _fetchedAt, ...source } = feed.source;
+      return { ...feed, source };
+    }),
+  };
+  return jsonResponse(result.status, result.cacheControl, bodyWithVersion);
 });
 
 function createRepository(): SourceFeedRepository | null {
@@ -43,7 +51,7 @@ function createRepository(): SourceFeedRepository | null {
     async readCachedSourceFeeds(providerSourceIds, limitPerSource): Promise<readonly CachedSourceFeedRecord[]> {
       const { data: sourceRows, error: sourceError } = await client
         .from("sources")
-        .select("id,provider,provider_source_id,handle,display_name,thumbnail_url,status")
+        .select("id,provider,provider_source_id,handle,display_name,thumbnail_url,status,metadata_fetched_at")
         .eq("provider", "youtube")
         .gt("metadata_fetched_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
         .lte("metadata_fetched_at", new Date().toISOString())
@@ -114,6 +122,7 @@ function mapSource(value: unknown): CachedSourceFeedSource | null {
     providerSourceId,
     handle: boundedText(value.handle, 64),
     displayName,
+    fetchedAt: optionalIsoDate(value.metadata_fetched_at),
     thumbnailUrl: safeHttpsUrl(value.thumbnail_url),
   };
 }
@@ -170,7 +179,7 @@ function jsonResponse(status: number, cacheControl: string, body: unknown): Resp
       "Cache-Control": cacheControl,
       "Content-Type": "application/json; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
-      "Vary": "Accept-Encoding",
+      "Vary": "Accept-Encoding, x-frame-metadata",
     },
   });
 }

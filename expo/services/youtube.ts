@@ -61,6 +61,7 @@ type SourceResolutionEnvelope = {
   source?: unknown;
   video?: unknown;
   provenance?: unknown;
+  metadataFetchedAt?: unknown;
   message?: unknown;
 };
 
@@ -100,7 +101,7 @@ export async function resolveSourceFromInput(input: string): Promise<ServiceResu
     if (!source || (envelope.video !== undefined && !video) || (envelope.provenance !== "cache" && envelope.provenance !== "provider")) {
       return { status: "temporarily_unavailable", message: "Source verification returned incomplete metadata." };
     }
-    return { status: "success", data: { source, ...(video ? { video } : {}), provenance: envelope.provenance } };
+    return { status: "success", data: { source, ...(video ? { video } : {}), provenance: envelope.provenance, fetchedAt: typeof envelope.metadataFetchedAt === "string" && Number.isFinite(Date.parse(envelope.metadataFetchedAt)) ? Date.parse(envelope.metadataFetchedAt) : null } };
   } catch {
     return { status: "network_error", message: "Frame is offline. Check your connection and try again." };
   }
@@ -198,10 +199,11 @@ export function resolutionVideoToVideo(resolution: SourceResolution): Video | nu
   if (!video) return null;
   return {
     id: video.providerMediaId,
+    fetchedAt: resolution.fetchedAt ?? null,
     title: video.title,
     channelId: resolution.source.providerSourceId,
     channelTitle: resolution.source.displayName,
-    thumbnailUrl: video.thumbnailUrl ?? `https://i.ytimg.com/vi/${video.providerMediaId}/hqdefault.jpg`,
+    thumbnailUrl: video.thumbnailUrl ?? "",
     publishedAt: video.publishedAt ?? "",
     durationSeconds: video.durationSeconds ?? 0,
     description: video.description,

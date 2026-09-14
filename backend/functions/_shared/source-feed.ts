@@ -17,6 +17,7 @@ export interface CachedSourceFeedItem {
 }
 
 export interface CachedSourceFeedSource {
+  fetchedAt?: string | null;
   provider: "youtube";
   providerSourceId: string;
   handle: string | null;

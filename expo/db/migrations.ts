@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 4;
+export const DATABASE_SCHEMA_VERSION = 5;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -235,6 +235,14 @@ export function buildVersion4MigrationPlan(): string[] {
   ];
 }
 
+/** Adds fetch provenance without inventing timestamps for legacy metadata or changing personal records. */
+export function buildVersion5MigrationPlan(): string[] {
+  return [
+    ...["saved_videos", "watch_later", "resume_positions", "followed_channels"].map((table) => `ALTER TABLE ${table} ADD COLUMN fetchedAt INTEGER`),
+    "PRAGMA user_version = 5",
+  ];
+}
+
 function seedDefaultOwnerSql(): string {
   return `INSERT OR IGNORE INTO profiles (id, name, role, createdAt, updatedAt) VALUES ('${DEFAULT_OWNER_PROFILE_ID}', '${DEFAULT_OWNER_PROFILE_NAME}', 'owner', 0, 0)`;
 }
@@ -306,5 +314,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 4) {
     await executeMigrationTransaction(db, buildVersion4MigrationPlan());
+    currentVersion = 4;
+  }
+  if (currentVersion < 5) {
+    await executeMigrationTransaction(db, buildVersion5MigrationPlan());
   }
 }

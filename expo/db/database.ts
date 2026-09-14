@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { EXPIRE_TODAY_METADATA_SQL, METADATA_MAX_AGE_MS, expireTodayItem, isMetadataCurrent } from "@/domain/metadataRetention";
+import { EXPIRE_TODAY_METADATA_SQL, EXPIRE_LIBRARY_METADATA_SQL, METADATA_MAX_AGE_MS, expireTodayItem, expireVideo, expireChannel, expireResume, isMetadataCurrent } from "@/domain/metadataRetention";
 import { Platform } from "react-native";
 import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db/migrations";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
@@ -27,7 +27,7 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         await migrateDatabase(db);
         await db.execAsync("PRAGMA foreign_keys = ON;");
         const now = Date.now();
-        await db.runAsync(EXPIRE_TODAY_METADATA_SQL, [now - METADATA_MAX_AGE_MS, now]);
+        await scrubStoredMetadata(db, now);
         return db;
       })
       .catch((error) => {
@@ -242,6 +242,7 @@ export async function upsertProfilePlaybackUsage(record: ProfilePlaybackUsageRec
 }
 
 export async function listSavedVideos(profileId: string): Promise<Video[]> {
+  await expireLocalMetadata();
   if (Platform.OS === "web") return profileValues(webStore.saved, profileId).sort((a, b) => b.savedAt - a.savedAt).map((video) => ({ ...video }));
   const db = await getDb();
   return db.getAllAsync<Video & { savedAt: number }>("SELECT * FROM saved_videos WHERE profileId = ? ORDER BY savedAt DESC", [profileId]);
@@ -255,6 +256,7 @@ export async function isVideoSaved(profileId: string, videoId: string): Promise<
 }
 
 export async function saveVideo(profileId: string, video: Video): Promise<void> {
+  video = expireVideo(video, Date.now());
   const savedAt = Date.now();
   if (Platform.OS === "web") {
     webStore.saved.set(profileEntityKey(profileId, video.id), { ...video, savedAt });
@@ -262,10 +264,10 @@ export async function saveVideo(profileId: string, video: Video): Promise<void> 
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO saved_videos (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,savedAt=excluded.savedAt`,
-    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, savedAt],
+    `INSERT INTO saved_videos (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,savedAt,fetchedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,savedAt=excluded.savedAt,fetchedAt=excluded.fetchedAt`,
+    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, savedAt, video.fetchedAt ?? null],
   );
 }
 
@@ -279,6 +281,7 @@ export async function unsaveVideo(profileId: string, videoId: string): Promise<v
 }
 
 export type ResumeRow = ResumePosition & {
+  fetchedAt?: number | null;
   title?: string;
   channelTitle?: string;
   thumbnailUrl?: string;
@@ -286,20 +289,24 @@ export type ResumeRow = ResumePosition & {
 };
 
 export async function listResume(profileId: string): Promise<ResumeRow[]> {
+  await expireLocalMetadata();
   if (Platform.OS === "web") return profileValues(webStore.resume, profileId).sort((a, b) => b.updatedAt - a.updatedAt);
   const db = await getDb();
   return db.getAllAsync<ResumeRow>("SELECT * FROM resume_positions WHERE profileId = ? ORDER BY updatedAt DESC LIMIT 24", [profileId]);
 }
 
 export async function getResume(profileId: string, videoId: string): Promise<ResumeRow | null> {
+  await expireLocalMetadata();
   if (Platform.OS === "web") return webStore.resume.get(profileEntityKey(profileId, videoId)) ?? null;
   const db = await getDb();
   return (await db.getFirstAsync<ResumeRow>("SELECT * FROM resume_positions WHERE profileId = ? AND videoId = ?", [profileId, videoId])) ?? null;
 }
 
 export async function upsertResume(profileId: string, video: Video, timestampSeconds: number): Promise<void> {
+  video = expireVideo(video, Date.now());
   const row: ResumeRow = {
     videoId: video.id,
+    fetchedAt: video.fetchedAt ?? null,
     timestampSeconds: Math.floor(timestampSeconds),
     updatedAt: Date.now(),
     title: video.title,
@@ -313,10 +320,10 @@ export async function upsertResume(profileId: string, video: Video, timestampSec
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO resume_positions (profileId,videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds)
-     VALUES (?,?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,videoId) DO UPDATE SET timestampSeconds=excluded.timestampSeconds,updatedAt=excluded.updatedAt,title=excluded.title,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,durationSeconds=excluded.durationSeconds`,
-    [profileId, row.videoId, row.timestampSeconds, row.updatedAt, row.title ?? null, row.channelTitle ?? null, row.thumbnailUrl ?? null, row.durationSeconds ?? null],
+    `INSERT INTO resume_positions (profileId,videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds,fetchedAt)
+     VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,videoId) DO UPDATE SET timestampSeconds=excluded.timestampSeconds,updatedAt=excluded.updatedAt,title=excluded.title,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,durationSeconds=excluded.durationSeconds,fetchedAt=excluded.fetchedAt`,
+    [profileId, row.videoId, row.timestampSeconds, row.updatedAt, row.title ?? null, row.channelTitle ?? null, row.thumbnailUrl ?? null, row.durationSeconds ?? null, row.fetchedAt ?? null],
   );
 }
 
@@ -371,12 +378,14 @@ export async function deleteQueue(profileId: string, id: string): Promise<void> 
 }
 
 export async function listWatchLater(profileId: string): Promise<Video[]> {
+  await expireLocalMetadata();
   if (Platform.OS === "web") return profileValues(webStore.watchLater, profileId).sort((a, b) => b.addedAt - a.addedAt).map((video) => ({ ...video }));
   const db = await getDb();
   return db.getAllAsync<Video & { addedAt: number }>("SELECT * FROM watch_later WHERE profileId = ? ORDER BY addedAt DESC", [profileId]);
 }
 
 export async function addWatchLater(profileId: string, video: Video): Promise<void> {
+  video = expireVideo(video, Date.now());
   const addedAt = Date.now();
   if (Platform.OS === "web") {
     webStore.watchLater.set(profileEntityKey(profileId, video.id), { ...video, addedAt });
@@ -384,10 +393,10 @@ export async function addWatchLater(profileId: string, video: Video): Promise<vo
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO watch_later (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,addedAt=excluded.addedAt`,
-    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, addedAt],
+    `INSERT INTO watch_later (profileId,id,title,channelId,channelTitle,thumbnailUrl,publishedAt,durationSeconds,description,addedAt,fetchedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,channelId=excluded.channelId,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,addedAt=excluded.addedAt,fetchedAt=excluded.fetchedAt`,
+    [profileId, video.id, video.title, video.channelId, video.channelTitle, video.thumbnailUrl, video.publishedAt, video.durationSeconds, video.description ?? null, addedAt, video.fetchedAt ?? null],
   );
 }
 
@@ -401,6 +410,7 @@ export async function removeWatchLater(profileId: string, videoId: string): Prom
 }
 
 export async function listFollowedChannels(profileId: string): Promise<FollowedChannel[]> {
+  await expireLocalMetadata();
   if (Platform.OS === "web") return profileValues(webStore.channels, profileId).sort((a, b) => b.followedAt - a.followedAt);
   const db = await getDb();
   return db.getAllAsync<FollowedChannel>("SELECT * FROM followed_channels WHERE profileId = ? ORDER BY followedAt DESC", [profileId]);
@@ -415,6 +425,7 @@ export async function listDistinctFollowedChannelIds(): Promise<string[]> {
 }
 
 export async function followChannel(profileId: string, channel: FollowedChannel): Promise<void> {
+  channel = expireChannel(channel, Date.now());
   if (Platform.OS === "web") {
     const key = profileEntityKey(profileId, channel.id);
     const existing = webStore.channels.get(key);
@@ -423,13 +434,14 @@ export async function followChannel(profileId: string, channel: FollowedChannel)
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl`,
-    [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
+    `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source,fetchedAt) VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl,fetchedAt=excluded.fetchedAt`,
+    [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source, channel.fetchedAt ?? null],
   );
 }
 
 export async function followChannels(profileId: string, channels: FollowedChannel[]): Promise<void> {
+  channels = channels.map((channel) => expireChannel(channel, Date.now()));
   if (Platform.OS === "web") {
     for (const channel of channels) await followChannel(profileId, channel);
     return;
@@ -438,9 +450,9 @@ export async function followChannels(profileId: string, channels: FollowedChanne
   await db.withTransactionAsync(async () => {
     for (const channel of channels) {
       await db.runAsync(
-        `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source) VALUES (?,?,?,?,?,?,?)
-         ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl`,
-        [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source],
+        `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source,fetchedAt) VALUES (?,?,?,?,?,?,?,?)
+         ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl,fetchedAt=excluded.fetchedAt`,
+        [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source, channel.fetchedAt ?? null],
       );
     }
   });
@@ -455,16 +467,73 @@ export async function unfollowChannel(profileId: string, id: string): Promise<vo
   await db.runAsync("DELETE FROM followed_channels WHERE profileId = ? AND id = ?", [profileId, id]);
 }
 
-/** Removes expired provider details while retaining every profile-local action and link. */
-export async function expireLocalTodayMetadata(now: number = Date.now()): Promise<void> {
+let retentionWork: Promise<void> | null = null;
+
+async function scrubStoredMetadata(db: SQLite.SQLiteDatabase, now: number): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    for (const statement of [EXPIRE_TODAY_METADATA_SQL, ...EXPIRE_LIBRARY_METADATA_SQL]) {
+      await db.runAsync(statement, [now - METADATA_MAX_AGE_MS, now]);
+    }
+  });
+}
+
+/** Coalesces cleanup across parallel library reads, preserving every personal action. */
+export async function expireLocalMetadata(now: number = Date.now()): Promise<void> {
+  if (retentionWork) return retentionWork;
+  retentionWork = scrubLocalMetadata(now).finally(() => { retentionWork = null; });
+  return retentionWork;
+}
+
+/** Compatibility boundary for existing Today callers. */
+export const expireLocalTodayMetadata = expireLocalMetadata;
+
+async function scrubLocalMetadata(now: number): Promise<void> {
   if (Platform.OS === "web") {
+    for (const [key, value] of webStore.saved) webStore.saved.set(key, expireVideo(value, now));
+    for (const [key, value] of webStore.watchLater) webStore.watchLater.set(key, expireVideo(value, now));
+    for (const [key, value] of webStore.resume) webStore.resume.set(key, expireResume(value, now));
+    for (const [key, value] of webStore.channels) webStore.channels.set(key, expireChannel(value, now));
     for (const [key, snapshot] of webStore.todaySnapshots) {
       webStore.todaySnapshots.set(key, { ...snapshot, items: snapshot.items.map((item) => expireTodayItem(item, now)) });
     }
     return;
   }
   const db = await getDb();
-  await db.runAsync(EXPIRE_TODAY_METADATA_SQL, [now - METADATA_MAX_AGE_MS, now]);
+  await scrubStoredMetadata(db, now);
+}
+
+/** Refresh existing library records only; never follows, saves or resets progress. */
+export async function refreshStoredLibraryMetadata(profileId: string, videos: readonly Video[], channel?: FollowedChannel): Promise<void> {
+  const now = Date.now();
+  const fresh = videos.filter((video) => isMetadataCurrent(video.fetchedAt, now)).slice(0, 20);
+  const freshChannel = channel && isMetadataCurrent(channel.fetchedAt, now) ? channel : undefined;
+  if (Platform.OS === "web") {
+    for (const video of fresh) {
+      const key = profileEntityKey(profileId, video.id);
+      const saved = webStore.saved.get(key);
+      if (saved && (saved.fetchedAt ?? 0) <= (video.fetchedAt ?? 0)) webStore.saved.set(key, { ...saved, ...video, savedAt: saved.savedAt });
+      const later = webStore.watchLater.get(key);
+      if (later && (later.fetchedAt ?? 0) <= (video.fetchedAt ?? 0)) webStore.watchLater.set(key, { ...later, ...video, addedAt: later.addedAt });
+      const resume = webStore.resume.get(key);
+      if (resume && (resume.fetchedAt ?? 0) <= (video.fetchedAt ?? 0)) webStore.resume.set(key, { ...resume, title: video.title, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, durationSeconds: video.durationSeconds, fetchedAt: video.fetchedAt });
+    }
+    if (freshChannel) {
+      const key = profileEntityKey(profileId, freshChannel.id);
+      const existing = webStore.channels.get(key);
+      if (existing && (existing.fetchedAt ?? 0) <= (freshChannel.fetchedAt ?? 0)) webStore.channels.set(key, { ...existing, title: freshChannel.title, description: freshChannel.description, thumbnailUrl: freshChannel.thumbnailUrl, fetchedAt: freshChannel.fetchedAt });
+    }
+    return;
+  }
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const video of fresh) {
+      for (const table of ["saved_videos", "watch_later"]) {
+        await db.runAsync(`UPDATE ${table} SET title=?,channelTitle=?,thumbnailUrl=?,publishedAt=?,durationSeconds=?,description=?,fetchedAt=? WHERE profileId=? AND id=? AND (fetchedAt IS NULL OR fetchedAt<=?)`, [video.title,video.channelTitle,video.thumbnailUrl,video.publishedAt,video.durationSeconds,video.description ?? "",video.fetchedAt ?? null,profileId,video.id,video.fetchedAt ?? 0]);
+      }
+      await db.runAsync("UPDATE resume_positions SET title=?,channelTitle=?,thumbnailUrl=?,durationSeconds=?,fetchedAt=? WHERE profileId=? AND videoId=? AND (fetchedAt IS NULL OR fetchedAt<=?)", [video.title,video.channelTitle,video.thumbnailUrl,video.durationSeconds,video.fetchedAt ?? null,profileId,video.id,video.fetchedAt ?? 0]);
+    }
+    if (freshChannel) await db.runAsync("UPDATE followed_channels SET title=?,description=?,thumbnailUrl=?,fetchedAt=? WHERE profileId=? AND id=? AND (fetchedAt IS NULL OR fetchedAt<=?)", [freshChannel.title,freshChannel.description ?? "",freshChannel.thumbnailUrl,freshChannel.fetchedAt ?? null,profileId,freshChannel.id,freshChannel.fetchedAt ?? 0]);
+  });
 }
 
 type TodaySnapshotRow = Omit<TodaySnapshot, "items">;
@@ -576,7 +645,7 @@ export async function refreshTodaySnapshotMetadata(profileId: string, periodKey:
 export async function getLatestTodayVideo(profileId: string, mediaId: string): Promise<Video | null> {
   const history = await listTodayHistory(profileId);
   const item = history.find((candidate) => candidate.id === mediaId && isMetadataCurrent(candidate.fetchedAt, Date.now()));
-  return item ? { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids } : null;
+  return item ? { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids, fetchedAt: item.fetchedAt } : null;
 }
 
 export async function listTodaySourceRules(profileId: string): Promise<TodaySourceRule[]> {

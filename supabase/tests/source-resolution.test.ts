@@ -69,6 +69,19 @@ function request(kind: "channelId" | "handle" | "video", value: string): unknown
 }
 
 describe("bounded shared-source resolution", () => {
+  test("cached responses retain the original fetch date instead of renewing it", async () => {
+    const repository = new MemoryRepository();
+    const original = "2026-09-14T01:00:00.000Z";
+    repository.cached = { source, metadataFetchedAt: original };
+    const provider = new RecordingProvider();
+    expect(await executeSourceResolution(request("handle", "frame"), repository, provider, new Date("2026-09-14T12:00:00Z"))).toMatchObject({metadataFetchedAt:original,provenance:"cache"});
+    expect(provider.channelCalls).toBe(0);
+  });
+  test("provider responses carry the time actually fetched", async () => {
+    const now = new Date("2026-09-14T12:00:00Z");
+    const result = await executeSourceResolution(request("video", video.providerMediaId),new MemoryRepository(),new RecordingProvider(),now);
+    expect(result).toMatchObject({metadataFetchedAt:now.toISOString(),provenance:"provider"});
+  });
   test("strictly validates supported inputs before cache, quota, or provider access", async () => {
     const invalid = [
       {},
@@ -145,7 +158,7 @@ describe("bounded shared-source resolution", () => {
     const result = await executeSourceResolution(request("video", video.providerMediaId), repository, provider);
     expect(result.outcome).toBe("success");
     if (result.outcome !== "success") return;
-    expect(Object.keys(result).sort()).toEqual(["outcome", "provenance", "source", "video"]);
+    expect(Object.keys(result).sort()).toEqual(["metadataFetchedAt", "outcome", "provenance", "source", "video"]);
     expect(Object.keys(result.source).sort()).toEqual(["description", "displayName", "handle", "provider", "providerSourceId", "thumbnailUrl"]);
     expect(result.video?.madeForKids).toBe(false);
     expect(result.source.thumbnailUrl).toBeNull();

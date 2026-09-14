@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
@@ -12,10 +12,13 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { cachedContentService } from "@/services/youtube";
+import { expireChannel, isMetadataCurrent } from "@/domain/metadataRetention";
+import { refreshStoredLibraryMetadata } from "@/db/database";
 import type { Video } from "@/types";
 
 export default function ChannelScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,7 +26,12 @@ export default function ChannelScreen() {
 
   const videosQuery = useQuery({
     queryKey: ["cached-channel", activeProfileId, id],
-    queryFn: () => cachedContentService.getChannelShelf(id),
+    queryFn: async () => {
+      const shelf = await cachedContentService.getChannelShelf(id);
+      await refreshStoredLibraryMetadata(activeProfileId, shelf.videos, { ...shelf.channel, followedAt: 0, source: "manual" });
+      await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId] });
+      return shelf;
+    },
     enabled: !!id && canUseLibrary,
     retry: false,
     staleTime: 5 * 60_000,
@@ -31,8 +39,9 @@ export default function ChannelScreen() {
   });
 
   const savedChannel = followedChannels.find((candidate) => candidate.id === id);
-  const channel = videosQuery.data?.channel ?? savedChannel;
-  const videos = videosQuery.data?.videos ?? [];
+  const rawChannel = videosQuery.data?.channel ?? savedChannel;
+  const channel = rawChannel ? expireChannel(rawChannel, Date.now()) : undefined;
+  const videos = (videosQuery.data?.videos ?? []).filter((video) => isMetadataCurrent(video.fetchedAt, Date.now()));
   const videosMessage = videosQuery.error instanceof Error ? videosQuery.error.message : videosQuery.data?.message;
   const following = id ? isChannelFollowed(id) : false;
 
@@ -59,7 +68,7 @@ export default function ChannelScreen() {
               source={{ uri: channel.thumbnailUrl }}
               style={styles.avatarImage}
               contentFit="cover"
-              cachePolicy="memory-disk"
+              cachePolicy="none"
               recyclingKey={channel.id}
             />
           ) : null}

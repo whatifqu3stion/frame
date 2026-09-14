@@ -15,6 +15,18 @@ const response = {
 };
 
 describe("batched cached source feed client", () => {
+  test("carries the older source/media fetch date and negotiates the new response shape", async () => {
+    const timestamp = "2026-09-05T10:00:00.000Z";
+    let header: string | null = null;
+    const client = createSourceFeedClient({supabaseUrl:"https://example.supabase.co",publishableKey:"public",fetchImpl:async (_input, init) => {
+      header = new Headers(init?.headers).get("x-frame-metadata");
+      return Response.json({...response, feeds:response.feeds.map((feed) => ({...feed,source:{...feed.source,fetchedAt:timestamp}}))});
+    }});
+    const result = await client.getCachedFeeds([sourceA,sourceB]);
+    expect(header).toBe("1");
+    expect(result.status).toBe("success");
+    if (result.status === "success") expect(result.candidates[0].fetchedAt).toBe(Date.parse(timestamp));
+  });
   test("makes one bounded profile-agnostic cached read", async () => {
     let calls = 0;
     let requestBody = "";

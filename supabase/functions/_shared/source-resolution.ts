@@ -45,6 +45,7 @@ export interface SourceResolutionSuccess {
   source: SanitizedSource;
   video?: SanitizedVideo;
   provenance: SourceResolutionProvenance;
+  metadataFetchedAt?: string;
 }
 
 export type SourceResolutionResponse = SourceResolutionSuccess | {
@@ -53,6 +54,7 @@ export type SourceResolutionResponse = SourceResolutionSuccess | {
 };
 
 export type CachedResolution = {
+  metadataFetchedAt?: string;
   source: SanitizedSource;
   video?: SanitizedVideo;
 };
@@ -132,7 +134,7 @@ export async function executeSourceResolution(
       const expiresAt = new Date(now.getTime() + SOURCE_METADATA_TTL_MS);
       const source = await repository.upsertSource(sanitizeSource(channelResult.data), now, expiresAt);
       const video = await repository.upsertVideo(sanitizeVideo(videoResult.data), source.providerSourceId, now, expiresAt);
-      return { outcome: "success", source, video, provenance: "provider" };
+      return { outcome: "success", source, video, metadataFetchedAt: now.toISOString(), provenance: "provider" };
     }
 
     const channelResult = await provider.getChannel(validated.kind, validated.value);
@@ -145,7 +147,7 @@ export async function executeSourceResolution(
       now,
       new Date(now.getTime() + SOURCE_METADATA_TTL_MS),
     );
-    return { outcome: "success", source, provenance: "provider" };
+    return { outcome: "success", source, metadataFetchedAt: now.toISOString(), provenance: "provider" };
   } catch {
     return failure("temporarily_unavailable", "Source verification is temporarily unavailable.");
   }

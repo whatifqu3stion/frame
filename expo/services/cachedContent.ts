@@ -18,7 +18,7 @@ export function createCachedContentService(client: CachedFeedReader) {
       const feed = result.response.feeds.find((entry) => entry.source.providerSourceId === channelId);
       if (!feed || result.response.state === "unavailable") throw new Error("This source is waiting for shared cache availability. No live lookup was made.");
       return {
-        channel: { id: channelId, title: feed.source.displayName, thumbnailUrl: feed.source.thumbnailUrl ?? "" },
+        channel: { id: channelId, title: feed.source.displayName, thumbnailUrl: feed.source.thumbnailUrl ?? "", fetchedAt: feed.source.fetchedAt ? Date.parse(feed.source.fetchedAt) : null },
         videos: result.candidates.filter((video) => video.sourceId === channelId && !video.isLivestream && !video.isUpcomingPremiere),
         message: feed.freshness === "stale"
           ? "Showing cached uploads while Frame waits for a shared refresh."

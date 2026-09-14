@@ -110,7 +110,7 @@ export default function TodayScreen() {
         Alert.alert("Today’s viewing is complete", allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.");
         return;
       }
-      router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: String(item.durationSeconds), cachedMetadata: "1", origin: "today", todayProfileId: activeProfileId, todayPeriodKey: item.periodKey } });
+      router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: String(item.durationSeconds), cachedMetadata: "1", fetchedAt: String(item.fetchedAt), origin: "today", todayProfileId: activeProfileId, todayPeriodKey: item.periodKey } });
     } catch {
       Alert.alert("Couldn’t open video", "The player did not open. This item is still in Today.");
     } finally { setBusyId(null); }

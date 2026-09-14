@@ -20,6 +20,7 @@ export async function confirmSourceFollow(
     thumbnailUrl: resolution.source.thumbnailUrl ?? "",
     followedAt: (dependencies.now ?? Date.now)(),
     source: "link",
+    fetchedAt: resolution.fetchedAt ?? null,
   });
   dependencies.reconcile();
   return { ok: true, message: `Following ${resolution.source.displayName}.` };

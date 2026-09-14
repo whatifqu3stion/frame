@@ -12,6 +12,7 @@ import { radii, spacing, type FramePalette, type FrameType } from "@/constants/t
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { todayRepository } from "@/repositories/todayRepository";
+import { expireVideo } from "@/domain/metadataRetention";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
@@ -29,7 +30,7 @@ export default function SavedSessionScreen() {
   });
   const videoMap = useMemo<Map<string, Video>>(() => {
     const map = new Map<string, Video>();
-    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...watchLater, ...savedVideos].forEach((video) => map.set(video.id, video));
+    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...watchLater, ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
     return map;
   }, [savedVideos, todayVideosQuery.data, watchLater]);
   const totalSeconds = session?.orderedVideoIds.reduce((sum, videoId) => sum + (videoMap.get(videoId)?.durationSeconds ?? 0), 0) ?? 0;
@@ -44,7 +45,7 @@ export default function SavedSessionScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.push({
       pathname: FRAME_PLAYBACK_ROUTE,
-      params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id, title: videoMap.get(videoId)?.title ?? "", channelId: videoMap.get(videoId)?.channelId ?? "", channelTitle: videoMap.get(videoId)?.channelTitle ?? "", thumbnailUrl: videoMap.get(videoId)?.thumbnailUrl ?? "", publishedAt: videoMap.get(videoId)?.publishedAt ?? "", durationSeconds: String(videoMap.get(videoId)?.durationSeconds ?? 0), cachedMetadata: "1" },
+      params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id, title: videoMap.get(videoId)?.title ?? "", channelId: videoMap.get(videoId)?.channelId ?? "", channelTitle: videoMap.get(videoId)?.channelTitle ?? "", thumbnailUrl: videoMap.get(videoId)?.thumbnailUrl ?? "", publishedAt: videoMap.get(videoId)?.publishedAt ?? "", durationSeconds: String(videoMap.get(videoId)?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(videoMap.get(videoId)?.fetchedAt ?? 0) },
     });
   }, [requirePurchase, session, videoMap]);
 

@@ -68,7 +68,10 @@ export type TodayFeedResult = {
   cachedAt?: number;
 };
 
-export type Video = {
+/** Provider fetch time, never the time a user saved, followed or resumed an item. */
+export type MetadataProvenance = { fetchedAt?: number | null };
+
+export type Video = MetadataProvenance & {
   id: string;
   title: string;
   channelId: string;
@@ -80,7 +83,7 @@ export type Video = {
   madeForKids?: boolean | null;
 };
 
-export type Channel = {
+export type Channel = MetadataProvenance & {
   id: string;
   title: string;
   description?: string;
@@ -109,7 +112,7 @@ export type ResolvedVideo = {
   madeForKids: boolean | null;
 };
 
-export type SourceResolution = {
+export type SourceResolution = MetadataProvenance & {
   source: ResolvedSource;
   video?: ResolvedVideo;
   provenance: "cache" | "provider";

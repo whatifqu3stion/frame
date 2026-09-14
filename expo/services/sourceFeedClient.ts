@@ -7,6 +7,7 @@ type SourceFeedState = "fresh" | "stale" | "empty" | "unavailable";
 type SourceFeedFreshness = "fresh" | "stale" | "empty";
 
 type SourceFeedSource = {
+  fetchedAt?: string | null;
   provider: "youtube";
   providerSourceId: string;
   handle: string | null;
@@ -61,7 +62,7 @@ export function createSourceFeedClient(options: SourceFeedClientOptions) {
           try {
             response = await fetchImpl(endpoint, {
               method: "POST",
-              headers: { "Content-Type": "application/json", apikey: key },
+              headers: { "Content-Type": "application/json", apikey: key, "x-frame-metadata": "1" },
               body: JSON.stringify({ providerSourceIds: ids, limitPerSource: SOURCE_FEED_CANDIDATES_PER_SOURCE }),
               signal: controller.signal,
             });
@@ -101,7 +102,7 @@ function mapCandidates(response: SourceFeedResponse): CachedTodayCandidate[] {
     sourceTitle: feed.source.displayName,
     isLivestream: item.isLivestream,
     isUpcomingPremiere: item.isUpcomingPremiere,
-    fetchedAt: Date.parse(item.fetchedAt),
+    fetchedAt: feed.source.fetchedAt ? Math.min(Date.parse(item.fetchedAt), Date.parse(feed.source.fetchedAt)) : Date.parse(item.fetchedAt),
   })));
 }
 
@@ -126,7 +127,8 @@ function isFeedEntry(value: unknown): value is SourceFeedEntry {
   return Array.isArray(value.items) && value.items.length <= SOURCE_FEED_CANDIDATES_PER_SOURCE && value.items.every(isItem);
 }
 function isSource(value: unknown): value is SourceFeedSource {
-  return isRecordWithKeys(value, ["provider", "providerSourceId", "handle", "displayName", "thumbnailUrl"])
+  return isRecordWithKeys(value, ["provider", "providerSourceId", "handle", "displayName", "thumbnailUrl", "fetchedAt"])
+    && (value.fetchedAt === undefined || value.fetchedAt === null || isIso(value.fetchedAt))
     && value.provider === "youtube" && typeof value.providerSourceId === "string" && /^UC[A-Za-z0-9_-]{22}$/.test(value.providerSourceId)
     && typeof value.displayName === "string" && value.displayName.length > 0 && value.displayName.length <= 160
     && (value.handle === null || typeof value.handle === "string") && isNullableHttps(value.thumbnailUrl);
