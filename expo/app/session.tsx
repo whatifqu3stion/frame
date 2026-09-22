@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { Check, Play, Save } from "lucide-react-native";
+import { Check, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +11,7 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { formatDuration } from "@/services/youtube";
+import { sessionRuntime } from "@/domain/sessionFlow";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
@@ -18,26 +19,46 @@ export default function SessionBuilder() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { savedVideos, sessions, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
   const [name, setName] = useState<string>("");
-  const [didHydrate, setDidHydrate] = useState<boolean>(false);
+  const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
-    if (didHydrate || !id || !existingSession) return;
-    setSelected(existingSession.orderedVideoIds.slice(0, PRODUCT_LIMITS.sessionDraftMaxItems));
-    setName(existingSession.name);
-    setDidHydrate(true);
-  }, [didHydrate, existingSession, id]);
+    if (hydratedProfile === activeProfileId || sessionDraftLoading) return;
+    if (id && !existingSession) return;
+    setSelected((id ? existingSession?.orderedVideoIds : sessionDraft?.orderedVideoIds)?.slice(0, PRODUCT_LIMITS.sessionDraftMaxItems) ?? []);
+    setName((id ? existingSession?.name : sessionDraft?.name) ?? "");
+    setHydratedProfile(activeProfileId);
+  }, [activeProfileId, existingSession, hydratedProfile, id, sessionDraft, sessionDraftLoading]);
+
+  const hasDraft = Boolean(sessionDraft);
+  useEffect(() => {
+    if (id || hydratedProfile !== activeProfileId) return;
+    if (!name && !selected.length) {
+      if (hasDraft) void clearSessionDraft().catch(() => Alert.alert("Couldn’t clear draft", "Try again in a moment."));
+      return;
+    }
+    void saveSessionDraft({ name, orderedVideoIds: selected }).catch(() => Alert.alert("Draft not saved", "Try again before leaving this session."));
+  }, [activeProfileId, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected]);
 
   const pool: Video[] = savedVideos;
 
-  const totalSeconds = useMemo<number>(
-    () => selected.reduce((sum, videoId) => sum + (pool.find((video) => video.id === videoId)?.durationSeconds ?? 0), 0),
-    [pool, selected],
-  );
+  const runtime = useMemo(() => sessionRuntime(selected, pool), [pool, selected]);
+  const durationSummary = `${runtime.seconds > 0 ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}${runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}`;
+  const finishTime = runtime.unknown === 0 && runtime.seconds > 0 ? new Date(Date.now() + runtime.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+
+  const move = useCallback((index: number, direction: -1 | 1): void => {
+    setSelected((previous) => {
+      const next = [...previous];
+      if (index + direction < 0 || index + direction >= next.length) return previous;
+      [next[index], next[index + direction]] = [next[index + direction], next[index]];
+      return next;
+    });
+    void Haptics.selectionAsync().catch(() => {});
+  }, []);
 
   const toggle = useCallback((videoId: string): void => {
     if (!requirePurchase("sessions")) return;
@@ -67,12 +88,17 @@ export default function SessionBuilder() {
         await updateSessionVideos(existingSession.id, selected);
         return existingSession.id;
       }
+      await saveSessionDraft({ name, orderedVideoIds: selected });
       const created = await createSession(name, selected);
+      if (created) await clearSessionDraft();
       return created?.id ?? null;
+    } catch {
+      Alert.alert("Couldn’t save session", "Your draft is still here. Try again in a moment.");
+      return null;
     } finally {
       setIsSaving(false);
     }
-  }, [createSession, existingSession, name, renameSession, requirePurchase, selected, updateSessionVideos]);
+  }, [clearSessionDraft, createSession, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos]);
 
   const save = useCallback(async (): Promise<void> => {
     const sessionId = await persistSession();
@@ -87,15 +113,19 @@ export default function SessionBuilder() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     router.replace({
       pathname: FRAME_PLAYBACK_ROUTE,
-      params: { id: selected[0], session: selected.join(","), i: "0", savedSessionId: sessionId },
+      params: { id: selected[0], savedSessionId: sessionId, sessionProfileId: activeProfileId },
     });
-  }, [persistSession, selected]);
+  }, [activeProfileId, persistSession, selected]);
+
+  if (hydratedProfile !== activeProfileId || (id && !existingSession)) {
+    return <View style={styles.screen}><EmptyState title={id && !existingSession ? "Session unavailable" : "Opening your draft"} body={id && !existingSession ? "It may have been removed from this profile." : "Finding your place on this device."} /></View>;
+  }
 
   const header = (
     <View style={styles.header}>
       <Text style={styles.eyebrow}>{existingSession ? "Edit named session" : "New named session"}</Text>
       <Text style={styles.title} accessibilityRole="header">Choose a few.{"\n"}Watch. Stop.</Text>
-      <Text style={styles.subtitle}>Pick one to {PRODUCT_LIMITS.sessionDraftMaxItems} videos. Frame keeps the order, then stops when the final video ends.</Text>
+      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos. Your draft stays on this device. Only you decide when to continue.</Text>
       <TextInput
         value={name}
         onChangeText={setName}
@@ -104,14 +134,32 @@ export default function SessionBuilder() {
         style={styles.nameInput}
         returnKeyType="done"
         accessibilityLabel="Session name"
+        maxLength={64}
       />
+      {selected.length ? (
+        <View style={styles.tray}>
+          <Text style={styles.trayLabel}>YOUR SHORT PLAN · {selected.length}/{PRODUCT_LIMITS.sessionDraftMaxItems}</Text>
+          {selected.map((videoId, index) => {
+            const video = pool.find((candidate) => candidate.id === videoId);
+            return <View key={videoId} style={styles.trayRow}>
+              <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
+              <Text style={styles.trayTitle} numberOfLines={1}>{video?.title ?? "Video details unavailable"}</Text>
+              <Pressable onPress={() => move(index, -1)} disabled={index === 0 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => move(index, 1)} disabled={index === selected.length - 1 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
+            </View>;
+          })}
+          <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Finish around ${finishTime}` : " · Finish time unavailable"}</Text>
+        </View>
+      ) : null}
+      <Text style={styles.pickLabel}>CHOOSE FROM SAVED</Text>
     </View>
   );
 
   return (
     <View style={styles.screen}>
       <FlatList<Video>
-        data={pool}
+        data={hydratedProfile === activeProfileId ? pool : []}
         keyExtractor={(video) => video.id}
         ListHeaderComponent={header}
         ListEmptyComponent={<EmptyState title="Nothing to sit with yet" body="Save a few videos, then build a named session from them." />}
@@ -149,11 +197,11 @@ export default function SessionBuilder() {
         removeClippedSubviews
       />
 
-      {selected.length > 0 ? (
+      {hydratedProfile === activeProfileId && selected.length > 0 ? (
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.summary}>
             <Text style={type.caption}>{selected.length} video{selected.length === 1 ? "" : "s"}</Text>
-            <Text style={styles.total}>{formatDuration(totalSeconds)} total</Text>
+            <Text style={styles.total}>{durationSummary}</Text>
           </View>
           <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" testID="save-session">
             <Save size={16} color={palette.accent} strokeWidth={1.8} />
@@ -192,6 +240,14 @@ function createStyles(palette: FramePalette, type: FrameType) {
     saveBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.activeSoft },
     beginBtn: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
     beginText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
+    tray: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    trayLabel: { ...type.caption, color: palette.accent },
+    trayRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
+    trayNumber: { ...type.caption, color: palette.accent, width: 24 },
+    trayTitle: { ...type.label, flex: 1 },
+    trayControl: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
+    pickLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xl },
     pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });
 }

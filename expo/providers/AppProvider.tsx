@@ -8,15 +8,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clearLegacyThumbnailCaches } from "@/services/thumbnailRetention";
 import { expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
 import { Alert, AppState } from "react-native";
-import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue } from "@/types";
+import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue, SessionDraft } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
+import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
+import { normalizeSessionIds, positionAfterEdit } from "@/domain/sessionFlow";
 import { OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
 import { performFullReset } from "@/domain/fullReset";
 import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
@@ -57,6 +58,10 @@ import {
   deleteQueue,
   isVideoSaved as dbIsVideoSaved,
   listQueues,
+  readSessionDraft,
+  writeSessionDraft,
+  deleteSessionDraft,
+  setQueuePosition,
   listResume,
   listSavedVideos,
   resetAllFrameDatabaseData,
@@ -200,12 +205,13 @@ type ProfileSnapshot = {
   savedVideos: Awaited<ReturnType<typeof listSavedVideos>>;
   resumeList: Awaited<ReturnType<typeof listResume>>;
   sessions: Awaited<ReturnType<typeof listQueues>>;
+  sessionDraft: SessionDraft | null;
   followedChannels: FollowedChannel[];
 };
 
 async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> {
   await expireLocalTodayMetadata();
-  const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, followedChannels] = await Promise.all([
+  const [prefs, interests, recentSearches, rawGoogleCredential, savedVideos, resumeList, sessions, sessionDraft, followedChannels] = await Promise.all([
     loadPrefs(profileId),
     loadInterests(profileId),
     loadRecentSearches(profileId),
@@ -213,6 +219,7 @@ async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> 
     listSavedVideos(profileId),
     listResume(profileId),
     listQueues(profileId),
+    readSessionDraft(profileId),
     followedSourceRepository.listForProfile(profileId),
   ]);
   const parsedCredential = parseGoogleCredential(rawGoogleCredential);
@@ -226,6 +233,7 @@ async function loadProfileSnapshot(profileId: string): Promise<ProfileSnapshot> 
     savedVideos,
     resumeList,
     sessions,
+    sessionDraft,
     followedChannels,
   };
 }
@@ -260,6 +268,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const authorizationSessionRef = useRef<OwnerAuthorizationSession>(new OwnerAuthorizationSession());
   const authorizationResolverRef = useRef<((authorized: boolean) => void) | null>(null);
   const queryClient = useQueryClient();
+  const draftWritesRef = useRef<Map<string, Promise<void>>>(new Map());
 
   // `expo-auth-session` throws if the active platform's client ID is missing, so we
   // only start the auth request when this platform is actually configured. The
@@ -311,6 +320,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       queryClient.setQueryData(["library", resolvedProfileId, "saved"], snapshot.savedVideos);
       queryClient.setQueryData(["library", resolvedProfileId, "resume"], snapshot.resumeList);
       queryClient.setQueryData(["library", resolvedProfileId, "queues"], snapshot.sessions);
+      queryClient.setQueryData(["library", resolvedProfileId, "draft"], snapshot.sessionDraft);
       queryClient.setQueryData(["library", resolvedProfileId, "channels"], snapshot.followedChannels);
       setProfiles(availableProfiles);
       setActiveProfileId(resolvedProfileId);
@@ -418,6 +428,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryClient.setQueryData(["library", profileId, "saved"], snapshot.savedVideos);
     queryClient.setQueryData(["library", profileId, "resume"], snapshot.resumeList);
     queryClient.setQueryData(["library", profileId, "queues"], snapshot.sessions);
+    queryClient.setQueryData(["library", profileId, "draft"], snapshot.sessionDraft);
     queryClient.setQueryData(["library", profileId, "channels"], snapshot.followedChannels);
     setPrefs(snapshot.prefs);
     setInterests(snapshot.interests);
@@ -437,7 +448,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setProfileSwitching(true);
     const previousProfileId = activeProfileIdRef.current;
     try {
-      await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
+      await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, draftWritesRef.current.get(previousProfileId)]);
       storageGenerationRef.current += 1;
       await viewingAllowanceService.stopPlaying();
       await Promise.all([
@@ -782,6 +793,35 @@ export const [AppProvider, useApp] = createContextHook(() => {
     enabled: ready,
   });
 
+  const draftQuery = useQuery({
+    queryKey: ["library", activeProfileId, "draft"],
+    queryFn: () => readSessionDraft(activeProfileId),
+    enabled: ready,
+  });
+
+  const saveSessionDraft = useCallback((draft: Pick<SessionDraft, "name" | "orderedVideoIds">): Promise<void> => {
+    const profileId = activeProfileId;
+    const next: SessionDraft = { name: draft.name.slice(0, 64), orderedVideoIds: normalizeSessionIds(draft.orderedVideoIds), updatedAt: Date.now() };
+    const previous = draftWritesRef.current.get(profileId) ?? Promise.resolve();
+    const write = previous.catch(() => {}).then(async () => {
+      await writeSessionDraft(profileId, next);
+      queryClient.setQueryData(["library", profileId, "draft"], next);
+    });
+    draftWritesRef.current.set(profileId, write);
+    return write;
+  }, [activeProfileId, queryClient]);
+
+  const clearSessionDraft = useCallback((): Promise<void> => {
+    const profileId = activeProfileId;
+    const previous = draftWritesRef.current.get(profileId) ?? Promise.resolve();
+    const write = previous.catch(() => {}).then(async () => {
+      await deleteSessionDraft(profileId);
+      queryClient.setQueryData(["library", profileId, "draft"], null);
+    });
+    draftWritesRef.current.set(profileId, write);
+    return write;
+  }, [activeProfileId, queryClient]);
+
   const channelsQuery = useQuery({
     queryKey: ["library", activeProfileId, "channels"],
     queryFn: () => followedSourceRepository.listForProfile(activeProfileId),
@@ -812,10 +852,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const updateSessionVideos = useCallback(
     async (sessionId: string, videoIds: string[]): Promise<void> => {
       if (!requirePurchase("sessions")) return;
-      const existing = queuesQuery.data?.find((session) => session.id === sessionId);
-      if (!existing) return;
-      const uniqueIds = Array.from(new Set(videoIds)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems);
-      await upsertQueue(activeProfileId, { ...existing, orderedVideoIds: uniqueIds, updatedAt: Date.now() });
+      const existing = (await listQueues(activeProfileId)).find((session) => session.id === sessionId);
+      if (!existing) throw new Error("Session no longer available.");
+      const uniqueIds = normalizeSessionIds(videoIds);
+      await upsertQueue(activeProfileId, { ...existing, orderedVideoIds: uniqueIds, currentIndex: positionAfterEdit(existing, uniqueIds), updatedAt: Date.now() });
       await invalidateLibrary();
     },
     [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
@@ -824,8 +864,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const renameSession = useCallback(
     async (id: string, name: string): Promise<void> => {
       if (!requirePurchase("sessions")) return;
-      const existing = queuesQuery.data?.find((session) => session.id === id);
-      if (!existing) return;
+      const existing = (await listQueues(activeProfileId)).find((session) => session.id === id);
+      if (!existing) throw new Error("Session no longer available.");
       await upsertQueue(activeProfileId, { ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
       await invalidateLibrary();
     },
@@ -854,7 +894,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const session: VideoQueue = {
         id: `session_${Math.random().toString(36).slice(2, 10)}`,
         name: name.trim() || "Untitled session",
-        orderedVideoIds: Array.from(new Set(videoIds)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems),
+        orderedVideoIds: normalizeSessionIds(videoIds),
+        currentIndex: 0,
         updatedAt: Date.now(),
       };
       await upsertQueue(activeProfileId, session);
@@ -863,6 +904,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     [activeProfileId, invalidateLibrary, requirePurchase],
   );
+
+  const updateSessionPosition = useCallback(async (sessionId: string, videoId: string, atIndex: number, nextIndex: number): Promise<boolean> => {
+    const profileId = activeProfileId;
+    if (profileId !== activeProfileIdRef.current) return false;
+    const changed = await setQueuePosition(profileId, sessionId, videoId, atIndex, nextIndex);
+    if (changed && profileId === activeProfileIdRef.current) await queryClient.invalidateQueries({ queryKey: ["library", profileId, "queues"] });
+    return changed;
+  }, [activeProfileId, queryClient]);
 
   const duplicateSession = useCallback(
     async (id: string): Promise<VideoQueue | null> => {
@@ -962,6 +1011,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!authorized) return;
     storageGenerationRef.current += 1;
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
+    await draftWritesRef.current.get(activeProfileId)?.catch(() => {});
     await clearAllData(activeProfileId);
     queueSourceLeaseReconciliation("local_change");
     await clearProfileStorage(AsyncStorage, activeProfileId);
@@ -980,7 +1030,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     storageGenerationRef.current += 1;
     await performFullReset({
       stopPlayback: async () => { await viewingAllowanceService.stopPlaying(); },
-      flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]); },
+      flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, ...draftWritesRef.current.values()]); },
       clearProtectedCredentials: async () => {
         if (ownerPinAvailability !== "available") return;
         const [existingProfiles, sources] = await Promise.all([profileRepository.list(), followedSourceRepository.listDistinctSources()]);
@@ -1086,6 +1136,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       savedVideos: savedQuery.data ?? [],
       resumeList: resumeQuery.data ?? [],
       sessions: queuesQuery.data ?? [],
+      sessionDraft: draftQuery.data ?? null,
+      sessionDraftLoading: !ready || draftQuery.isLoading,
       followedChannels: channelsQuery.data ?? [],
       isVideoSaved: (id: string) => (savedQuery.data ?? []).some((v) => v.id === id),
       isChannelFollowed: (id: string) => (channelsQuery.data ?? []).some((c) => c.id === id),
@@ -1104,6 +1156,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameSession,
       removeSession,
       updateSessionVideos,
+      updateSessionPosition,
+      saveSessionDraft,
+      clearSessionDraft,
       recordResume,
       clearVideoResume,
       wipeAllData,
@@ -1172,6 +1227,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       savedQuery.data,
       resumeQuery.data,
       queuesQuery.data,
+      draftQuery.data,
+      draftQuery.isLoading,
       channelsQuery.data,
       saveMutation,
       unsaveMutation,
@@ -1182,6 +1239,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameSession,
       removeSession,
       updateSessionVideos,
+      updateSessionPosition,
+      saveSessionDraft,
+      clearSessionDraft,
       recordResume,
       clearVideoResume,
       wipeAllData,

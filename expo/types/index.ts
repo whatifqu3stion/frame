@@ -136,6 +136,15 @@ export type VideoQueue = {
   name: string;
   orderedVideoIds: string[];
   updatedAt: number;
+  /** Next video to offer; length means the session has ended. */
+  currentIndex: number;
+};
+
+/** One unfinished, profile-local Session composition. */
+export type SessionDraft = {
+  name: string;
+  orderedVideoIds: string[];
+  updatedAt: number;
 };
 
 export type InterestTopic = {

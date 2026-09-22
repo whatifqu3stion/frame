@@ -6,7 +6,7 @@ import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
 import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
 import type { ProfilePlaybackLimitRecord, ProfilePlaybackUsageRecord } from "@/models/viewingAllowance";
-import type { FollowedChannel, ResumePosition, Video, VideoQueue } from "@/types";
+import type { FollowedChannel, ResumePosition, Video, VideoQueue, SessionDraft } from "@/types";
 import type { CachedTodayCandidate, TodayDisposition, TodaySnapshot, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -56,6 +56,7 @@ const webStore = {
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
+  drafts: new Map<string, SessionDraft>(),
   channels: new Map<string, FollowedChannel>(),
   todaySnapshots: new Map<string, TodaySnapshot>(),
   sourceRules: new Map<string, TodaySourceRule>(),
@@ -78,7 +79,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "session_drafts", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -164,6 +165,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     clearProfileMap(webStore.saved, profileId);
     clearProfileMap(webStore.resume, profileId);
     clearProfileMap(webStore.queues, profileId);
+    webStore.drafts.delete(profileId);
     clearProfileMap(webStore.channels, profileId);
     clearProfileMap(webStore.todaySnapshots, profileId);
     clearProfileMap(webStore.sourceRules, profileId);
@@ -177,7 +179,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
     if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
     await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
@@ -344,26 +346,63 @@ function safeParseIds(input: string): string[] {
 }
 
 export async function listQueues(profileId: string): Promise<VideoQueue[]> {
-  if (Platform.OS === "web") return profileValues(webStore.queues, profileId).sort((a, b) => b.updatedAt - a.updatedAt);
+  if (Platform.OS === "web") return profileValues(webStore.queues, profileId).sort((a, b) => b.updatedAt - a.updatedAt).map((queue) => ({ ...queue, orderedVideoIds: [...queue.orderedVideoIds] }));
   const db = await getDb();
-  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number }>(
-    "SELECT id,name,orderedVideoIds,updatedAt FROM queues WHERE profileId = ? ORDER BY updatedAt DESC",
+  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number; currentIndex: number }>(
+    "SELECT id,name,orderedVideoIds,updatedAt,currentIndex FROM queues WHERE profileId = ? ORDER BY updatedAt DESC",
     [profileId],
   );
-  return rows.map((row) => ({ ...row, orderedVideoIds: safeParseIds(row.orderedVideoIds) }));
+  return rows.map((row) => { const orderedVideoIds = safeParseIds(row.orderedVideoIds); return { ...row, orderedVideoIds, currentIndex: Math.max(0, Math.min(row.currentIndex, orderedVideoIds.length)) }; });
 }
 
 export async function upsertQueue(profileId: string, queue: VideoQueue): Promise<void> {
   if (Platform.OS === "web") {
-    webStore.queues.set(profileEntityKey(profileId, queue.id), { ...queue });
+    webStore.queues.set(profileEntityKey(profileId, queue.id), { ...queue, orderedVideoIds: [...queue.orderedVideoIds] });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO queues (profileId,id,name,orderedVideoIds,updatedAt) VALUES (?,?,?,?,?)
-     ON CONFLICT(profileId,id) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt`,
-    [profileId, queue.id, queue.name, JSON.stringify(queue.orderedVideoIds), queue.updatedAt],
+    `INSERT INTO queues (profileId,id,name,orderedVideoIds,updatedAt,currentIndex) VALUES (?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt,currentIndex=excluded.currentIndex`,
+    [profileId, queue.id, queue.name, JSON.stringify(queue.orderedVideoIds), queue.updatedAt, queue.currentIndex],
   );
+}
+
+/** Advances only the cursor; a concurrently edited tray cannot be overwritten by playback. */
+export async function setQueuePosition(profileId: string, id: string, expectedVideoId: string, atIndex: number, nextIndex: number): Promise<boolean> {
+  if (Platform.OS === "web") {
+    const key = profileEntityKey(profileId, id);
+    const queue = webStore.queues.get(key);
+    if (!queue || queue.orderedVideoIds[atIndex] !== expectedVideoId || nextIndex < 0 || nextIndex > queue.orderedVideoIds.length) return false;
+    webStore.queues.set(key, { ...queue, currentIndex: nextIndex, updatedAt: Date.now() });
+    return true;
+  }
+  const db = await getDb();
+  const queue = await db.getFirstAsync<{ orderedVideoIds: string }>("SELECT orderedVideoIds FROM queues WHERE profileId=? AND id=?", [profileId, id]);
+  const ids = safeParseIds(queue?.orderedVideoIds ?? "");
+  if (ids[atIndex] !== expectedVideoId || nextIndex < 0 || nextIndex > ids.length) return false;
+  const result = await db.runAsync("UPDATE queues SET currentIndex=?,updatedAt=? WHERE profileId=? AND id=? AND orderedVideoIds=?", [nextIndex, Date.now(), profileId, id, queue?.orderedVideoIds ?? ""]);
+  return result.changes === 1;
+}
+
+/** Keeps one unfinished composition per profile; the web preview is session-only. */
+export async function readSessionDraft(profileId: string): Promise<SessionDraft | null> {
+  if (Platform.OS === "web") { const draft = webStore.drafts.get(profileId); return draft ? { ...draft, orderedVideoIds: [...draft.orderedVideoIds] } : null; }
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ name: string; orderedVideoIds: string; updatedAt: number }>("SELECT name,orderedVideoIds,updatedAt FROM session_drafts WHERE profileId=?", [profileId]);
+  return row ? { name: row.name, orderedVideoIds: safeParseIds(row.orderedVideoIds), updatedAt: row.updatedAt } : null;
+}
+
+export async function writeSessionDraft(profileId: string, draft: SessionDraft): Promise<void> {
+  if (Platform.OS === "web") { webStore.drafts.set(profileId, { ...draft, orderedVideoIds: [...draft.orderedVideoIds] }); return; }
+  const db = await getDb();
+  await db.runAsync("INSERT INTO session_drafts (profileId,name,orderedVideoIds,updatedAt) VALUES (?,?,?,?) ON CONFLICT(profileId) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt", [profileId, draft.name, JSON.stringify(draft.orderedVideoIds), draft.updatedAt]);
+}
+
+export async function deleteSessionDraft(profileId: string): Promise<void> {
+  if (Platform.OS === "web") { webStore.drafts.delete(profileId); return; }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM session_drafts WHERE profileId=?", [profileId]);
 }
 
 export async function deleteQueue(profileId: string, id: string): Promise<void> {
@@ -646,6 +685,7 @@ export async function clearAllData(profileId: string): Promise<void> {
     clearProfileMap(webStore.saved, profileId);
     clearProfileMap(webStore.resume, profileId);
     clearProfileMap(webStore.queues, profileId);
+    webStore.drafts.delete(profileId);
     clearProfileMap(webStore.channels, profileId);
     clearProfileMap(webStore.todaySnapshots, profileId);
     clearProfileMap(webStore.sourceRules, profileId);
@@ -653,7 +693,7 @@ export async function clearAllData(profileId: string): Promise<void> {
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
   });
@@ -670,6 +710,7 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     webStore.saved.clear();
     webStore.resume.clear();
     webStore.queues.clear();
+    webStore.drafts.clear();
     webStore.channels.clear();
     webStore.todaySnapshots.clear();
     webStore.sourceRules.clear();
@@ -677,7 +718,7 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
     await db.runAsync("DELETE FROM profiles");

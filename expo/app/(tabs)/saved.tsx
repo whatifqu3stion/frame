@@ -9,6 +9,7 @@ import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { shellProfileQueryKeys } from "@/domain/productShell";
 import { filterSavedLibrary, resolveSavedCriteria, type SavedFilterCriteria, type SavedViewingFilter } from "@/domain/savedLibrary";
@@ -24,7 +25,7 @@ export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, savedVideos, resumeList, sessions, libraryLoading, requirePurchase } = useApp();
+  const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, requirePurchase } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
   const { query: searchQuery, filter: viewingFilter } = resolveSavedCriteria(criteria, activeProfileId);
@@ -42,7 +43,9 @@ export default function SavedScreen() {
     } : null);
     return video ? [{ video, progressSeconds: resume.timestampSeconds }] : [];
   }), [resumeList, savedVideos]);
-  const currentSession = sessions[0] ?? null;
+  const currentSession = sessions.find((item) => item.orderedVideoIds.length > 0 && sessionPosition(item) < item.orderedVideoIds.length) ?? sessions[0] ?? null;
+  const draft = sessionDraft?.name || sessionDraft?.orderedVideoIds.length ? sessionDraft : null;
+  const sessionEstimate = currentSession ? sessionRuntime(currentSession.orderedVideoIds, savedVideos, sessionPosition(currentSession)) : null;
   const hasActiveFilter = searchQuery.trim().length > 0 || viewingFilter !== "all";
 
   const openSessionBuilder = (): void => {
@@ -118,6 +121,13 @@ export default function SavedScreen() {
         ) : filteredSaved.map((item) => <VideoCard key={item.video.id} video={item.video} variant="wide" progressSeconds={item.progressSeconds} />)}
 
         <SectionTitle label="Current Session" styles={styles} />
+        {draft ? (
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your unfinished Session draft" testID="session-draft-card">
+            <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
+            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Unfinished plan"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
+            <ArrowRight size={17} color={palette.inkMuted} />
+          </Pressable>
+        ) : null}
         {currentSession ? (
           <Pressable
             onPress={() => {
@@ -130,19 +140,27 @@ export default function SavedScreen() {
             <View style={styles.sessionIcon}><Play size={17} color={palette.active} fill={palette.active} /></View>
             <View style={styles.flex}>
               <Text style={styles.sessionName}>{currentSession.name}</Text>
-              <Text style={styles.sessionMeta}>{currentSession.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text>
+              <Text style={styles.sessionMeta}>{currentSession.orderedVideoIds.length} videos · {sessionPosition(currentSession) >= currentSession.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(currentSession) + 1}`}{sessionEstimate?.seconds ? ` · ${Math.ceil(sessionEstimate.seconds / 60)} min known left` : ""}{sessionEstimate?.unknown ? " + unknown time" : ""}</Text>
             </View>
             <ArrowRight size={17} color={palette.inkMuted} />
           </Pressable>
         ) : (
           <View>
-            <EmptyState title="No current session" body="When you want a short viewing plan, create one outside the tab flow and Frame will stop after it ends." />
+            <EmptyState title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
             <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
               <Plus size={16} color={palette.onDark} />
               <Text style={styles.createSessionText}>Create a session</Text>
             </Pressable>
           </View>
         )}
+        {currentSession ? (
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, { marginTop: spacing.md }, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.onDark} /><Text style={styles.createSessionText}>Create another session</Text></Pressable>
+        ) : null}
+        {sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
+          <Pressable key={item.id} onPress={() => router.push({ pathname: "/session/[id]", params: { id: item.id } })} style={({ pressed }) => [styles.sessionCard, { marginTop: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open session ${item.name}`}>
+            <View style={styles.sessionIcon}><Play size={17} color={palette.active} /></View><View style={styles.flex}><Text style={styles.sessionName}>{item.name}</Text><Text style={styles.sessionMeta}>{item.orderedVideoIds.length} videos · {sessionPosition(item) >= item.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(item) + 1}`}</Text></View><ArrowRight size={17} color={palette.inkMuted} />
+          </Pressable>
+        ))}
       </View>
     </ScrollView>
   );

@@ -13,6 +13,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
+import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
@@ -21,7 +22,7 @@ export default function SavedSessionScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionVideos, updateSessionPosition, requirePurchase } = useApp();
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
     queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""],
@@ -33,21 +34,28 @@ export default function SavedSessionScreen() {
     [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
     return map;
   }, [savedVideos, todayVideosQuery.data]);
-  const totalSeconds = session?.orderedVideoIds.reduce((sum, videoId) => sum + (videoMap.get(videoId)?.durationSeconds ?? 0), 0) ?? 0;
+  const position = session ? sessionPosition(session) : 0;
+  const runtime = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()]);
+  const remaining = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()], position);
+  const finishTime = remaining.unknown === 0 && remaining.seconds > 0 ? new Date(Date.now() + remaining.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
 
-  const startAt = useCallback((index: number): void => {
+  const startAt = useCallback(async (index: number): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
     const videoId = session.orderedVideoIds[index];
-    if (!videoMap.has(videoId)) {
-      Alert.alert("Video unavailable", "This saved item is no longer in your local library. Remove it or add the video again.");
-      return;
+    if (!videoId) return;
+    try {
+      const moved = await updateSessionPosition(session.id, videoId, index, index);
+      if (!moved) throw new Error("Session changed");
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      const video = videoMap.get(videoId);
+      router.push({
+        pathname: FRAME_PLAYBACK_ROUTE,
+        params: { id: videoId, savedSessionId: session.id, sessionProfileId: activeProfileId, title: video?.title ?? "", channelId: video?.channelId ?? "", channelTitle: video?.channelTitle ?? "", thumbnailUrl: video?.thumbnailUrl ?? "", publishedAt: video?.publishedAt ?? "", durationSeconds: String(video?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(video?.fetchedAt ?? 0) },
+      });
+    } catch {
+      Alert.alert("Couldn’t start session", "Your place was not saved. Try again.");
     }
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    router.push({
-      pathname: FRAME_PLAYBACK_ROUTE,
-      params: { id: videoId, session: session.orderedVideoIds.join(","), i: String(index), savedSessionId: session.id, title: videoMap.get(videoId)?.title ?? "", channelId: videoMap.get(videoId)?.channelId ?? "", channelTitle: videoMap.get(videoId)?.channelTitle ?? "", thumbnailUrl: videoMap.get(videoId)?.thumbnailUrl ?? "", publishedAt: videoMap.get(videoId)?.publishedAt ?? "", durationSeconds: String(videoMap.get(videoId)?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(videoMap.get(videoId)?.fetchedAt ?? 0) },
-    });
-  }, [requirePurchase, session, videoMap]);
+  }, [activeProfileId, requirePurchase, session, updateSessionPosition, videoMap]);
 
   const move = useCallback(async (index: number, direction: -1 | 1): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
@@ -55,13 +63,14 @@ export default function SavedSessionScreen() {
     if (target < 0 || target >= session.orderedVideoIds.length) return;
     const next = [...session.orderedVideoIds];
     [next[index], next[target]] = [next[target], next[index]];
-    await updateSessionVideos(session.id, next);
-    void Haptics.selectionAsync().catch(() => {});
+    try { await updateSessionVideos(session.id, next); void Haptics.selectionAsync().catch(() => {}); }
+    catch { Alert.alert("Couldn’t reorder", "The original order is still here."); }
   }, [requirePurchase, session, updateSessionVideos]);
 
   const removeVideo = useCallback(async (videoId: string): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
-    await updateSessionVideos(session.id, session.orderedVideoIds.filter((candidate) => candidate !== videoId));
+    try { await updateSessionVideos(session.id, session.orderedVideoIds.filter((candidate) => candidate !== videoId)); }
+    catch { Alert.alert("Couldn’t remove video", "The session is unchanged."); }
   }, [requirePurchase, session, updateSessionVideos]);
 
   const duplicate = useCallback(async (): Promise<void> => {
@@ -98,7 +107,8 @@ export default function SavedSessionScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
       <Text style={styles.eyebrow}>Named session</Text>
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {formatDuration(totalSeconds)} known runtime</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}{runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete · Rest here, or begin again when you choose." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${formatDuration(remaining.seconds)} known remaining` : "Runtime unknown"}${finishTime ? ` · Finish around ${finishTime}` : ""}`}</Text>
 
       <View style={styles.actions}>
         <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
@@ -120,10 +130,10 @@ export default function SavedSessionScreen() {
           return (
             <View key={videoId} style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
-              <Pressable onPress={() => startAt(index)} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={video ? `Start with ${video.title}` : "Unavailable video"}>
-                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Unavailable"}</Text>
-                <Text style={[styles.videoTitle, !video && styles.unavailable]} numberOfLines={2}>{video?.title || "Video no longer in your local library"}</Text>
-                <Text style={styles.duration}>{video ? formatDuration(video.durationSeconds) : "Remove or add again"}</Text>
+              <Pressable onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
+                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "YouTube · local link"}</Text>
+                <Text style={styles.videoTitle} numberOfLines={2}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
+                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Runtime unknown · playback needs internet"}</Text>
               </Pressable>
               <View style={styles.rowActions}>
                 <Pressable onPress={() => { void move(index, -1); }} disabled={index === 0} style={[styles.smallButton, index === 0 && styles.disabled]} accessibilityRole="button" accessibilityLabel="Move earlier"><ChevronUp size={16} color={palette.inkMuted} /></Pressable>
@@ -136,12 +146,12 @@ export default function SavedSessionScreen() {
       </View>
 
       {session.orderedVideoIds.length > 0 ? (
-        <Pressable onPress={() => startAt(0)} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
+        <Pressable onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
           <Play size={17} color={palette.onDark} fill={palette.onDark} />
-          <Text style={styles.beginText}>Begin from the start</Text>
+          <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Begin again" : position > 0 ? `Continue with video ${position + 1}` : "Begin session"}</Text>
         </Pressable>
       ) : null}
-      <Text style={styles.stopNote}>Frame advances only when you choose Next, then stops after the final video.</Text>
+      <Text style={styles.stopNote}>No autoplay. The next video waits for you; after the last one, Frame stops.</Text>
     </ScrollView>
   );
 }

@@ -29,6 +29,7 @@ import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { expireVideo } from "@/domain/metadataRetention";
+import { nextSessionStep } from "@/domain/sessionFlow";
 import { getResume } from "@/db/database";
 import { todayRepository } from "@/repositories/todayRepository";
 import { useApp } from "@/providers/AppProvider";
@@ -75,6 +76,8 @@ export default function WatchScreen() {
     id: string | string[];
     session?: string | string[];
     i?: string | string[];
+    savedSessionId?: string | string[];
+    sessionProfileId?: string | string[];
     title?: string | string[];
     channelId?: string | string[];
     channelTitle?: string | string[];
@@ -98,6 +101,8 @@ export default function WatchScreen() {
   const {
     activeProfileId,
     savedVideos,
+    sessions,
+    updateSessionPosition,
     saveVideo,
     unsaveVideo,
     requirePurchase,
@@ -110,22 +115,32 @@ export default function WatchScreen() {
     stopAllowancePlayback,
   } = useApp();
 
+  const savedSessionId = firstParam(params.savedSessionId);
+  const sessionProfileId = firstParam(params.sessionProfileId);
+  const savedSession = savedSessionId && sessionProfileId === activeProfileId ? sessions.find((candidate) => candidate.id === savedSessionId) : undefined;
+  const invalidSavedSession = Boolean(savedSessionId && (!savedSession || sessionProfileId !== activeProfileId));
   const sessionIds = useMemo<string[]>(
-    () => (session ?? "").split(",").filter((candidate) => VIDEO_ID_PATTERN.test(candidate)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems),
-    [session],
+    () => savedSessionId ? (savedSession?.orderedVideoIds ?? []).filter((candidate) => VIDEO_ID_PATTERN.test(candidate)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems) : (session ?? "").split(",").filter((candidate) => VIDEO_ID_PATTERN.test(candidate)).slice(0, PRODUCT_LIMITS.sessionDraftMaxItems),
+    [savedSessionId, savedSession?.orderedVideoIds, session],
   );
   const sessionIndex = useMemo<number>(() => {
+    if (savedSessionId) return sessionIds.indexOf(id);
     const requestedIndex = Number(indexParam ?? 0);
-    const validIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < sessionIds.length
+    const validIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < sessionIds.length && sessionIds[requestedIndex] === id
       ? requestedIndex
       : sessionIds.indexOf(id);
-    return Math.max(0, validIndex);
-  }, [id, indexParam, sessionIds]);
-  const nextSessionId = sessionIds[sessionIndex + 1];
+    return validIndex;
+  }, [id, indexParam, savedSessionId, sessionIds]);
+  const nextSessionId = sessionIndex >= 0 ? sessionIds[sessionIndex + 1] : undefined;
+  const localSessionVideo = useQuery({
+    queryKey: ["session-playback-video", activeProfileId, id],
+    queryFn: () => todayRepository.getVideo(activeProfileId, id),
+    enabled: Boolean(savedSessionId && sessionIndex >= 0 && !savedVideos.some((candidate) => candidate.id === id)),
+  });
   const isSession = sessionIds.length > 0;
 
   const baseVideo = useMemo<Video | undefined>(() => {
-    const stored = savedVideos.find((candidate) => candidate.id === id);
+    const stored = savedVideos.find((candidate) => candidate.id === id) ?? localSessionVideo.data;
     if (stored) return stored;
     if (!VIDEO_ID_PATTERN.test(id)) return undefined;
 
@@ -142,7 +157,7 @@ export default function WatchScreen() {
       madeForKids: firstParam(params.madeForKids) === "1" ? true : firstParam(params.madeForKids) === "0" ? false : null,
       durationSeconds: Number.isFinite(routeDuration) && routeDuration > 0 ? routeDuration : 0,
     };
-  }, [id, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos]);
+  }, [id, localSessionVideo.data, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos]);
 
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
 
@@ -473,10 +488,13 @@ export default function WatchScreen() {
     setAction(null);
     if (isFullscreenRef.current) leaveFullscreen();
     writeChainRef.current = writeChainRef.current
-      .then(() => clearVideoResume(video.id))
+      .then(async () => {
+        await clearVideoResume(video.id);
+        if (savedSessionId && sessionIndex >= 0) await updateSessionPosition(savedSessionId, video.id, sessionIndex, nextSessionStep(sessionIds, sessionIndex));
+      })
       .catch(() => {});
     void AccessibilityInfo.announceForAccessibility(isSession && nextSessionId ? "Video complete. Next video ready." : "Video complete.");
-  }, [applyAllowanceStatus, clearVideoResume, failClosedAllowance, isSession, leaveFullscreen, nextSessionId, sessionIndex, setAction, stopAllowancePlayback, video]);
+  }, [applyAllowanceStatus, clearVideoResume, failClosedAllowance, isSession, leaveFullscreen, nextSessionId, savedSessionId, sessionIds, sessionIndex, setAction, stopAllowancePlayback, updateSessionPosition, video]);
 
   const handlePlayerError = useCallback((error: YouTubePlayerError): void => {
     if (__DEV__) console.warn("[player] error", { id, code: error.code ?? null });
@@ -513,34 +531,48 @@ export default function WatchScreen() {
     else router.replace("/(tabs)");
   }, [haptic, leaveFullscreen, pauseAndPersist]);
 
-  const playNext = useCallback((): void => {
-    if (!nextSessionId) {
-      closePlayer();
-      return;
-    }
+  const playNext = useCallback(async (): Promise<void> => {
+    if (!nextSessionId) { closePlayer(); return; }
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
     haptic();
     pauseAndPersist();
-    setResumeReady(false);
-    setPlayerReady(false);
-    setPlayerError(null);
-    router.replace({
-      pathname: FRAME_PLAYBACK_ROUTE,
-      params: { id: nextSessionId, session: sessionIds.join(","), i: String(sessionIndex + 1) },
-    });
-  }, [closePlayer, haptic, nextSessionId, pauseAndPersist, sessionIds, sessionIndex]);
+    try {
+      await writeChainRef.current;
+      if (savedSessionId) {
+        const moved = await updateSessionPosition(savedSessionId, id, sessionIndex, sessionIndex + 1);
+        if (!moved) throw new Error("Session changed");
+      }
+      setResumeReady(false);
+      setPlayerReady(false);
+      setPlayerError(null);
+      router.replace({
+        pathname: FRAME_PLAYBACK_ROUTE,
+        params: savedSessionId ? { id: nextSessionId, savedSessionId, sessionProfileId: activeProfileId, cachedMetadata: "1" } : { id: nextSessionId, session: sessionIds.join(","), i: String(sessionIndex + 1) },
+      });
+    } catch {
+      navigationLockedRef.current = false;
+      Alert.alert("Couldn’t continue", "Your next video is still in the Session. Open it from Saved when you’re ready.");
+    }
+  }, [activeProfileId, closePlayer, haptic, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition]);
 
-  const rewatch = useCallback((): void => {
+  const rewatch = useCallback(async (): Promise<void> => {
     if (!beginAction("rewatch")) return;
-    haptic(Haptics.ImpactFeedbackStyle.Medium);
-    didEndRef.current = false;
-    currentTimeRef.current = 0;
-    setPlaybackState("playing");
-    playerRef.current?.seekTo(0);
-    playerRef.current?.play();
-    setAction(null);
-  }, [beginAction, haptic, setAction]);
+    try {
+      await writeChainRef.current;
+      if (savedSessionId && sessionIndex >= 0) {
+        const moved = await updateSessionPosition(savedSessionId, id, sessionIndex, sessionIndex);
+        if (!moved) throw new Error("Session changed");
+      }
+      haptic(Haptics.ImpactFeedbackStyle.Medium);
+      didEndRef.current = false;
+      currentTimeRef.current = 0;
+      setPlaybackState("playing");
+      playerRef.current?.seekTo(0);
+      playerRef.current?.play();
+    } catch { Alert.alert("Couldn’t restart", "Your place is still saved in the Session."); }
+    finally { setAction(null); }
+  }, [beginAction, haptic, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
 
   const goToToday = useCallback((): void => {
     pauseAndPersist();
@@ -594,12 +626,12 @@ export default function WatchScreen() {
     }
   }, [beginAction, haptic, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
 
-  if (!video) {
+  if (!video || invalidSavedSession || (savedSessionId && sessionIndex < 0)) {
     return (
       <View style={[styles.unavailableScreen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
         <StatusBar style="dark" />
         <Text style={type.heading}>Video unavailable</Text>
-        <Text style={[type.bodySoft, styles.unavailableBody]}>This link is incomplete or no longer valid.</Text>
+        <Text style={[type.bodySoft, styles.unavailableBody]}>This link is incomplete, the Session changed, or it belongs to another profile.</Text>
         <Pressable onPress={closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={[type.label, { color: palette.accent }]}>Go back</Text>
         </Pressable>
@@ -684,7 +716,7 @@ export default function WatchScreen() {
             </Pressable>
           </View>
           {isSession ? (
-            <Pressable onPress={playNext} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
+            <Pressable onPress={() => { void playNext(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
               <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
             </Pressable>
@@ -697,14 +729,15 @@ export default function WatchScreen() {
           <Text style={styles.endEyebrow}>
             {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
           </Text>
-          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done." : "That’s it."}</Text>
+          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done. Pause here?" : "That’s it."}</Text>
+          <Text style={styles.allowanceBody}>{nextSessionId ? "The next video waits until you choose Continue." : "Nothing plays next. Your Session has a quiet end."}</Text>
           <View style={styles.stateActions}>
-            <Pressable onPress={rewatch} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
+            <Pressable onPress={() => { void rewatch(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
               <RotateCcw size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>Watch again</Text>
             </Pressable>
             <Pressable onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
-              <Text style={styles.lightButtonText}>{nextSessionId ? "Next" : "Done"}</Text>
+              <Text style={styles.lightButtonText}>{nextSessionId ? "Continue" : "Done"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
             </Pressable>
           </View>

@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 6;
+export const DATABASE_SCHEMA_VERSION = 7;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -263,6 +263,21 @@ export function buildVersion6MigrationPlan(now: number = Date.now()): string[] {
   ];
 }
 
+/** Adds one local draft per profile and a durable next-video cursor without rewriting existing sessions. */
+export function buildVersion7MigrationPlan(): string[] {
+  return [
+    "ALTER TABLE queues ADD COLUMN currentIndex INTEGER NOT NULL DEFAULT 0",
+    `CREATE TABLE IF NOT EXISTS session_drafts (
+      profileId TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      orderedVideoIds TEXT NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+    )`,
+    "PRAGMA user_version = 7",
+  ];
+}
+
 function seedDefaultOwnerSql(): string {
   return `INSERT OR IGNORE INTO profiles (id, name, role, createdAt, updatedAt) VALUES ('${DEFAULT_OWNER_PROFILE_ID}', '${DEFAULT_OWNER_PROFILE_NAME}', 'owner', 0, 0)`;
 }
@@ -342,5 +357,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 6) {
     await executeMigrationTransaction(db, buildVersion6MigrationPlan());
+    currentVersion = 6;
+  }
+  if (currentVersion < 7) {
+    await executeMigrationTransaction(db, buildVersion7MigrationPlan());
   }
 }
