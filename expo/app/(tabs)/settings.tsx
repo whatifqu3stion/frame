@@ -46,7 +46,9 @@ export default function SettingsScreen() {
       } },
     ]);
   };
-  const onWipe = (): void => { setFullResetOpen(true); };
+  const onWipe = async (): Promise<void> => {
+    if (await requestOwnerAuthorization()) setFullResetOpen(true);
+  };
   const openProfileControls = async (): Promise<void> => {
     const authorized = await requestOwnerAuthorization();
     if (authorized) setProfileControlsOpen(true);
@@ -140,7 +142,7 @@ export default function SettingsScreen() {
         <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Saved videos, interests, sources, Sessions, and progress stay on this device.</Text></View></View>
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
         <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
-        <Pressable onPress={onWipe} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, allowance, usage record, and library item.</Text></View></Pressable>
+        <Pressable onPress={() => { void onWipe(); }} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, allowance, usage record, and library item.</Text></View></Pressable>
       </Section>
 
       <Section label="About"><Text style={styles.infoText}>Frame is an intentional YouTube viewer: a finite inbox from trusted sources, followed by intentional viewing and a genuine stopping point.</Text><Text style={styles.version}>Version 1.0</Text></Section>

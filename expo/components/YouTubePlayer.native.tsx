@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { Linking, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from "react-native-webview/lib/WebViewTypes";
 import type {
@@ -157,7 +157,7 @@ function youtubeError(code?: number): YouTubePlayerError {
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
-  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange, onConnectivityChange },
+  { videoId, startSeconds, onReady, onProgress, onStateChange, onEnded, onError, onFullscreenChange, onConnectivityChange, onOpenExternal },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
@@ -243,10 +243,10 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         && (parsed.hostname === "www.youtube.com" || parsed.hostname === "www.youtube-nocookie.com");
       if (isFrameOrigin) return true;
       if (request.isTopFrame === false && isTrustedYouTube) return true;
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") void Linking.openURL(url).catch(() => {});
+      if (isTrustedYouTube) void onOpenExternal(url);
     } catch {}
     return false;
-  }, []);
+  }, [onOpenExternal]);
 
   return (
     <WebView

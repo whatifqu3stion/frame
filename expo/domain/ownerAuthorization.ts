@@ -1,5 +1,6 @@
 export const OWNER_PIN_MAX_FAILURES = 5;
 export const OWNER_PIN_COOLDOWN_MS = 30_000;
+export const OWNER_AUTHORIZATION_MS = 120_000;
 
 export type ManagedProtectedAction = "createManaged" | "deleteManaged" | "changeAllowance" | "disableAllowance" | "addTimeToday";
 
@@ -9,7 +10,19 @@ export function requiresOwnerAuthorizationForManagedAction(_action: ManagedProte
 }
 
 export function requiresPinForOwnerEntry(fromRole: "owner" | "standard" | "managed", hasPin: boolean): boolean {
-  return fromRole === "managed" && hasPin;
+  return fromRole !== "owner" && hasPin;
+}
+
+/** Rejects stale protected callbacks both before and after the PIN prompt. */
+export async function authorizeForCurrentProfile(
+  expectedProfileId: string,
+  getCurrentProfileId: () => string,
+  isSwitching: () => boolean,
+  request: () => Promise<boolean>,
+): Promise<boolean> {
+  if (isSwitching() || expectedProfileId !== getCurrentProfileId()) return false;
+  const authorized = await request();
+  return authorized && !isSwitching() && expectedProfileId === getCurrentProfileId();
 }
 
 export type OwnerAuthorizationAttempt =
@@ -19,12 +32,12 @@ export type OwnerAuthorizationAttempt =
 
 /** Keeps one visit-level Owner authorization and a non-persistent brute-force cooldown. */
 export class OwnerAuthorizationSession {
-  private authorized = false;
+  private authorizedUntil = 0;
   private failedAttempts = 0;
   private cooldownUntil = 0;
 
-  isAuthorized(): boolean {
-    return this.authorized;
+  isAuthorized(now: number = Date.now()): boolean {
+    return this.authorizedUntil > now;
   }
 
   getCooldownUntil(): number {
@@ -34,7 +47,7 @@ export class OwnerAuthorizationSession {
   attempt(isCorrect: boolean, now: number = Date.now()): OwnerAuthorizationAttempt {
     if (this.cooldownUntil > now) return { status: "cooldown", retryAt: this.cooldownUntil };
     if (isCorrect) {
-      this.authorized = true;
+      this.authorizedUntil = now + OWNER_AUTHORIZATION_MS;
       this.failedAttempts = 0;
       this.cooldownUntil = 0;
       return { status: "authorized" };
@@ -48,11 +61,18 @@ export class OwnerAuthorizationSession {
     return { status: "incorrect", remainingAttempts: OWNER_PIN_MAX_FAILURES - this.failedAttempts };
   }
 
+  /** Current verifier must be entered for credential changes, even during an authorized visit. */
+  async verifyCurrentPin(pin: string, verify: (candidate: string) => Promise<boolean>, now: number = Date.now()): Promise<boolean> {
+    if (this.cooldownUntil > now) return false;
+    const matches = await verify(pin);
+    return this.attempt(matches, now).status === "authorized";
+  }
+
   authorizeWithoutPin(): void {
-    this.authorized = true;
+    this.authorizedUntil = Date.now() + OWNER_AUTHORIZATION_MS;
   }
 
   relock(): void {
-    this.authorized = false;
+    this.authorizedUntil = 0;
   }
 }

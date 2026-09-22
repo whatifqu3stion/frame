@@ -113,6 +113,7 @@ export default function WatchScreen() {
     beginAllowancePlayback,
     checkpointAllowancePlayback,
     stopAllowancePlayback,
+    authorizeProtectedAction,
   } = useApp();
 
   const savedSessionId = firstParam(params.savedSessionId);
@@ -584,12 +585,19 @@ export default function WatchScreen() {
     router.replace("/(tabs)/saved");
   }, [pauseAndPersist]);
 
+  const openExternal = useCallback(async (url: string): Promise<void> => {
+    if (!await authorizeProtectedAction(activeProfileId)) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      void AccessibilityInfo.announceForAccessibility("Couldn’t open YouTube.");
+    }
+  }, [activeProfileId, authorizeProtectedAction]);
+
   const openInYouTube = useCallback((): void => {
     haptic();
-    void Linking.openURL(`https://www.youtube.com/watch?v=${id}`).catch(() => {
-      void AccessibilityInfo.announceForAccessibility("Couldn’t open YouTube.");
-    });
-  }, [haptic, id]);
+    void openExternal(`https://www.youtube.com/watch?v=${id}`);
+  }, [haptic, id, openExternal]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
@@ -669,6 +677,7 @@ export default function WatchScreen() {
             onError={handlePlayerError}
             onFullscreenChange={handleFullscreenChange}
             onConnectivityChange={handleConnectivityChange}
+            onOpenExternal={openExternal}
           />
         </View>
       ) : null}

@@ -15,18 +15,20 @@ type Feedback = { ok: boolean; message: string };
 
 /** Resolves a shared source first, then requires an explicit profile-local follow. */
 export default function AddChannelModal({ visible, onClose }: Props) {
-  const { resolveSourceInput, confirmSource, requirePurchase, saveVideo } = useApp();
+  const { resolveSourceInput, confirmSource, requirePurchase, saveVideo, activeProfileId } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [value, setValue] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [resolution, setResolution] = useState<SourceResolution | null>(null);
+  const [resolutionProfileId, setResolutionProfileId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const close = (): void => {
     setValue("");
     setBusy(false);
     setResolution(null);
+    setResolutionProfileId(null);
     setFeedback(null);
     onClose();
   };
@@ -36,9 +38,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     setBusy(true);
     setResolution(null);
     setFeedback(null);
+    const expectedProfile = activeProfileId;
     const result = await resolveSourceInput(value.trim());
     setBusy(false);
+    if (expectedProfile !== activeProfileId) return;
     if (result.status === "success") {
+      setResolutionProfileId(expectedProfile);
       setResolution(result.data);
       setFeedback({ ok: true, message: result.data.provenance === "cache" ? "Verified from Frame’s shared catalog." : "Verified with YouTube." });
       return;
@@ -47,7 +52,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   const follow = async (): Promise<void> => {
-    if (!resolution || busy) return;
+    if (!resolution || resolutionProfileId !== activeProfileId || busy) return;
     setBusy(true);
     const result = await confirmSource(resolution);
     setBusy(false);
@@ -56,7 +61,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   const watch = (): void => {
-    if (!resolution) return;
+    if (!resolution || resolutionProfileId !== activeProfileId) return;
     const video = resolutionVideoToVideo(resolution);
     if (!video) return;
     close();
@@ -77,7 +82,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   const save = async (): Promise<void> => {
-    if (!resolution || busy) return;
+    if (!resolution || resolutionProfileId !== activeProfileId || busy) return;
     const video = resolutionVideoToVideo(resolution);
     if (!video) return;
     setBusy(true);
@@ -108,7 +113,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
             <TextInput
               value={value}
-              onChangeText={(text) => { setValue(text); setResolution(null); setFeedback(null); }}
+              onChangeText={(text) => { setValue(text); setResolution(null); setResolutionProfileId(null); setFeedback(null); }}
               placeholder="youtube.com/@source"
               placeholderTextColor={palette.inkMuted}
               autoCapitalize="none"

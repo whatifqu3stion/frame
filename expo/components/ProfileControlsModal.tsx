@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Check, ChevronRight, Clock3, LockKeyhole, Pencil, Plus, ShieldCheck, Trash2, UserRound, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AllowancePicker from "@/components/AllowancePicker";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -9,6 +9,7 @@ import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
 import type { Profile } from "@/models/profile";
 import { useApp } from "@/providers/AppProvider";
+import { OWNER_AUTHORIZATION_MS } from "@/domain/ownerAuthorization";
 
 type Props = { visible: boolean; onClose: () => void };
 type Editor =
@@ -17,6 +18,7 @@ type Editor =
   | { kind: "rename"; profile: Profile }
   | { kind: "allowance"; profile: Profile }
   | { kind: "pin" }
+  | { kind: "removePin" }
   | null;
 
 /** Owner-authorized household profile, allowance, and PIN controls. */
@@ -31,6 +33,9 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const [editor, setEditor] = useState<Editor>(null);
   const [value, setValue] = useState<string>("");
   const [confirmation, setConfirmation] = useState<string>("");
+  const [currentPin, setCurrentPin] = useState<string>("");
+  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
+  useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion); }, []);
   const [allowance, setAllowance] = useState<ViewingAllowance>({ mode: "dailyLimit", minutes: 30 });
   const [allowanceStatus, setAllowanceStatus] = useState<Record<string, ViewingAllowanceStatus>>({});
   const [busy, setBusy] = useState<boolean>(false);
@@ -43,17 +48,22 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
 
   useEffect(() => { if (visible) void refreshAllowances(); }, [refreshAllowances, visible]);
   useEffect(() => { if (visible && !isOwnerAuthorized) onClose(); }, [isOwnerAuthorized, onClose, visible]);
+  useEffect(() => {
+    if (!visible || !hasOwnerPin) return;
+    const timer = setTimeout(() => { relockOwnerAccess(); onClose(); }, OWNER_AUTHORIZATION_MS);
+    return () => clearTimeout(timer);
+  }, [hasOwnerPin, onClose, relockOwnerAccess, visible]);
 
   const close = (): void => {
     if (busy || profileSwitching) return;
-    setEditor(null); setValue(""); setConfirmation(""); setFeedback(null);
+    setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null);
     relockOwnerAccess(); onClose();
   };
 
   const begin = (next: Editor): void => {
     setEditor(next);
     setValue(next?.kind === "rename" ? next.profile.name : "");
-    setConfirmation(""); setFeedback(null);
+    setConfirmation(""); setCurrentPin(""); setFeedback(null);
     if (next?.kind === "allowance") {
       if (!hasOwnerPin) {
         Alert.alert("Create an Owner PIN first", "Viewing allowances need the existing protected-action boundary. Add an Owner PIN before enabling or changing one.", [{ text: "Not now", style: "cancel" }, { text: "Add PIN", onPress: () => begin({ kind: "pin" }) }]);
@@ -83,11 +93,12 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
       : editor.kind === "createManaged" ? await createManagedProfile(value, allowance as ManagedAllowance)
         : editor.kind === "rename" ? await renameLocalProfile(editor.profile.id, value)
           : editor.kind === "allowance" ? await setProfileViewingAllowance(editor.profile.id, allowance)
-            : await saveOwnerPin(value);
+            : editor.kind === "removePin" ? await clearOwnerPin(currentPin)
+              : await saveOwnerPin(value, currentPin);
     setBusy(false); setFeedback(result);
     if (result.ok) {
       const createdManagedWithoutPin = editor.kind === "createManaged" && !hasOwnerPin;
-      setEditor(null); setValue(""); setConfirmation("");
+      setEditor(null); setValue(""); setConfirmation(""); setCurrentPin("");
       await refreshAllowances();
       if (createdManagedWithoutPin) Alert.alert("Add an Owner PIN when ready", "Managed settings are not meaningfully protected until an Owner PIN is set in this existing protected-controls screen.");
     }
@@ -108,12 +119,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     if (result.ok) await refreshAllowances();
   };
 
-  const confirmRemovePin = (): void => {
-    Alert.alert("Remove Owner PIN?", "Managed settings and Owner entry will no longer ask for a PIN.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove PIN", style: "destructive", onPress: async () => { setBusy(true); const result = await clearOwnerPin(); setBusy(false); setFeedback(result); } },
-    ]);
-  };
+  const confirmRemovePin = (): void => begin({ kind: "removePin" });
 
   const chooseProfile = async (profileId: string): Promise<void> => {
     setBusy(true); const result = await switchProfile(profileId); setBusy(false); setFeedback(result);
@@ -140,7 +146,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const allowanceInvalid = allowance.mode === "dailyLimit" && (!Number.isInteger(allowance.minutes) || allowance.minutes < 1 || allowance.minutes > 1_440);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={close}>
+    <Modal visible={visible} animationType={reduceMotion ? "none" : "slide"} transparent statusBarTranslucent onRequestClose={close}>
       <View style={styles.backdrop}><View style={styles.card}>
         <View style={styles.handle} />
         <View style={styles.headerRow}><View><Text style={styles.eyebrow}>Protected controls</Text><Text style={styles.heading}>Profiles & boundaries</Text></View><Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close protected controls"><X size={18} color={palette.inkMuted} /></Pressable></View>
@@ -178,15 +184,16 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
           {!pinUnavailable ? <View style={styles.actionRow}><Pressable onPress={() => begin({ kind: "pin" })} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{hasOwnerPin ? "Change PIN" : "Add PIN"}</Text></Pressable>{hasOwnerPin ? <Pressable onPress={confirmRemovePin} style={styles.secondaryButton}><Text style={[styles.secondaryButtonText, { color: palette.danger }]}>Remove PIN</Text></Pressable> : null}</View> : null}
 
           {editor ? <View style={styles.editor}>
-            <Text style={styles.editorTitle}>{editor.kind === "createStandard" ? "New Standard profile" : editor.kind === "createManaged" ? "New Managed profile" : editor.kind === "rename" ? `Rename ${editor.profile.name}` : editor.kind === "allowance" ? `${editor.profile.name} · Daily viewing allowance` : hasOwnerPin ? "Change Owner PIN" : "Add Owner PIN"}</Text>
-            {editorNeedsName || editor.kind === "pin" ? <TextInput value={value} onChangeText={(text) => { setValue(editor.kind === "pin" ? text.replace(/\D/g, "").slice(0, 6) : text); setFeedback(null); }} placeholder={editor.kind === "pin" ? "4–6 digit PIN" : "Profile name"} placeholderTextColor={palette.inkMuted} style={[styles.input, editor.kind === "pin" && styles.pinInput]} keyboardType={editor.kind === "pin" ? "number-pad" : "default"} secureTextEntry={editor.kind === "pin"} maxLength={editor.kind === "pin" ? 6 : 32} autoFocus accessibilityLabel={editor.kind === "pin" ? "New Owner PIN" : "Profile name"} /> : null}
+            <Text style={styles.editorTitle}>{editor.kind === "createStandard" ? "New Standard profile" : editor.kind === "createManaged" ? "New Managed profile" : editor.kind === "rename" ? `Rename ${editor.profile.name}` : editor.kind === "allowance" ? `${editor.profile.name} · Daily viewing allowance` : editor.kind === "removePin" ? "Remove Owner PIN" : hasOwnerPin ? "Change Owner PIN" : "Add Owner PIN"}</Text>
+            {(editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") ? <TextInput value={currentPin} onChangeText={(text) => setCurrentPin(text.replace(/\D/g, "").slice(0, 6))} placeholder="Current Owner PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus accessibilityLabel="Current Owner PIN" /> : null}
+            {editorNeedsName || editor.kind === "pin" ? <TextInput value={value} onChangeText={(text) => { setValue(editor.kind === "pin" ? text.replace(/\D/g, "").slice(0, 6) : text); setFeedback(null); }} placeholder={editor.kind === "pin" ? "4–6 digit PIN" : "Profile name"} placeholderTextColor={palette.inkMuted} style={[styles.input, editor.kind === "pin" && styles.pinInput]} keyboardType={editor.kind === "pin" ? "number-pad" : "default"} secureTextEntry={editor.kind === "pin"} maxLength={editor.kind === "pin" ? 6 : 32} autoFocus={!hasOwnerPin || editor.kind !== "pin"} accessibilityLabel={editor.kind === "pin" ? "New Owner PIN" : "Profile name"} /> : null}
             {editor.kind === "pin" ? <TextInput value={confirmation} onChangeText={(text) => { setConfirmation(text.replace(/\D/g, "").slice(0, 6)); setFeedback(null); }} placeholder="Repeat PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} accessibilityLabel="Repeat new Owner PIN" /> : null}
             {editor.kind === "createManaged" || editor.kind === "allowance" ? <AllowancePicker value={allowance} onChange={setAllowance} /> : null}
             {editor.kind === "allowance" && editor.profile.role === "owner" ? <Text style={styles.ownerDelayNote}>Enabling or reducing your Owner limit is immediate. Increasing it or choosing Unlimited takes effect 24 hours later. There is no PIN bypass or “add time” action.</Text> : null}
-            <View style={styles.actionRow}><Pressable onPress={() => begin(null)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable onPress={() => { void submitEditor(); }} disabled={busy || allowanceInvalid || ((editorNeedsName || editor.kind === "pin") && !value.trim())} style={[styles.primaryButton, (busy || allowanceInvalid || ((editorNeedsName || editor.kind === "pin") && !value.trim())) && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>Save</Text>}</Pressable></View>
+            <View style={styles.actionRow}><Pressable onPress={() => begin(null)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable onPress={() => { void submitEditor(); }} disabled={busy || allowanceInvalid || ((editorNeedsName || editor.kind === "pin") && !value.trim()) || ((editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") && currentPin.length < 4)} style={[styles.primaryButton, (busy || allowanceInvalid || ((editorNeedsName || editor.kind === "pin") && !value.trim()) || ((editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") && currentPin.length < 4)) && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>
           </View> : null}
           {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
-          <Text style={styles.recovery}>The Owner PIN and allowances are boundaries inside Frame, not encryption or device-level parental controls. Forgotten PIN recovery erases all local Frame data.</Text>
+          <Text style={styles.recovery}>The Owner PIN and allowances are boundaries inside Frame, not encryption or device-level parental controls. There is no cloud PIN recovery. Forgotten PIN recovery erases all local Frame data.</Text>
         </ScrollView>
       </View></View>
     </Modal>

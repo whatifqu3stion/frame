@@ -28,7 +28,7 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, ready } = useApp();
+  const { activeProfileId, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, ready, profileSwitching } = useApp();
   const [clock, setClock] = useState<number>(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [snoozeItem, setSnoozeItem] = useState<TodaySnapshotItem | null>(null);
@@ -96,16 +96,18 @@ export default function TodayScreen() {
   }, [activeProfileId, isRefreshing, queryClient, queryKey, snapshot, sourceIds]);
 
   const handle = useCallback(async (item: TodaySnapshotItem, disposition: TodayDisposition, snoozedUntil: number | null = null): Promise<boolean> => {
+    if (profileSwitching || activeProfileRef.current !== activeProfileId || item.profileId !== activeProfileId) return false;
     const changed = await todayRepository.setDisposition(activeProfileId, item.periodKey, item.id, disposition, Date.now(), snoozedUntil);
     if (changed) await reloadLocal();
     return changed;
-  }, [activeProfileId, reloadLocal]);
+  }, [activeProfileId, reloadLocal, profileSwitching]);
 
   const watch = useCallback(async (item: TodaySnapshotItem): Promise<void> => {
     if (busyId || !requirePurchase("library")) return;
     setBusyId(item.id);
     try {
       const allowance = await getPlaybackAllowance(activeProfileId);
+      if (activeProfileRef.current !== activeProfileId || profileSwitching) return;
       if (!allowance.canPlay) {
         Alert.alert("Today’s viewing is complete", allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.");
         return;
@@ -114,7 +116,7 @@ export default function TodayScreen() {
     } catch {
       Alert.alert("Couldn’t open video", "The player did not open. This item is still in Today.");
     } finally { setBusyId(null); }
-  }, [activeProfileId, busyId, getPlaybackAllowance, requirePurchase]);
+  }, [activeProfileId, busyId, getPlaybackAllowance, requirePurchase, profileSwitching]);
 
   const save = useCallback(async (item: TodaySnapshotItem): Promise<void> => {
     if (busyId || !requirePurchase("save")) return;

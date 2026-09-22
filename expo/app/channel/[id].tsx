@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
@@ -47,12 +47,12 @@ export default function ChannelScreen() {
 
   const toggleFollow = useCallback(async (): Promise<void> => {
     if (!channel) return;
-    if (following) {
-      await unfollowChannel(channel.id);
-      return;
+    try {
+      if (following) await unfollowChannel(channel.id);
+      else if (requirePurchase("creators")) await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
+    } catch {
+      Alert.alert("Source unchanged", "Owner authorization was cancelled or the source could not be updated.");
     }
-    if (!requirePurchase("creators")) return;
-    await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
   }, [channel, followChannel, following, requirePurchase, unfollowChannel]);
 
   const retryUploads = useCallback((): void => {

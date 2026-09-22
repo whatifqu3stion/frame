@@ -7,7 +7,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
 import OwnerPinModal from "@/components/OwnerPinModal";
@@ -75,12 +75,14 @@ function AppContent() {
 function ThemedApp() {
   const segments = useSegments();
   const { isDark, palette } = useFrameTheme();
+  const { profileSwitching, activeProfileId } = useApp();
   const isWatching = segments[0] === "watch";
 
   return (
     <View style={{ flex: 1, backgroundColor: isWatching ? watchPalette.wall : palette.wall }}>
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
-      <AppContent />
+      <View key={activeProfileId} style={{ flex: 1 }}><AppContent /></View>
+      {profileSwitching ? <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", backgroundColor: palette.wall }} accessible accessibilityLabel="Switching profile"><ActivityIndicator color={palette.active} /><Text style={{ color: palette.ink, marginTop: 16 }}>Switching profile…</Text></View> : null}
       {FEATURE_FLAGS.paidAccess ? <PaywallSheet /> : null}
       <OwnerPinModal />
     </View>

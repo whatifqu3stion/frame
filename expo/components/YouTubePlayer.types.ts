@@ -23,4 +23,5 @@ export type YouTubePlayerProps = {
   onError: (error: YouTubePlayerError) => void;
   onFullscreenChange: (isFullscreen: boolean) => void;
   onConnectivityChange: (isOnline: boolean) => void;
+  onOpenExternal: (url: string) => Promise<void>;
 };

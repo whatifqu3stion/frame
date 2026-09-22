@@ -6,12 +6,12 @@ import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } 
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
-type Props = { visible: boolean; onClose: () => void };
+type Props = { visible: boolean; onClose: () => void; forgottenPinRecovery?: boolean };
 
 const DELETED_ITEMS = "all profiles; Owner PIN; viewing allowances and daily usage; sources; saved videos (including former Watch Later links); Sessions; progress; interests; searches; appearance; and local Google credentials";
 
 /** Shared irreversible full-reset recovery used by Privacy & Data and Forgot PIN. */
-export default function FullResetModal({ visible, onClose }: Props) {
+export default function FullResetModal({ visible, onClose, forgottenPinRecovery = false }: Props) {
   const { eraseAllFrameData } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -27,7 +27,7 @@ export default function FullResetModal({ visible, onClose }: Props) {
   const finish = async (): Promise<void> => {
     setBusy(true);
     try {
-      await eraseAllFrameData();
+      await eraseAllFrameData(forgottenPinRecovery);
       onClose();
       router.replace("/onboarding");
     } catch {

@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Clock3, LockKeyhole, UserRound, X } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -13,6 +13,8 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
+  useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion); }, []);
 
   const close = (): void => {
     if (profileSwitching) return;
@@ -28,7 +30,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={close}>
+    <Modal visible={visible} animationType={reduceMotion ? "none" : "fade"} transparent statusBarTranslucent onRequestClose={close}>
       <Pressable onPress={close} style={styles.backdrop} accessibilityLabel="Close profile chooser">
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.card}>
           <View style={styles.handle} />
