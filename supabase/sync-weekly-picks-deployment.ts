@@ -8,11 +8,14 @@ const files = [
   "_shared/source-feed.ts",
   "_shared/weekly-picks-contract.ts",
   "_shared/weekly-picks.ts",
+  "_shared/weekly-pick-preparation.ts",
+  "_shared/weekly-pick-drafting.ts",
   "source-leases/index.ts",
   "resolve-source/index.ts",
   "sync-sources/index.ts",
   "source-feed/index.ts",
   "weekly-picks/index.ts",
+  "draft-weekly-picks/index.ts",
 ] as const;
 
 for (const relativePath of files) {

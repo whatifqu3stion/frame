@@ -34,3 +34,6 @@ verify_jwt = false
 
 [functions.source-feed]
 verify_jwt = false
+
+[functions.draft-weekly-picks]
+verify_jwt = false
