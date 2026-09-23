@@ -68,6 +68,15 @@ function formatAllowanceRemaining(seconds: number): string {
   return `${Math.ceil(seconds / 60)} min`;
 }
 
+function playbackRemaining(status: ViewingAllowanceStatus): number | null {
+  if (!status.canPlay) return null;
+  const daily = status.kind === "limited" ? status.remainingSeconds : null;
+  const session = status.sessionRemainingSeconds ?? null;
+  if (daily === null) return session;
+  if (session === null) return daily;
+  return Math.min(daily, session);
+}
+
 export default function WatchScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -375,17 +384,21 @@ export default function WatchScreen() {
     }, ALLOWANCE_CHECKPOINT_INTERVAL_MS);
     const countdownInterval = setInterval(() => {
       setAllowanceStatus((current) => {
-        if (current?.kind !== "limited") return current;
-        const remainingSeconds = Math.max(0, current.remainingSeconds - 1);
-        if (remainingSeconds === 0 && !allowanceEndingRef.current) {
+        if (!current?.canPlay) return current;
+        const dailyRemaining = current.kind === "limited" ? Math.max(0, current.remainingSeconds - 1) : null;
+        const sessionRemaining = current.sessionRemainingSeconds === undefined ? undefined : Math.max(0, current.sessionRemainingSeconds - 1);
+        if ((dailyRemaining === 0 || sessionRemaining === 0) && !allowanceEndingRef.current) {
           allowanceEndingRef.current = true;
           playerRef.current?.pause();
           void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
           void persist();
         }
-        return remainingSeconds === 0
-          ? { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: current.allowanceMinutes, ...(current.pendingChange ? { pendingChange: current.pendingChange } : {}) }
-          : { ...current, remainingSeconds };
+        if (dailyRemaining === 0 && current.kind === "limited") {
+          return { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: current.allowanceMinutes, ...(current.pendingChange ? { pendingChange: current.pendingChange } : {}) };
+        }
+        return current.kind === "limited"
+          ? { ...current, remainingSeconds: dailyRemaining as number, ...(sessionRemaining === undefined ? {} : { sessionRemainingSeconds: sessionRemaining }) }
+          : { ...current, ...(sessionRemaining === undefined ? {} : { sessionRemainingSeconds: sessionRemaining }) };
       });
     }, 1000);
     void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
@@ -684,9 +697,9 @@ export default function WatchScreen() {
 
       {allowanceBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
-          <Text style={styles.endEyebrow}>Daily viewing allowance</Text>
-          <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : "Today’s viewing is complete."}</Text>
-          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" ? allowanceStatus.reason : "Your Frame playback place is saved. Settings and the rest of Frame remain available."}</Text>
+          <Text style={styles.endEyebrow}>{allowanceStatus.kind === "restricted" ? "Managed playback controls" : "Daily viewing allowance"}</Text>
+          <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : allowanceStatus.kind === "restricted" ? "Playback isn’t available now." : "Today’s viewing is complete."}</Text>
+          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" || allowanceStatus.kind === "restricted" ? allowanceStatus.reason : "Your Frame playback place is saved. Settings and the rest of Frame remain available."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={goToToday} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Today</Text></Pressable>
             <Pressable onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></Pressable>
@@ -771,7 +784,7 @@ export default function WatchScreen() {
           >
             <ChevronLeft color={palette.wall} size={23} />
           </Pressable>
-          {allowanceStatus?.kind === "limited" ? <Text style={styles.landscapeAllowance}>{formatAllowanceRemaining(allowanceStatus.remainingSeconds)}</Text> : null}
+          {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.landscapeAllowance}>{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)}</Text> : null}
         </View>
         <View style={styles.landscapeStageArea}>
           <View style={{ width: landscapePlayerWidth, height: landscapePlayerHeight }}>{stage}</View>
@@ -796,7 +809,7 @@ export default function WatchScreen() {
           <ChevronLeft color={palette.wall} size={22} />
           <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
-        {allowanceStatus?.kind === "limited" ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(allowanceStatus.remainingSeconds)} viewing time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
+        {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)} viewing time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
       </View>
 
       <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>

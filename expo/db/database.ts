@@ -6,6 +6,7 @@ import { DATABASE_SCHEMA_VERSION, migrateDatabase, profileEntityKey } from "@/db
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } from "@/models/profile";
 import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
 import type { ProfilePlaybackLimitRecord, ProfilePlaybackUsageRecord } from "@/models/viewingAllowance";
+import type { ProfilePlaybackControlsRecord, ProfileSessionUsageRecord } from "@/models/playbackControls";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue, SessionDraft } from "@/types";
 import type { CachedTodayCandidate, TodayDisposition, TodaySnapshot, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
@@ -53,6 +54,8 @@ const webStore = {
   allowances: new Map<string, ManagedAllowanceRecord>(),
   playbackLimits: new Map<string, ProfilePlaybackLimitRecord>(),
   playbackUsage: new Map<string, ProfilePlaybackUsageRecord>(),
+  playbackControls: new Map<string, ProfilePlaybackControlsRecord>(),
+  sessionUsage: new Map<string, ProfileSessionUsageRecord>(),
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
@@ -79,7 +82,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profiles", "queues", "session_drafts", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_controls", "profile_playback_limits", "profile_playback_usage", "profile_session_usage", "profiles", "queues", "session_drafts", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -172,6 +175,8 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     webStore.allowances.delete(profileId);
     webStore.playbackLimits.delete(profileId);
     webStore.playbackUsage.delete(profileId);
+    webStore.playbackControls.delete(profileId);
+    webStore.sessionUsage.delete(profileId);
     webStore.profiles.delete(profileId);
     return;
   }
@@ -179,7 +184,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
     if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
     await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
@@ -239,6 +244,39 @@ export async function upsertProfilePlaybackUsage(record: ProfilePlaybackUsageRec
     `INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)
      ON CONFLICT(profileId) DO UPDATE SET dayKey=excluded.dayKey,dayStartedAt=excluded.dayStartedAt,lastSeenAt=excluded.lastSeenAt,timezoneOffsetMinutes=excluded.timezoneOffsetMinutes,consumedSeconds=excluded.consumedSeconds,warnedFive=excluded.warnedFive,warnedOne=excluded.warnedOne,updatedAt=excluded.updatedAt`,
     [record.profileId, record.dayKey, record.dayStartedAt, record.lastSeenAt, record.timezoneOffsetMinutes, record.consumedSeconds, record.warnedFive, record.warnedOne, record.updatedAt],
+  );
+}
+
+export async function readProfilePlaybackControls(profileId: string): Promise<ProfilePlaybackControlsRecord | null> {
+  if (Platform.OS === "web") return webStore.playbackControls.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ProfilePlaybackControlsRecord>("SELECT * FROM profile_playback_controls WHERE profileId = ?", [profileId])) ?? null;
+}
+
+export async function upsertProfilePlaybackControls(record: ProfilePlaybackControlsRecord): Promise<void> {
+  if (Platform.OS === "web") { webStore.playbackControls.set(record.profileId, { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO profile_playback_controls (profileId,allowedStartMinute,allowedEndMinute,quietStartMinute,quietEndMinute,sessionLimitMinutes,sessionBreakMinutes,pausedUntil,updatedAt)
+     VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET allowedStartMinute=excluded.allowedStartMinute,allowedEndMinute=excluded.allowedEndMinute,quietStartMinute=excluded.quietStartMinute,quietEndMinute=excluded.quietEndMinute,sessionLimitMinutes=excluded.sessionLimitMinutes,sessionBreakMinutes=excluded.sessionBreakMinutes,pausedUntil=excluded.pausedUntil,updatedAt=excluded.updatedAt`,
+    [record.profileId, record.allowedStartMinute, record.allowedEndMinute, record.quietStartMinute, record.quietEndMinute, record.sessionLimitMinutes, record.sessionBreakMinutes, record.pausedUntil, record.updatedAt],
+  );
+}
+
+export async function readProfileSessionUsage(profileId: string): Promise<ProfileSessionUsageRecord | null> {
+  if (Platform.OS === "web") return webStore.sessionUsage.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ProfileSessionUsageRecord>("SELECT * FROM profile_session_usage WHERE profileId = ?", [profileId])) ?? null;
+}
+
+export async function upsertProfileSessionUsage(record: ProfileSessionUsageRecord): Promise<void> {
+  if (Platform.OS === "web") { webStore.sessionUsage.set(record.profileId, { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO profile_session_usage (profileId,lastPlaybackAt,consumedSeconds,lockedUntil,updatedAt) VALUES (?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET lastPlaybackAt=excluded.lastPlaybackAt,consumedSeconds=excluded.consumedSeconds,lockedUntil=excluded.lockedUntil,updatedAt=excluded.updatedAt`,
+    [record.profileId, record.lastPlaybackAt, record.consumedSeconds, record.lockedUntil, record.updatedAt],
   );
 }
 
@@ -707,6 +745,8 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     webStore.allowances.clear();
     webStore.playbackLimits.clear();
     webStore.playbackUsage.clear();
+    webStore.playbackControls.clear();
+    webStore.sessionUsage.clear();
     webStore.saved.clear();
     webStore.resume.clear();
     webStore.queues.clear();
@@ -718,7 +758,7 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage"] as const) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
     await db.runAsync("DELETE FROM profiles");

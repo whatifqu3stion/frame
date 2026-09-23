@@ -2,7 +2,7 @@ export const OWNER_PIN_MAX_FAILURES = 5;
 export const OWNER_PIN_COOLDOWN_MS = 30_000;
 export const OWNER_AUTHORIZATION_MS = 120_000;
 
-export type ManagedProtectedAction = "createManaged" | "deleteManaged" | "changeAllowance" | "disableAllowance" | "addTimeToday";
+export type ManagedProtectedAction = "createManaged" | "deleteManaged" | "changeAllowance" | "disableAllowance" | "addTimeToday" | "playbackControls";
 
 /** Managed settings always pass through the Owner gate; a missing PIN authorizes only the current visit. */
 export function requiresOwnerAuthorizationForManagedAction(_action: ManagedProtectedAction): true {

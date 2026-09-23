@@ -22,7 +22,7 @@ describe("version 7 Session persistence", () => {
     try {
       version6(db);
       await migrateDatabase(adapter(db));
-      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 7 });
+      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 8 });
       for (const profile of ["owner-default", "standard"]) {
         expect(db.query("SELECT name,orderedVideoIds,updatedAt,currentIndex FROM queues WHERE profileId=?").get(profile)).toEqual({ name: "Evening", orderedVideoIds: '["video000001","video000002"]', updatedAt: 77, currentIndex: 0 });
       }

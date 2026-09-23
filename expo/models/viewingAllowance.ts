@@ -30,7 +30,8 @@ export type PendingViewingAllowanceChange = {
 };
 
 export type ViewingAllowanceStatus =
-  | { kind: "unlimited"; canPlay: true; pendingChange?: PendingViewingAllowanceChange }
-  | { kind: "limited"; canPlay: true; remainingSeconds: number; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange; warning?: ViewingAllowanceWarning }
+  | { kind: "unlimited"; canPlay: true; pendingChange?: PendingViewingAllowanceChange; sessionRemainingSeconds?: number }
+  | { kind: "limited"; canPlay: true; remainingSeconds: number; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange; warning?: ViewingAllowanceWarning; sessionRemainingSeconds?: number }
   | { kind: "complete"; canPlay: false; remainingSeconds: 0; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange }
-  | { kind: "ownerReview"; canPlay: false; remainingSeconds: 0; reason: string };
+  | { kind: "ownerReview"; canPlay: false; remainingSeconds: 0; reason: string }
+  | { kind: "restricted"; canPlay: false; remainingSeconds: 0; restriction: "paused" | "outsideWindow" | "quietHours" | "sessionBreak"; reason: string; availableAt?: number };
