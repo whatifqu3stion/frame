@@ -21,7 +21,7 @@ export default function SettingsScreen() {
   const {
     interests, toggleInterest, openPremium, isPremium, premiumAccessState, refreshPremiumAccess,
     googleConfigured, googleConnected, googleEmail, importing, signInWithGoogle,
-    signOutGoogle, prefs, setTheme, setAccent, requirePurchase, activeProfile, profiles,
+    signOutGoogle, prefs, setTheme, setAccent, activeProfile, profiles,
     requestOwnerAuthorization,
   } = useApp();
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
@@ -29,11 +29,11 @@ export default function SettingsScreen() {
   const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
 
   const onConnect = async (): Promise<void> => {
-    if (!requirePurchase("import")) return;
     setAccountBusy(true);
     const result = await signInWithGoogle();
     setAccountBusy(false);
-    Alert.alert(result.ok ? "Connected" : "Sign-in", result.message);
+    if (result.ok) router.push("/google-import");
+    else Alert.alert("Sign-in", result.message);
   };
   const onSignOut = (): void => {
     Alert.alert("Disconnect Google?", "Frame will revoke Google access. Manually followed sources stay on this device.", [
@@ -69,7 +69,10 @@ export default function SettingsScreen() {
         {googleConnected ? (
           <View style={styles.accountBlock}>
             <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google connected"}</Text>
-            <Text style={styles.supporting}>Connected for identity only. Subscriptions are not followed automatically.</Text>
+            <Text style={styles.supporting}>Connected for optional import. Nothing is followed automatically.</Text>
+            <Pressable onPress={() => router.push("/google-import")} style={styles.inlineAction} accessibilityRole="button" testID="settings-google-import">
+              <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
+            </Pressable>
             <Pressable onPress={onSignOut} style={styles.inlineAction} disabled={accountBusy} accessibilityRole="button" testID="sign-out-google">
               {accountBusy ? <ActivityIndicator size="small" color={palette.inkMuted} /> : <LogOut size={15} color={palette.inkMuted} />}
               <Text style={styles.inlineActionText}>Disconnect Google</Text>

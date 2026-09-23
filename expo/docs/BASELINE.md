@@ -84,7 +84,7 @@ There is no account/profile table or backend profile model. The active profile i
 ### Real and credential-dependent
 
 - YouTube discovery and metadata: real Cloudflare Worker calls to YouTube Data API v3; requires a server-only YouTube key and a configured app backend URL.
-- Google OAuth/import: real Expo AuthSession plus Google userinfo, YouTube subscriptions, and revoke endpoints; requires a client ID for the active platform and Premium entitlement.
+- Google OAuth/import: real Expo AuthSession plus Google userinfo, bounded YouTube subscription pages, deliberate local selection, and revoke endpoints; requires a client ID for the active platform and is available without Premium during the MVP.
 - RevenueCat: real native SDK; requires configured products, offering `frame_premium`, entitlement `premium`, and environment-appropriate public SDK key. Web purchases are intentionally unavailable.
 - Native YouTube playback: real YouTube iframe inside WebView with official controls and user-initiated playback.
 - SQLite, SecureStore, orientation, keep-awake, haptics, and image caching: real native integrations.

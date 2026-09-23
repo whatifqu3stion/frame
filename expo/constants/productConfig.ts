@@ -29,6 +29,6 @@ export const FOUNDATION_CAPABILITIES = {
   youtubeSearch: false,
   sharedTodayFeed: true,
   weeklyDiscovery: false,
-  googleSelectiveImport: false,
+  googleSelectiveImport: true,
   automaticGoogleFollowing: false,
 } as const;

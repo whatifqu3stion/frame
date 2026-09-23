@@ -8,21 +8,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clearLegacyThumbnailCaches } from "@/services/thumbnailRetention";
 import { expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
 import { Alert, AppState } from "react-native";
-import type { AccentMode, AddChannelResult, FollowedChannel, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue, SessionDraft } from "@/types";
+import type { AccentMode, AddChannelResult, FollowedChannel, GoogleImportResult, GoogleSubscriptionPage, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue, SessionDraft } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { TodaySourceRule } from "@/models/today";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
+import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
 import { normalizeSessionIds, positionAfterEdit } from "@/domain/sessionFlow";
 import { authorizeForCurrentProfile, OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
 import { performFullReset } from "@/domain/fullReset";
-import { fetchGoogleEmail, revokeGoogleAccess } from "@/services/googleAuth";
-import { getGoogleImportAvailability, GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE } from "@/services/googleImportPolicy";
+import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
+import { planSelectiveGoogleImport } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, LEGACY_GOOGLE_TOKEN_KEY, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
 import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
 import { readActiveProfileId, writeActiveProfileId } from "@/storage/activeProfileStorage";
@@ -101,7 +101,7 @@ const PREMIUM_FEATURE_MESSAGES: Record<PremiumFeature, string> = {
   resume: "Premium remembers where you stopped across your library.",
   interests: "Premium uses your chosen interests to build quiet Explore collections.",
   creators: "Premium lets you follow trusted creators on your shelf.",
-  import: "Premium supports optional Google connection. Selective source import is not available yet.",
+  import: "Connect Google to choose subscriptions you want to follow in Frame.",
   sessions: "Premium lets you create and edit reusable one-to-three-video sessions.",
   discovery: "Premium unlocks interest-led browsing without an endless feed.",
 };
@@ -258,7 +258,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [ownerPinPromptError, setOwnerPinPromptError] = useState<string | null>(null);
   const [ownerPinCooldownUntil, setOwnerPinCooldownUntil] = useState<number>(0);
   const [isOwnerAuthorized, setIsOwnerAuthorized] = useState<boolean>(false);
-  const importing = false;
+  const [importing, setImporting] = useState<boolean>(false);
   const activeProfileIdRef = useRef<string>(DEFAULT_OWNER_PROFILE_ID);
   const prefsRef = useRef<UserPreferences>(defaultPrefs);
   const interestsRef = useRef<InterestTopic[]>([]);
@@ -993,9 +993,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     [activeProfileId, invalidateLibrary, requirePurchase],
   );
 
-  // Google authorization is separate from following. Round 1 never imports automatically.
+  // Google authorization is separate from following. Import always requires explicit selection.
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
-    if (!requirePurchase("import")) return { ok: false, message: "Google connection is part of Frame Premium." };
     if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
     if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
@@ -1021,23 +1020,60 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await writeProfileGoogleCredential(SecureStore, activeProfileId, JSON.stringify(credential));
       setGoogleCredential(credential);
       await updatePrefs({ googleEmail: emailResult.data, googleConnectedAt: Date.now() });
-      return { ok: true, message: GOOGLE_SELECTIVE_IMPORT_UNAVAILABLE_MESSAGE };
+      return { ok: true, message: "Google connected. Choose the subscriptions you want in Frame." };
     } catch (err) {
       console.warn("[google] sign-in failed", err instanceof Error ? err.message : "unknown error");
       return { ok: false, message: "Sign-in failed. Please try again." };
     }
-  }, [activeProfileId, promptGoogle, requirePurchase, updatePrefs]);
+  }, [activeProfileId, promptGoogle, updatePrefs]);
 
-  const refreshSubscriptions = useCallback(async (): Promise<AddChannelResult> => {
-    if (!requirePurchase("import")) return { ok: false, message: "Google connection is part of Frame Premium." };
+  const loadGoogleSubscriptions = useCallback(async (pageToken?: string): Promise<ServiceResult<GoogleSubscriptionPage>> => {
     if (!googleCredential || googleCredential.expiresAt <= Date.now()) {
       setGoogleCredential(null);
       await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
       await updatePrefs({ googleEmail: null, googleConnectedAt: null });
-      return { ok: false, message: "Your Google connection expired. Sign in again to refresh." };
+      return { status: "unauthorized", message: "Your Google connection expired. Sign in again to continue." };
     }
-    return getGoogleImportAvailability();
-  }, [activeProfileId, googleCredential, requirePurchase, updatePrefs]);
+    const result = await fetchSubscriptions(googleCredential.accessToken, pageToken);
+    if (result.status === "unauthorized") {
+      setGoogleCredential(null);
+      await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
+      await updatePrefs({ googleEmail: null, googleConnectedAt: null });
+    }
+    return result;
+  }, [activeProfileId, googleCredential, updatePrefs]);
+
+  const importGoogleSubscriptions = useCallback(async (selected: FollowedChannel[]): Promise<GoogleImportResult> => {
+    if (selected.length === 0) return { ok: false, importedCount: 0, message: "Choose at least one subscription." };
+    const profileId = activeProfileId;
+    if (!await authorizeProtectedAction(profileId)) return { ok: false, importedCount: 0, message: "Source change cancelled." };
+    if (profileId !== activeProfileIdRef.current) return { ok: false, importedCount: 0, message: "The active profile changed. Review your choices and try again." };
+    setImporting(true);
+    try {
+      const existing = await followedSourceRepository.listForProfile(profileId);
+      const plan = planSelectiveGoogleImport(selected, new Set(existing.map((source) => source.id)), PRODUCT_LIMITS.futureSourcesPerProfile);
+      if (plan.overflowCount > 0) {
+        return { ok: false, importedCount: 0, message: `This profile can follow up to ${PRODUCT_LIMITS.futureSourcesPerProfile} sources. Choose fewer subscriptions.` };
+      }
+      if (plan.channels.length === 0) {
+        return { ok: true, importedCount: 0, message: plan.alreadyFollowedCount > 0 ? "Those subscriptions are already followed in Frame." : "No new subscriptions were selected." };
+      }
+      const followedAt = Date.now();
+      await followedSourceRepository.followMany(profileId, plan.channels.map((channel) => ({ ...channel, followedAt, source: "google" })));
+      queueSourceLeaseReconciliation("local_change");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["library", profileId] }),
+        queryClient.invalidateQueries({ queryKey: ["today", profileId] }),
+      ]);
+      const count = plan.channels.length;
+      return { ok: true, importedCount: count, message: `${count} ${count === 1 ? "source" : "sources"} added to Frame.` };
+    } catch (error) {
+      console.warn("[google] import failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, importedCount: 0, message: "Frame couldn't add those sources. Nothing was removed; try again." };
+    } finally {
+      setImporting(false);
+    }
+  }, [activeProfileId, authorizeProtectedAction, queryClient]);
 
   const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (googleCredential) {
@@ -1195,7 +1231,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       importing,
       signInWithGoogle,
       signOutGoogle,
-      refreshSubscriptions,
+      loadGoogleSubscriptions,
+      importGoogleSubscriptions,
       resolveSourceInput,
       confirmSource,
       savedVideos: savedQuery.data ?? [],
@@ -1288,7 +1325,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       importing,
       signInWithGoogle,
       signOutGoogle,
-      refreshSubscriptions,
+      loadGoogleSubscriptions,
+      importGoogleSubscriptions,
       resolveSourceInput,
       confirmSource,
       savedQuery.data,

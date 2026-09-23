@@ -14,7 +14,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "Optional account connection",
-    body: "If you choose to connect Google, Frame receives your email address and stores the sign-in credential securely on your device. Frame does not read or automatically follow your YouTube subscriptions in this version. Disconnecting revokes access before removing the local credential; manually selected sources remain in your library.",
+    body: "If you choose to connect Google, Frame receives your email address and stores the sign-in credential securely on your device. Frame reads a bounded page of subscriptions only when you open the import screen and follows only sources you select. Disconnecting revokes access before removing the local credential; selected sources remain in your library.",
   },
   {
     title: "Premium purchases",

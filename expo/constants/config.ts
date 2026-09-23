@@ -76,5 +76,5 @@ export function isGooglePlatformConfigured(): boolean {
   return Boolean(GOOGLE_CONFIG.webClientId);
 }
 
-/** Minimal scopes used while selective YouTube subscription import is unavailable. */
-export const GOOGLE_SCOPES = ["openid", "email", "profile"];
+/** Read-only access supports an explicit, user-selected subscription import. */
+export const GOOGLE_SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/youtube.readonly"];
