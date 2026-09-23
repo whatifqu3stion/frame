@@ -2,18 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { ArrowRight, Import, Plus, SlidersHorizontal } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
+import WeeklyPickCard from "@/components/WeeklyPickCard";
+import { INTEREST_LIBRARY } from "@/constants/interests";
 import { FOUNDATION_CAPABILITIES, PRODUCT_LIMITS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { discoveryService, shouldRequestWeeklyPicks } from "@/services/discovery";
+import { discoveryService, shouldRequestWeeklyPicks, weeklyDiscoveryPeriodKey, weeklyPickToSourceResolution } from "@/services/discovery";
+import type { WeeklyPickSourceSuggestion } from "@/types";
 
 type SourcesSection = "followed" | "discover";
 
@@ -21,20 +24,33 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle } = useApp();
+  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [googleBusy, setGoogleBusy] = useState<boolean>(false);
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
+  const [followFeedback, setFollowFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const activeProfileRef = useRef(activeProfileId);
+  const interestIds = interests.map((interest) => interest.id);
+  const interestNames = useMemo(() => new Map(INTEREST_LIBRARY.map((interest) => [interest.id, interest.name])), []);
+  const followedIds = useMemo(() => new Set(followedChannels.map((channel) => channel.id)), [followedChannels]);
+  const weeklyPeriod = weeklyDiscoveryPeriodKey();
   const discoverQuery = useQuery({
-    queryKey: ["weekly-picks", activeProfileId, interests.map((interest) => interest.id).join(",")],
-    queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interests.map((interest) => interest.id)),
-    enabled: section === "discover" && shouldRequestWeeklyPicks(interests.map((interest) => interest.id)),
+    queryKey: ["weekly-picks", activeProfileId, interestIds.join(","), weeklyPeriod],
+    queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interestIds),
+    enabled: section === "discover" && shouldRequestWeeklyPicks(interestIds),
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
+
+  useEffect(() => {
+    activeProfileRef.current = activeProfileId;
+    setFollowBusyId(null);
+    setFollowFeedback({});
+  }, [activeProfileId]);
 
   const openAddSource = (): void => {
     setAddOpen(true);
@@ -49,6 +65,30 @@ export default function SourcesScreen() {
     else Alert.alert("Google connection", result.message);
   };
 
+  const followWeeklyPick = async (suggestion: WeeklyPickSourceSuggestion): Promise<void> => {
+    if (followBusyId || followedIds.has(suggestion.providerSourceId)) return;
+    const requestProfileId = activeProfileId;
+    const sourceId = suggestion.providerSourceId;
+    setFollowBusyId(sourceId);
+    setFollowFeedback((current) => {
+      const next = { ...current };
+      delete next[sourceId];
+      return next;
+    });
+    try {
+      const result = await confirmSource(weeklyPickToSourceResolution(suggestion));
+      if (activeProfileRef.current !== requestProfileId) return;
+      setFollowFeedback((current) => ({ ...current, [sourceId]: result }));
+    } catch {
+      if (activeProfileRef.current !== requestProfileId) return;
+      setFollowFeedback((current) => ({ ...current, [sourceId]: { ok: false, message: "Frame couldn’t add this source. Try again." } }));
+    } finally {
+      if (activeProfileRef.current === requestProfileId) setFollowBusyId(null);
+    }
+  };
+
+  const retryDiscover = (): void => { void discoverQuery.refetch(); };
+
   return (
     <>
       <ScrollView
@@ -57,7 +97,7 @@ export default function SourcesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.page}>
-          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle="Follow trusted sources directly. Frame does not expand this list for you." />
+          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle="Follow trusted sources directly, or review three optional picks each week." />
           {FOUNDATION_CAPABILITIES.weeklyDiscovery ? <View style={styles.segmented} accessibilityRole="tablist">
             {(["followed", "discover"] as const).map((item) => {
               const selected = section === item;
@@ -140,7 +180,10 @@ export default function SourcesScreen() {
               ) : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
                 <VideoFeedSkeleton count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
               ) : discoverQuery.data?.reason === "offline" ? (
-                <EmptyState title="Discover is offline" body={discoverQuery.data.message ?? "Weekly picks need a connection. Your sources and preferences were not changed."} />
+                <View>
+                  <EmptyState title="Discover is offline" body={discoverQuery.data.message ?? "Weekly picks need a connection. Your sources and preferences were not changed."} />
+                  <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
+                </View>
               ) : discoverQuery.data?.reason === "configuration" ? (
                 <EmptyState title="Discover isn't configured" body={discoverQuery.data.message ?? "Weekly picks are not configured for this build."} />
               ) : discoverQuery.data?.reason === "maintenance" ? (
@@ -148,22 +191,49 @@ export default function SourcesScreen() {
               ) : discoverQuery.data?.reason === "empty" ? (
                 <EmptyState title="No picks this week" body={discoverQuery.data.message ?? "There is no current publication for your interests."} />
               ) : discoverQuery.isError || discoverQuery.data?.reason === "backend" || discoverQuery.data?.status === "temporarily_unavailable" ? (
-                <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "The weekly service is unavailable. No replacement recommendations were generated."} />
+                <View>
+                  <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "The weekly service is unavailable. No replacement recommendations were generated."} />
+                  <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
+                </View>
+              ) : discoverQuery.data && discoverQuery.data.items.length > 0 ? (
+                <View style={styles.weeklyList}>
+                  {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing the saved weekly edition.</Text> : null}
+                  {discoverQuery.data.items.map((suggestion) => (
+                    <WeeklyPickCard
+                      key={`${suggestion.provider}:${suggestion.providerSourceId}`}
+                      suggestion={suggestion}
+                      interestName={interestNames.get(suggestion.interestId) ?? "Your interests"}
+                      followed={followedIds.has(suggestion.providerSourceId)}
+                      busy={followBusyId === suggestion.providerSourceId}
+                      feedback={followFeedback[suggestion.providerSourceId]}
+                      onFollow={() => { void followWeeklyPick(suggestion); }}
+                    />
+                  ))}
+                </View>
               ) : (
-                <EmptyState title="Weekly picks stay hidden for now" body="The secure read path is ready. Source cards and actions will arrive in a later Frame Picks release." />
+                <EmptyState title="No picks this week" body="There is no current publication for your interests. Your followed sources are still available." />
               )}
               <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />
                 <Text style={styles.endText}>End of weekly picks</Text>
                 <View style={styles.endLine} />
               </View>
-              <Text style={styles.discoverNote}>Future releases will show no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} suggestions total and refresh no more than once every {PRODUCT_LIMITS.discoveryCadenceDays} days.</Text>
+              <Text style={styles.discoverNote}>Frame shows no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} shared suggestions and checks for a new edition once every {PRODUCT_LIMITS.discoveryCadenceDays} days.</Text>
             </View>
           )}
         </View>
       </ScrollView>
       <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />
     </>
+  );
+}
+
+function RetryButton({ busy, onPress, styles }: { busy: boolean; onPress(): void; styles: ReturnType<typeof createStyles> }) {
+  return (
+    <Pressable onPress={onPress} disabled={busy} style={styles.retryButton} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} testID="weekly-picks-retry">
+      {busy ? <ActivityIndicator size="small" /> : null}
+      <Text style={styles.retryButtonText}>{busy ? "Trying again…" : "Try again"}</Text>
+    </Pressable>
   );
 }
 
@@ -190,12 +260,16 @@ function createStyles(palette: FramePalette, type: FrameType) {
     sourceName: { ...type.heading, fontSize: 17, lineHeight: 22 },
     weeklyHeader: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     limitLabel: { ...type.caption, color: palette.active, fontSize: 9 },
+    weeklyList: { gap: spacing.md },
+    cacheNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginBottom: spacing.xs },
     endState: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg },
     endLine: { flex: 1, height: 1, backgroundColor: palette.borderSoft },
     endText: { ...type.caption, color: palette.inkMuted },
     discoverNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
     settingsButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
     settingsButtonText: { ...type.label, color: palette.active },
+    retryButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+    retryButtonText: { ...type.label, color: palette.active },
     pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   });
 }

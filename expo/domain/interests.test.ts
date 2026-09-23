@@ -53,7 +53,7 @@ describe("Round 2B interest compatibility", () => {
 
   test("does no Weekly Picks work for zero interests and caps weekly display at three total", () => {
     expect(shouldRequestWeeklyPicks([])).toBe(false);
-    expect(shouldRequestWeeklyPicks(["science"])).toBe(false);
+    expect(shouldRequestWeeklyPicks(["science"])).toBe(true);
     expect(shouldRequestWeeklyPicks(["science"], true)).toBe(true);
     expect(shouldRequestWeeklyPicks([], true)).toBe(false);
     expect(WEEKLY_DISCOVERY_DISPLAY_MAX).toBe(3);
