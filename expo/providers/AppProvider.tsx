@@ -13,6 +13,7 @@ import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
 import type { TodaySourceRule } from "@/models/today";
 import type { ViewingAllowance, ViewingAllowanceStatus } from "@/models/viewingAllowance";
+import type { ManagedPlaybackControls, PlaybackControlStatus } from "@/models/playbackControls";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
@@ -39,6 +40,7 @@ import { installationIdentityStore } from "@/storage/installationIdentityStorage
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
 import { profileRepository } from "@/repositories/profileRepository";
 import { viewingAllowanceService } from "@/services/viewingAllowanceService";
+import { playbackControlsService } from "@/services/playbackControlsService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
 import { confirmSourceFollow } from "@/services/sourceResolutionFlow";
@@ -89,6 +91,15 @@ const sourceLeaseCoordinator = createSourceLeaseCoordinator({
 
 function queueSourceLeaseReconciliation(reason: SourceLeaseReconciliationReason): void {
   void sourceLeaseCoordinator.reconcile(reason).catch(() => {});
+}
+
+function combinePlaybackStatus(allowance: ViewingAllowanceStatus, controls: PlaybackControlStatus): ViewingAllowanceStatus {
+  if (!controls.canPlay) {
+    if (controls.kind === "ownerReview") return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: controls.reason };
+    return { kind: "restricted", canPlay: false, remainingSeconds: 0, restriction: controls.kind, reason: controls.reason, ...(controls.availableAt ? { availableAt: controls.availableAt } : {}) };
+  }
+  if (!allowance.canPlay || controls.sessionRemainingSeconds === undefined) return allowance;
+  return { ...allowance, sessionRemainingSeconds: controls.sessionRemainingSeconds };
 }
 
 export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
@@ -474,7 +485,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, draftWritesRef.current.get(previousProfileId)]);
       storageGenerationRef.current += 1;
-      await viewingAllowanceService.stopPlaying();
+      await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]);
       await Promise.all([
         queryClient.cancelQueries({ queryKey: ["library", previousProfileId] }),
         queryClient.cancelQueries({ queryKey: ["today", previousProfileId] }),
@@ -588,6 +599,26 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [hasOwnerPin, profiles, authorizeProtectedAction]);
 
+  const getManagedPlaybackControls = useCallback(async (profileId: string): Promise<ManagedPlaybackControls> => {
+    if (profileId !== activeProfileIdRef.current && !authorizationSessionRef.current.isAuthorized()) throw new Error("Owner authorization is required to view another profile’s controls.");
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile || profile.role !== "managed") throw new Error("Managed profile unavailable.");
+    return playbackControlsService.getControls(profile);
+  }, [profiles]);
+
+  const setManagedPlaybackControls = useCallback(async (profileId: string, controls: ManagedPlaybackControls): Promise<AddChannelResult> => {
+    if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required to change Managed playback controls." };
+    if (!hasOwnerPin) return { ok: false, message: "Create an Owner PIN before enabling Managed playback controls." };
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile || profile.role !== "managed") return { ok: false, message: "That Managed profile is no longer available." };
+    try {
+      await playbackControlsService.setControls(profile, controls);
+      return { ok: true, message: "Managed playback controls updated." };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t update those controls." };
+    }
+  }, [authorizeProtectedAction, hasOwnerPin, profiles]);
+
   const cancelPendingOwnerAllowance = useCallback(async (): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required." };
     const owner = profiles.find((candidate) => candidate.role === "owner");
@@ -604,17 +635,36 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (profileId && profileId !== activeProfileIdRef.current && !authorizationSessionRef.current.isAuthorized()) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Owner authorization is required to view another profile’s allowance." };
     const profile = profiles.find((candidate) => candidate.id === (profileId ?? activeProfileIdRef.current));
     if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
-    return viewingAllowanceService.getStatus(profile);
+    const controls = await playbackControlsService.getStatus(profile);
+    if (!controls.canPlay) return combinePlaybackStatus({ kind: "unlimited", canPlay: true }, controls);
+    return combinePlaybackStatus(await viewingAllowanceService.getStatus(profile), controls);
   }, [profiles]);
 
   const beginAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus> => {
     const profile = profiles.find((candidate) => candidate.id === activeProfileIdRef.current);
     if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
-    return viewingAllowanceService.beginPlaying(profile);
+    const controls = await playbackControlsService.beginPlaying(profile);
+    if (!controls.canPlay) return combinePlaybackStatus({ kind: "unlimited", canPlay: true }, controls);
+    const allowance = await viewingAllowanceService.beginPlaying(profile);
+    if (!allowance.canPlay) await playbackControlsService.stopPlaying();
+    return combinePlaybackStatus(allowance, controls);
   }, [profiles]);
 
-  const checkpointAllowancePlayback = useCallback((): Promise<ViewingAllowanceStatus> => viewingAllowanceService.checkpoint(), []);
-  const stopAllowancePlayback = useCallback((): Promise<ViewingAllowanceStatus | null> => viewingAllowanceService.stopPlaying(), []);
+  const checkpointAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus> => {
+    const controls = await playbackControlsService.checkpoint();
+    if (!controls.canPlay) {
+      await viewingAllowanceService.stopPlaying();
+      return combinePlaybackStatus({ kind: "unlimited", canPlay: true }, controls);
+    }
+    const allowance = await viewingAllowanceService.checkpoint();
+    if (!allowance.canPlay) await playbackControlsService.stopPlaying();
+    return combinePlaybackStatus(allowance, controls);
+  }, []);
+  const stopAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus | null> => {
+    const [allowance, controls] = await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]);
+    if (!allowance && !controls) return null;
+    return combinePlaybackStatus(allowance ?? { kind: "unlimited", canPlay: true }, controls ?? { kind: "available", canPlay: true });
+  }, []);
 
   const verifyCurrentPinForChange = useCallback(async (pin: string): Promise<boolean> => {
     if (!pin || authorizationSessionRef.current.getCooldownUntil() > Date.now() || pinVerificationRef.current) return false;
@@ -1128,7 +1178,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!confirmedRecovery && !await authorizeProtectedAction()) throw new Error("Owner authorization required before erasing local data.");
     storageGenerationRef.current += 1;
     await performFullReset({
-      stopPlayback: async () => { await viewingAllowanceService.stopPlaying(); },
+      stopPlayback: async () => { await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]); },
       flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, ...draftWritesRef.current.values()]); },
       clearProtectedCredentials: async () => {
         if (ownerPinAvailability !== "available") return;
@@ -1178,6 +1228,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       reorderLocalProfile,
       deleteLocalProfile,
       setProfileViewingAllowance,
+      getManagedPlaybackControls,
+      setManagedPlaybackControls,
       cancelPendingOwnerAllowance,
       getPlaybackAllowance,
       beginAllowancePlayback,
@@ -1278,6 +1330,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       reorderLocalProfile,
       deleteLocalProfile,
       setProfileViewingAllowance,
+      getManagedPlaybackControls,
+      setManagedPlaybackControls,
       cancelPendingOwnerAllowance,
       getPlaybackAllowance,
       beginAllowancePlayback,

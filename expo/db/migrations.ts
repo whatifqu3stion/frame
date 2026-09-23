@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 7;
+export const DATABASE_SCHEMA_VERSION = 8;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -126,6 +126,28 @@ export const CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL = `CREATE TABLE IF NOT EXIS
   consumedSeconds INTEGER NOT NULL,
   warnedFive INTEGER NOT NULL,
   warnedOne INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS profile_playback_controls (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  allowedStartMinute INTEGER,
+  allowedEndMinute INTEGER,
+  quietStartMinute INTEGER,
+  quietEndMinute INTEGER,
+  sessionLimitMinutes INTEGER,
+  sessionBreakMinutes INTEGER NOT NULL DEFAULT 15,
+  pausedUntil INTEGER,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_PROFILE_SESSION_USAGE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS profile_session_usage (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  lastPlaybackAt INTEGER,
+  consumedSeconds INTEGER NOT NULL DEFAULT 0,
+  lockedUntil INTEGER,
   updatedAt INTEGER NOT NULL,
   FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
 )`;
@@ -278,6 +300,15 @@ export function buildVersion7MigrationPlan(): string[] {
   ];
 }
 
+/** Adds optional, profile-local Managed playback schedules and durable session breaks. */
+export function buildVersion8MigrationPlan(): string[] {
+  return [
+    CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL,
+    CREATE_PROFILE_SESSION_USAGE_TABLE_SQL,
+    "PRAGMA user_version = 8",
+  ];
+}
+
 function seedDefaultOwnerSql(): string {
   return `INSERT OR IGNORE INTO profiles (id, name, role, createdAt, updatedAt) VALUES ('${DEFAULT_OWNER_PROFILE_ID}', '${DEFAULT_OWNER_PROFILE_NAME}', 'owner', 0, 0)`;
 }
@@ -361,5 +392,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 7) {
     await executeMigrationTransaction(db, buildVersion7MigrationPlan());
+    currentVersion = 7;
+  }
+  if (currentVersion < 8) {
+    await executeMigrationTransaction(db, buildVersion8MigrationPlan());
   }
 }

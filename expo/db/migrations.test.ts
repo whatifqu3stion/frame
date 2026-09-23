@@ -4,6 +4,8 @@ import {
   CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL,
+  CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL,
+  CREATE_PROFILE_SESSION_USAGE_TABLE_SQL,
   CREATE_SOURCE_RULES_TABLE_SQL,
   CREATE_TODAY_SNAPSHOTS_TABLE_SQL,
   CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL,
@@ -13,6 +15,7 @@ import {
   buildVersion2MigrationPlan,
   buildVersion3MigrationPlan,
   buildVersion4MigrationPlan,
+  buildVersion8MigrationPlan,
   createProfileOwnedTableSql,
   executeMigrationTransaction,
   migrateDatabase,
@@ -67,7 +70,7 @@ describe("database version 1 migration", () => {
       const version = database.query("PRAGMA user_version").get() as { user_version: number };
       const tables = database.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[];
       expect(version.user_version).toBe(DATABASE_SCHEMA_VERSION);
-      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "today_snapshots", "today_snapshot_items", "source_rules", ...PROFILE_OWNED_TABLES]));
+      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage", "today_snapshots", "today_snapshot_items", "source_rules", ...PROFILE_OWNED_TABLES]));
       expect(database.query("SELECT role, sortOrder FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner", sortOrder: 0 });
     } finally {
       database.close();
@@ -105,6 +108,7 @@ describe("database version 1 migration", () => {
     expect(buildVersion2MigrationPlan()).toContain(CREATE_MANAGED_ALLOWANCES_TABLE_SQL);
     expect(buildVersion3MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL, CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL]));
     expect(buildVersion4MigrationPlan()).toEqual(expect.arrayContaining([CREATE_TODAY_SNAPSHOTS_TABLE_SQL, CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL, CREATE_SOURCE_RULES_TABLE_SQL]));
+    expect(buildVersion8MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL, CREATE_PROFILE_SESSION_USAGE_TABLE_SQL]));
   });
 
   test("assigns representative legacy records to the stable Owner", () => {

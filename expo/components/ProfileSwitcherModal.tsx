@@ -54,14 +54,14 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
                   testID={`switch-profile-${profile.id}`}
                 >
                   <View style={[styles.avatar, isActive && styles.avatarActive]}>{profile.role === "managed" ? <Clock3 size={19} color={isActive ? palette.active : palette.inkMuted} /> : <UserRound size={19} color={isActive ? palette.active : palette.inkMuted} />}</View>
-                  <View style={styles.flex}><Text style={styles.name}>{profile.name}</Text><Text style={styles.role}>{profile.role === "owner" ? "Owner" : profile.role === "managed" ? "Managed · Daily Frame time" : "Standard"}{profile.role === "owner" && hasOwnerPin ? " · PIN" : ""}</Text></View>
+                  <View style={styles.flex}><Text style={styles.name}>{profile.name}</Text><Text style={styles.role}>{profile.role === "owner" ? "Owner" : profile.role === "managed" ? "Managed · Playback boundaries" : "Standard"}{profile.role === "owner" && hasOwnerPin ? " · PIN" : ""}</Text></View>
                   {profileSwitching && !isActive ? <ActivityIndicator size="small" color={palette.active} /> : isActive ? <Check size={18} color={palette.active} /> : profile.role === "owner" && hasOwnerPin ? <LockKeyhole size={16} color={palette.inkMuted} /> : <ChevronRight size={17} color={palette.inkMuted} />}
                 </Pressable>
               );
             })}
           </View>
           {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-          <Text style={styles.note}>Each profile keeps its own sources, library, progress, interests, appearance, and viewing allowance on this device.</Text>
+          <Text style={styles.note}>Each profile keeps its own sources, library, progress, interests, appearance, and playback boundaries on this device.</Text>
         </Pressable>
       </Pressable>
     </Modal>

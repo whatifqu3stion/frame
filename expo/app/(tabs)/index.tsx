@@ -109,7 +109,9 @@ export default function TodayScreen() {
       const allowance = await getPlaybackAllowance(activeProfileId);
       if (activeProfileRef.current !== activeProfileId || profileSwitching) return;
       if (!allowance.canPlay) {
-        Alert.alert("Today’s viewing is complete", allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.");
+        const title = allowance.kind === "restricted" ? "Playback isn’t available now" : allowance.kind === "ownerReview" ? "Owner review needed" : "Today’s viewing is complete";
+        const message = allowance.kind === "restricted" || allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.";
+        Alert.alert(title, message);
         return;
       }
       router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: String(item.durationSeconds), cachedMetadata: "1", fetchedAt: String(item.fetchedAt), origin: "today", todayProfileId: activeProfileId, todayPeriodKey: item.periodKey } });
