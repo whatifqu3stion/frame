@@ -252,8 +252,15 @@ function groupCandidates(candidates: readonly WeeklyPickCandidate[]): Map<string
 function normalizeReason(value: string): string | null {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length < 10 || normalized.length > 240) return null;
-  if (/https?:\/\//i.test(normalized) || /[\u0000-\u001f\u007f]/.test(normalized)) return null;
+  if (/https?:\/\//i.test(normalized) || containsControlCharacter(normalized)) return null;
   return normalized;
+}
+
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
 }
 
 function reservationMessage(outcome: Exclude<WeeklyPickAiReservation, "reserved">): string {
