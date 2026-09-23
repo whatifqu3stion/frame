@@ -125,6 +125,17 @@ export type FollowedChannel = Channel & {
   source: ChannelProvenance;
 };
 
+/** One deliberately requested page of the signed-in user's subscriptions. */
+export type GoogleSubscriptionPage = {
+  items: FollowedChannel[];
+  nextPageToken: string | null;
+  totalResults: number | null;
+};
+
+export type GoogleImportResult = AddChannelResult & {
+  importedCount: number;
+};
+
 export type ResumePosition = {
   videoId: string;
   timestampSeconds: number;

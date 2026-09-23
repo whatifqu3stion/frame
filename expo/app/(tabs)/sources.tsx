@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { ArrowRight, Plus, SlidersHorizontal } from "lucide-react-native";
+import { ArrowRight, Import, Plus, SlidersHorizontal } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
@@ -21,9 +21,10 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError } = useApp();
+  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
+  const [googleBusy, setGoogleBusy] = useState<boolean>(false);
   const discoverQuery = useQuery({
     queryKey: ["weekly-picks", activeProfileId, interests.map((interest) => interest.id).join(",")],
     queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interests.map((interest) => interest.id)),
@@ -37,6 +38,15 @@ export default function SourcesScreen() {
 
   const openAddSource = (): void => {
     setAddOpen(true);
+  };
+
+  const openGoogleImport = async (): Promise<void> => {
+    if (googleConnected) { router.push("/google-import"); return; }
+    setGoogleBusy(true);
+    const result = await signInWithGoogle();
+    setGoogleBusy(false);
+    if (result.ok) router.push("/google-import");
+    else Alert.alert("Google connection", result.message);
   };
 
   return (
@@ -76,6 +86,12 @@ export default function SourcesScreen() {
                 </View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable>
+
+              {googleConfigured ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
+                <View style={styles.importIcon}>{googleBusy ? <ActivityIndicator size="small" color={palette.active} /> : <Import size={17} color={palette.active} strokeWidth={1.8} />}</View>
+                <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose Google subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Select sources yourself. Nothing is followed automatically.</Text></View>
+                <ArrowRight size={17} color={palette.inkMuted} />
+              </Pressable> : null}
 
               {libraryLoading ? (
                 <VideoFeedSkeleton count={3} accessibilityLabel="Loading followed sources" />
@@ -164,6 +180,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
     section: { marginTop: spacing.lg },
     addButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     addIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: palette.activeSoft },
+    importButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    importIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: palette.activeSoft },
     supporting: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
     sourceList: { gap: spacing.sm },
     sourceRow: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },

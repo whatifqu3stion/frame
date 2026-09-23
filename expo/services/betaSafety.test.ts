@@ -7,7 +7,7 @@ const source = (path: string): Promise<string> => readFile(new URL(path, import.
 describe("free beta boundaries", () => {
   test("keeps billing and unfinished entry points disabled", () => {
     expect(FOUNDATION_CAPABILITIES.paidAccess).toBeFalse();
-    expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeFalse();
+    expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeTrue();
     expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeFalse();
   });
 
