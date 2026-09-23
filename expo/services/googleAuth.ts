@@ -3,6 +3,10 @@ import type { FollowedChannel, GoogleSubscriptionPage, ServiceResult } from "@/t
 const SUBSCRIPTIONS_URL = "https://www.googleapis.com/youtube/v3/subscriptions";
 const YOUTUBE_SOURCE_ID = /^UC[A-Za-z0-9_-]{22}$/;
 
+function isSafePageToken(value: string): boolean {
+  return value.length <= 512 && !/[\u0000-\u001F\u007F]/.test(value);
+}
+
 function googleFailure<T>(status: number): ServiceResult<T> {
   if (status === 401) return { status: "unauthorized", message: "Your Google connection expired. Sign in again to continue." };
   if (status === 403) return { status: "unavailable", message: "Google couldn't read these subscriptions. Disconnect and reconnect Frame, then try again." };
@@ -72,7 +76,7 @@ function parseSubscription(value: unknown, fetchedAt: number): FollowedChannel |
 /** Reads one bounded page only. Calling this never follows a source. */
 export async function fetchSubscriptions(accessToken: string, pageToken?: string): Promise<ServiceResult<GoogleSubscriptionPage>> {
   if (!accessToken.trim()) return { status: "unauthorized", message: "Connect Google before importing subscriptions." };
-  if (pageToken && (pageToken.length > 512 || !/^[A-Za-z0-9._~-]+$/.test(pageToken))) {
+  if (pageToken && !isSafePageToken(pageToken)) {
     return { status: "invalid_request", message: "That subscription page could not be requested." };
   }
   const params = new URLSearchParams({ part: "snippet", mine: "true", maxResults: "50", order: "alphabetical" });
@@ -90,7 +94,7 @@ export async function fetchSubscriptions(accessToken: string, pageToken?: string
     const total = data.pageInfo?.totalResults;
     const page: GoogleSubscriptionPage = {
       items: unique,
-      nextPageToken: typeof data.nextPageToken === "string" && data.nextPageToken.length <= 512 ? data.nextPageToken : null,
+      nextPageToken: typeof data.nextPageToken === "string" && isSafePageToken(data.nextPageToken) ? data.nextPageToken : null,
       totalResults: typeof total === "number" && Number.isInteger(total) && total >= 0 ? total : null,
     };
     if (unique.length === 0) return { status: "empty", data: page, message: "No subscriptions were found on this page." };

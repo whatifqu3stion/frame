@@ -50,7 +50,7 @@ describe("selective Google subscription reads", () => {
   test("does not request with an invalid page token", async () => {
     let calls = 0;
     globalThis.fetch = (async () => { calls += 1; return Response.json({ items: [] }); }) as typeof fetch;
-    expect((await fetchSubscriptions("token", "bad token!"))).toMatchObject({ status: "invalid_request" });
+    expect((await fetchSubscriptions("token", "bad\ntoken"))).toMatchObject({ status: "invalid_request" });
     expect(calls).toBe(0);
   });
 
