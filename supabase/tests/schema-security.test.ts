@@ -5,6 +5,7 @@ const controlsPath = new URL("../migrations/20260830150100_service_controls.sql"
 const readPath = new URL("../migrations/20260830150200_weekly_picks_read.sql", import.meta.url);
 const hardenedReadPath = new URL("../migrations/20260830150300_harden_weekly_picks.sql", import.meta.url);
 const taxonomyPath = new URL("../migrations/20260830210000_stabilize_discovery_taxonomy.sql", import.meta.url);
+const publicationPath = new URL("../migrations/20260923193000_weekly_pick_publication.sql", import.meta.url);
 const functionPath = new URL("../functions/weekly-picks/index.ts", import.meta.url);
 const weeklyPicksLogicPath = new URL("../functions/_shared/weekly-picks.ts", import.meta.url);
 const deploymentSyncPath = new URL("../sync-weekly-picks-deployment.ts", import.meta.url);
@@ -70,6 +71,22 @@ describe("shared schema constraints", () => {
     expect(migration).toContain("unique (pick_set_id, display_order)");
   });
 
+  test("publishes only bounded, validated, server-side Weekly Picks", async () => {
+    const migration = await sql(publicationPath);
+    expect(migration).toContain("create or replace function public.publish_weekly_pick_set");
+    expect(migration).toContain("p_period_end <> p_period_start + 6");
+    expect(migration).toContain("v_pick_count < 1 or v_pick_count > 3");
+    expect(migration).toContain("A source may appear only once");
+    expect(migration).toContain("sources.status = 'active'");
+    expect(migration).toContain("media.source_id = v_source_id");
+    expect(migration).toContain("not media.is_livestream");
+    expect(migration).toContain("not media.is_upcoming_premiere");
+    expect(migration).toContain("set status = 'published'");
+    expect(migration).toContain("grant execute on function public.publish_weekly_pick_set(text, date, date, jsonb) to service_role;");
+    expect(migration).not.toContain("grant execute on function public.publish_weekly_pick_set(text, date, date, jsonb) to anon");
+    expect(migration).not.toContain("grant execute on function public.publish_weekly_pick_set(text, date, date, jsonb) to authenticated");
+  });
+
   test("creates no cloud tables for private viewing behavior", async () => {
     const migrations = `${await sql(catalogPath)}\n${await sql(controlsPath)}\n${await sql(readPath)}\n${await sql(hardenedReadPath)}\n${await sql(taxonomyPath)}`;
     for (const tableName of privateTableNames) {
@@ -98,11 +115,13 @@ describe("database access boundary", () => {
   });
 
   test("allows only service-role execution of operational functions", async () => {
-    const migrations = `${await sql(controlsPath)}\n${await sql(readPath)}\n${await sql(hardenedReadPath)}`;
+    const migrations = `${await sql(controlsPath)}\n${await sql(readPath)}\n${await sql(hardenedReadPath)}\n${await sql(publicationPath)}`;
     expect(migrations).toContain("revoke execute on function public.increment_daily_provider_usage(text, bigint, bigint) from public, anon, authenticated;");
     expect(migrations).toContain("grant execute on function public.increment_daily_provider_usage(text, bigint, bigint) to service_role;");
     expect(migrations).toContain("revoke execute on function public.get_current_weekly_picks(text[]) from public, anon, authenticated;");
     expect(migrations).toContain("grant execute on function public.get_current_weekly_picks(text[]) to service_role;");
+    expect(migrations).toContain("revoke all on function public.publish_weekly_pick_set(text, date, date, jsonb) from public, anon, authenticated;");
+    expect(migrations).toContain("grant execute on function public.publish_weekly_pick_set(text, date, date, jsonb) to service_role;");
   });
 
   test("database read function independently filters published current sets", async () => {
