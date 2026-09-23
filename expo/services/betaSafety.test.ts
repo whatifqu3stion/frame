@@ -5,10 +5,10 @@ import { FOUNDATION_CAPABILITIES } from "../constants/productConfig";
 const source = (path: string): Promise<string> => readFile(new URL(path, import.meta.url).pathname, "utf8");
 
 describe("free beta boundaries", () => {
-  test("keeps billing and unfinished entry points disabled", () => {
+  test("keeps billing disabled while launch discovery stays free", () => {
     expect(FOUNDATION_CAPABILITIES.paidAccess).toBeFalse();
     expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeTrue();
-    expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeFalse();
+    expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeTrue();
   });
 
   test("free access is independent of purchase status and does not pretend to be an entitlement", async () => {

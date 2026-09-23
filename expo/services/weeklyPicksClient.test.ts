@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createDiscoveryService, mapWeeklyPicksClientResult } from "./discovery";
+import {
+  createDiscoveryService,
+  mapWeeklyPicksClientResult,
+  selectWeeklyPickSuggestions,
+  weeklyDiscoveryPeriodKey,
+  weeklyPickToSourceResolution,
+} from "./discovery";
 import {
   createWeeklyPicksClient,
   type WeeklyPicksClient,
@@ -81,7 +87,7 @@ describe("Round 2C Weekly Picks client", () => {
         requestCount += 1;
         return { status: "success", response: maintenanceResponse };
       },
-    });
+    }, false);
 
     const result = await service.getWeeklyPicks("private-profile-id", []);
     expect(result).toMatchObject({ status: "success", reason: "no_interests", items: [] });
@@ -210,5 +216,74 @@ describe("Round 2C Weekly Picks client", () => {
     expect(result.items[0]).not.toHaveProperty("order");
     expect(result.items[0]).not.toHaveProperty("id");
     expect(JSON.stringify(result.items[0])).not.toContain("never-transmitted-profile");
+  });
+
+  test("selects at most three distinct sources while representing interests fairly", () => {
+    const response: WeeklyPicksResponse = {
+      state: "fresh",
+      interests: [
+        {
+          interestId: "science",
+          publicationPeriod: { start: "2026-09-21", end: "2026-09-27" },
+          picks: [
+            { order: 2, reason: "Second science", source: { provider: "youtube", providerSourceId: "science-2", handle: null, displayName: "Science Two", description: "", thumbnailUrl: null } },
+            { order: 1, reason: "Shared", source: { provider: "youtube", providerSourceId: "shared", handle: null, displayName: "Shared Source", description: "", thumbnailUrl: null } },
+          ],
+        },
+        {
+          interestId: "tech",
+          publicationPeriod: { start: "2026-09-21", end: "2026-09-27" },
+          picks: [
+            { order: 1, reason: "Duplicate", source: { provider: "youtube", providerSourceId: "shared", handle: null, displayName: "Shared Source", description: "", thumbnailUrl: null } },
+            { order: 2, reason: "First unique tech", source: { provider: "youtube", providerSourceId: "tech-2", handle: null, displayName: "Tech Two", description: "", thumbnailUrl: null } },
+          ],
+        },
+        {
+          interestId: "history",
+          publicationPeriod: { start: "2026-09-21", end: "2026-09-27" },
+          picks: [
+            { order: 1, reason: "History", source: { provider: "youtube", providerSourceId: "history-1", handle: null, displayName: "History One", description: "", thumbnailUrl: null } },
+          ],
+        },
+      ],
+    };
+
+    const selected = selectWeeklyPickSuggestions(response);
+    expect(selected.map((item) => item.providerSourceId)).toEqual(["shared", "tech-2", "history-1"]);
+    expect(new Set(selected.map((item) => item.providerSourceId)).size).toBe(3);
+    expect(selectWeeklyPickSuggestions(response, 2).map((item) => item.providerSourceId)).toEqual(["shared", "tech-2"]);
+  });
+
+  test("converts a pick into the existing cached follow contract", () => {
+    const result = selectWeeklyPickSuggestions(publishedResponse())[0];
+    expect(weeklyPickToSourceResolution(result)).toEqual({
+      source: {
+        provider: "youtube",
+        providerSourceId: "channel-1",
+        handle: "@frame",
+        displayName: "Source 1",
+        description: "A public source description",
+        thumbnailUrl: "https://example.com/source.jpg",
+      },
+      video: {
+        provider: "youtube",
+        providerMediaId: "video-1",
+        title: "A public video",
+        description: "A public preview",
+        thumbnailUrl: "https://example.com/video.jpg",
+        publishedAt: "2026-08-29T12:00:00.000Z",
+        durationSeconds: 240,
+        isLivestream: false,
+        isUpcomingPremiere: false,
+        madeForKids: null,
+      },
+      provenance: "cache",
+    });
+  });
+
+  test("uses a stable Monday UTC key and advances only at the weekly boundary", () => {
+    expect(weeklyDiscoveryPeriodKey(Date.parse("2026-09-21T00:00:00.000Z"))).toBe("2026-09-21");
+    expect(weeklyDiscoveryPeriodKey(Date.parse("2026-09-27T23:59:59.000Z"))).toBe("2026-09-21");
+    expect(weeklyDiscoveryPeriodKey(Date.parse("2026-09-28T00:00:00.000Z"))).toBe("2026-09-28");
   });
 });

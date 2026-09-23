@@ -20,7 +20,7 @@ export const TODAY_RESET_HOUR = PRODUCT_LIMITS.todayResetHour;
 export const SOURCE_FEED_MAX_SOURCES = PRODUCT_LIMITS.sourceFeedMaxSources;
 export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandidatesPerSource;
 
-/** Round 1 kill switches for backend-dependent or unfinished behavior. */
+/** Central kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
   paidAccess: false,
   localLibrary: true,
@@ -28,7 +28,7 @@ export const FOUNDATION_CAPABILITIES = {
   youtubeDiscovery: false,
   youtubeSearch: false,
   sharedTodayFeed: true,
-  weeklyDiscovery: false,
+  weeklyDiscovery: true,
   googleSelectiveImport: true,
   automaticGoogleFollowing: false,
 } as const;
