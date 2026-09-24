@@ -7,6 +7,7 @@ import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME, type Profile } fr
 import type { ManagedAllowanceRecord } from "@/models/dailyAllowance";
 import type { ProfilePlaybackLimitRecord, ProfilePlaybackUsageRecord } from "@/models/viewingAllowance";
 import type { ProfilePlaybackControlsRecord, ProfileSessionUsageRecord } from "@/models/playbackControls";
+import type { ManagedApprovalRequest, ManagedApprovedSource, ManagedApprovedVideo, ManagedContentMode, ManagedContentPolicy } from "@/models/managedContentAccess";
 import type { FollowedChannel, ResumePosition, Video, VideoQueue, SessionDraft } from "@/types";
 import type { CachedTodayCandidate, TodayDisposition, TodaySnapshot, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
@@ -56,6 +57,10 @@ const webStore = {
   playbackUsage: new Map<string, ProfilePlaybackUsageRecord>(),
   playbackControls: new Map<string, ProfilePlaybackControlsRecord>(),
   sessionUsage: new Map<string, ProfileSessionUsageRecord>(),
+  managedContentPolicies: new Map<string, ManagedContentPolicy>(),
+  managedApprovedVideos: new Map<string, ManagedApprovedVideo>(),
+  managedApprovedSources: new Map<string, ManagedApprovedSource>(),
+  managedApprovalRequests: new Map<string, ManagedApprovalRequest>(),
   saved: new Map<string, Video & { savedAt: number }>(),
   resume: new Map<string, ResumeRow>(),
   queues: new Map<string, VideoQueue>(),
@@ -82,7 +87,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /** Reads non-sensitive database metadata without changing the schema. */
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
-  const expectedTables = ["followed_channels", "managed_allowances", "profile_playback_controls", "profile_playback_limits", "profile_playback_usage", "profile_session_usage", "profiles", "queues", "session_drafts", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
+  const expectedTables = ["followed_channels", "managed_allowances", "managed_approval_requests", "managed_approved_sources", "managed_approved_videos", "managed_content_policies", "profile_playback_controls", "profile_playback_limits", "profile_playback_usage", "profile_session_usage", "profiles", "queues", "session_drafts", "resume_positions", "saved_videos", "source_rules", "today_snapshot_items", "today_snapshots", "watch_later"];
   if (Platform.OS === "web") return { storage: "memory-web-preview", version: DATABASE_SCHEMA_VERSION, tables: expectedTables };
   const db = await getDb();
   const versionRow = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -109,6 +114,7 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
       webStore.allowances.set(profile.id, { ...allowance });
       webStore.playbackLimits.set(profile.id, { profileId: profile.id, dailyLimitMinutes: allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, pendingDailyLimitMinutes: null, pendingActivatesAt: null, updatedAt: allowance.updatedAt });
       webStore.playbackUsage.set(profile.id, { profileId: profile.id, dayKey: allowance.dayKey, dayStartedAt: allowance.dayStartedAt, lastSeenAt: allowance.lastSeenAt, timezoneOffsetMinutes: allowance.timezoneOffsetMinutes, consumedSeconds: allowance.consumedSeconds, warnedFive: allowance.warnedFive, warnedOne: allowance.warnedOne, updatedAt: allowance.updatedAt });
+      webStore.managedContentPolicies.set(profile.id, { profileId: profile.id, mode: "selectedVideos", updatedAt: profile.updatedAt });
     }
     return;
   }
@@ -122,6 +128,7 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
       await writeManagedAllowanceRecord(allowance, db);
       await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt) VALUES (?,?,?,?,?)", [profile.id, allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, null, null, allowance.updatedAt]);
       await db.runAsync("INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)", [profile.id, allowance.dayKey, allowance.dayStartedAt, allowance.lastSeenAt, allowance.timezoneOffsetMinutes, allowance.consumedSeconds, allowance.warnedFive, allowance.warnedOne, allowance.updatedAt]);
+      await db.runAsync("INSERT INTO managed_content_policies (profileId,mode,updatedAt) VALUES (?,?,?)", [profile.id, "selectedVideos", profile.updatedAt]);
     }
   });
 }
@@ -177,6 +184,10 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     webStore.playbackUsage.delete(profileId);
     webStore.playbackControls.delete(profileId);
     webStore.sessionUsage.delete(profileId);
+    webStore.managedContentPolicies.delete(profileId);
+    clearProfileMap(webStore.managedApprovedVideos, profileId);
+    clearProfileMap(webStore.managedApprovedSources, profileId);
+    clearProfileMap(webStore.managedApprovalRequests, profileId);
     webStore.profiles.delete(profileId);
     return;
   }
@@ -184,7 +195,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
   await db.withTransactionAsync(async () => {
     const profile = await db.getFirstAsync<Pick<Profile, "role">>("SELECT role FROM profiles WHERE id = ?", [profileId]);
     if (!profile || profile.role === "owner") throw new Error("Only Standard or Managed profiles can be deleted.");
-    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage", "managed_approval_requests", "managed_approved_videos", "managed_approved_sources", "managed_content_policies"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
     await db.runAsync("DELETE FROM profiles WHERE id = ? AND role != 'owner'", [profileId]);
@@ -278,6 +289,100 @@ export async function upsertProfileSessionUsage(record: ProfileSessionUsageRecor
      ON CONFLICT(profileId) DO UPDATE SET lastPlaybackAt=excluded.lastPlaybackAt,consumedSeconds=excluded.consumedSeconds,lockedUntil=excluded.lockedUntil,updatedAt=excluded.updatedAt`,
     [record.profileId, record.lastPlaybackAt, record.consumedSeconds, record.lockedUntil, record.updatedAt],
   );
+}
+
+export async function readManagedContentPolicy(profileId: string): Promise<ManagedContentPolicy | null> {
+  if (Platform.OS === "web") return webStore.managedContentPolicies.get(profileId) ?? null;
+  const db = await getDb();
+  return (await db.getFirstAsync<ManagedContentPolicy>("SELECT * FROM managed_content_policies WHERE profileId = ?", [profileId])) ?? null;
+}
+
+export async function upsertManagedContentPolicy(profileId: string, mode: ManagedContentMode, updatedAt: number): Promise<void> {
+  const record: ManagedContentPolicy = { profileId, mode, updatedAt };
+  if (Platform.OS === "web") { webStore.managedContentPolicies.set(profileId, record); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO managed_content_policies (profileId,mode,updatedAt) VALUES (?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET mode=excluded.mode,updatedAt=excluded.updatedAt`,
+    [profileId, mode, updatedAt],
+  );
+}
+
+export async function listManagedApprovedVideos(profileId: string): Promise<ManagedApprovedVideo[]> {
+  if (Platform.OS === "web") return profileValues(webStore.managedApprovedVideos, profileId).sort((a, b) => b.approvedAt - a.approvedAt);
+  const db = await getDb();
+  const rows = await db.getAllAsync<Omit<ManagedApprovedVideo, "id" | "channelId" | "channelTitle" | "madeForKids"> & { videoId: string; sourceId: string; sourceTitle: string; madeForKids: number | null }>("SELECT * FROM managed_approved_videos WHERE profileId = ? ORDER BY approvedAt DESC", [profileId]);
+  return rows.map((row) => ({ ...row, id: row.videoId, channelId: row.sourceId, channelTitle: row.sourceTitle, madeForKids: row.madeForKids === null ? null : row.madeForKids === 1 }));
+}
+
+export async function upsertManagedApprovedVideo(record: ManagedApprovedVideo): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovedVideos.set(profileEntityKey(record.profileId, record.id), { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO managed_approved_videos (profileId,videoId,title,sourceId,sourceTitle,thumbnailUrl,publishedAt,durationSeconds,description,madeForKids,fetchedAt,approvedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,videoId) DO UPDATE SET title=excluded.title,sourceId=excluded.sourceId,sourceTitle=excluded.sourceTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,madeForKids=excluded.madeForKids,fetchedAt=excluded.fetchedAt,approvedAt=excluded.approvedAt`,
+    [record.profileId, record.id, record.title, record.channelId, record.channelTitle, record.thumbnailUrl, record.publishedAt, record.durationSeconds, record.description ?? "", record.madeForKids === null || record.madeForKids === undefined ? null : record.madeForKids ? 1 : 0, record.fetchedAt ?? null, record.approvedAt],
+  );
+}
+
+export async function deleteManagedApprovedVideo(profileId: string, videoId: string): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovedVideos.delete(profileEntityKey(profileId, videoId)); return; }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM managed_approved_videos WHERE profileId = ? AND videoId = ?", [profileId, videoId]);
+}
+
+export async function listManagedApprovedSources(profileId: string): Promise<ManagedApprovedSource[]> {
+  if (Platform.OS === "web") return profileValues(webStore.managedApprovedSources, profileId).sort((a, b) => b.approvedAt - a.approvedAt);
+  const db = await getDb();
+  const rows = await db.getAllAsync<Omit<ManagedApprovedSource, "id"> & { sourceId: string }>("SELECT * FROM managed_approved_sources WHERE profileId = ? ORDER BY approvedAt DESC", [profileId]);
+  return rows.map((row) => ({ ...row, id: row.sourceId }));
+}
+
+export async function upsertManagedApprovedSource(record: ManagedApprovedSource): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovedSources.set(profileEntityKey(record.profileId, record.id), { ...record }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO managed_approved_sources (profileId,sourceId,title,description,thumbnailUrl,followedAt,source,fetchedAt,approvedAt)
+     VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,sourceId) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl,followedAt=excluded.followedAt,source=excluded.source,fetchedAt=excluded.fetchedAt,approvedAt=excluded.approvedAt`,
+    [record.profileId, record.id, record.title, record.description ?? "", record.thumbnailUrl, record.followedAt, record.source, record.fetchedAt ?? null, record.approvedAt],
+  );
+}
+
+export async function deleteManagedApprovedSource(profileId: string, sourceId: string): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovedSources.delete(profileEntityKey(profileId, sourceId)); return; }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM managed_approved_sources WHERE profileId = ? AND sourceId = ?", [profileId, sourceId]);
+}
+
+export async function listManagedApprovalRequests(profileId: string): Promise<ManagedApprovalRequest[]> {
+  if (Platform.OS === "web") return profileValues(webStore.managedApprovalRequests, profileId).sort((a, b) => b.requestedAt - a.requestedAt);
+  const db = await getDb();
+  return db.getAllAsync<ManagedApprovalRequest>("SELECT * FROM managed_approval_requests WHERE profileId = ? ORDER BY requestedAt DESC", [profileId]);
+}
+
+export async function upsertManagedApprovalRequest(request: ManagedApprovalRequest): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovalRequests.set(profileEntityKey(request.profileId, `${request.kind}:${request.targetId}`), { ...request }); return; }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO managed_approval_requests (profileId,kind,targetId,sourceId,title,sourceTitle,thumbnailUrl,publishedAt,durationSeconds,description,fetchedAt,requestedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,kind,targetId) DO UPDATE SET sourceId=excluded.sourceId,title=excluded.title,sourceTitle=excluded.sourceTitle,thumbnailUrl=excluded.thumbnailUrl,publishedAt=excluded.publishedAt,durationSeconds=excluded.durationSeconds,description=excluded.description,fetchedAt=excluded.fetchedAt,requestedAt=excluded.requestedAt`,
+    [request.profileId, request.kind, request.targetId, request.sourceId, request.title, request.sourceTitle, request.thumbnailUrl, request.publishedAt, request.durationSeconds, request.description, request.fetchedAt, request.requestedAt],
+  );
+}
+
+export async function deleteManagedApprovalRequest(profileId: string, kind: ManagedApprovalRequest["kind"], targetId: string): Promise<void> {
+  if (Platform.OS === "web") { webStore.managedApprovalRequests.delete(profileEntityKey(profileId, `${kind}:${targetId}`)); return; }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM managed_approval_requests WHERE profileId = ? AND kind = ? AND targetId = ?", [profileId, kind, targetId]);
+}
+
+export async function clearManagedApprovalRequests(profileId: string): Promise<void> {
+  if (Platform.OS === "web") { clearProfileMap(webStore.managedApprovalRequests, profileId); return; }
+  const db = await getDb();
+  await db.runAsync("DELETE FROM managed_approval_requests WHERE profileId = ?", [profileId]);
 }
 
 export async function listSavedVideos(profileId: string): Promise<Video[]> {
@@ -727,11 +832,14 @@ export async function clearAllData(profileId: string): Promise<void> {
     clearProfileMap(webStore.channels, profileId);
     clearProfileMap(webStore.todaySnapshots, profileId);
     clearProfileMap(webStore.sourceRules, profileId);
+    clearProfileMap(webStore.managedApprovedVideos, profileId);
+    clearProfileMap(webStore.managedApprovedSources, profileId);
+    clearProfileMap(webStore.managedApprovalRequests, profileId);
     return;
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_approval_requests", "managed_approved_videos", "managed_approved_sources"] as const) {
       await db.runAsync(`DELETE FROM ${table} WHERE profileId = ?`, [profileId]);
     }
   });
@@ -747,6 +855,10 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     webStore.playbackUsage.clear();
     webStore.playbackControls.clear();
     webStore.sessionUsage.clear();
+    webStore.managedContentPolicies.clear();
+    webStore.managedApprovedVideos.clear();
+    webStore.managedApprovedSources.clear();
+    webStore.managedApprovalRequests.clear();
     webStore.saved.clear();
     webStore.resume.clear();
     webStore.queues.clear();
@@ -758,7 +870,7 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage"] as const) {
+    for (const table of ["saved_videos", "resume_positions", "queues", "session_drafts", "watch_later", "followed_channels", "today_snapshot_items", "today_snapshots", "source_rules", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage", "managed_approval_requests", "managed_approved_videos", "managed_approved_sources", "managed_content_policies"] as const) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
     await db.runAsync("DELETE FROM profiles");
