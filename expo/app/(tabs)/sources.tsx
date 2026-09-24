@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { ArrowRight, Import, Plus, SlidersHorizontal } from "lucide-react-native";
@@ -11,11 +11,12 @@ import ScreenHeader from "@/components/ScreenHeader";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import WeeklyPickCard from "@/components/WeeklyPickCard";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { FOUNDATION_CAPABILITIES, PRODUCT_LIMITS, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
+import { FOUNDATION_CAPABILITIES, WEEKLY_DISCOVERY_DISPLAY_MAX } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { discoveryService, shouldRequestWeeklyPicks, weeklyDiscoveryPeriodKey, weeklyPickToSourceResolution } from "@/services/discovery";
+import { weeklyDiscoveryPeriodKey, weeklyPickToSourceResolution } from "@/services/discovery";
+import { weeklyEditionService } from "@/services/weeklyEditionInstance";
 import type { WeeklyPickSourceSuggestion } from "@/types";
 
 type SourcesSection = "followed" | "discover";
@@ -29,11 +30,13 @@ export default function SourcesScreen() {
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [googleBusy, setGoogleBusy] = useState<boolean>(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
+  const [editionBusy, setEditionBusy] = useState(false);
   const [followFeedback, setFollowFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
   const activeProfileRef = useRef(activeProfileId);
   const interestIds = interests.map((interest) => interest.id);
   const interestNames = useMemo(() => new Map(INTEREST_LIBRARY.map((interest) => [interest.id, interest.name])), []);
   const followedIds = useMemo(() => new Set(followedChannels.map((channel) => channel.id)), [followedChannels]);
+  const queryClient = useQueryClient();
   const managedContentQuery = useQuery({
     queryKey: ["managed-content", activeProfileId],
     queryFn: () => getManagedContentOverview(activeProfileId),
@@ -48,10 +51,11 @@ export default function SourcesScreen() {
     return followedChannels.filter((source) => approved.has(source.id));
   }, [activeProfile?.role, followedChannels, managedOverview]);
   const weeklyPeriod = weeklyDiscoveryPeriodKey();
+  const discoverKey = ["weekly-picks", activeProfileId, weeklyPeriod, interestIds.join(","), [...followedIds].sort().join(",")];
   const discoverQuery = useQuery({
-    queryKey: ["weekly-picks", activeProfileId, interestIds.join(","), weeklyPeriod],
-    queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interestIds),
-    enabled: activeProfile?.role !== "managed" && section === "discover" && shouldRequestWeeklyPicks(interestIds),
+    queryKey: discoverKey,
+    queryFn: () => weeklyEditionService.get(activeProfileId, interestIds, [...followedIds]),
+    enabled: FOUNDATION_CAPABILITIES.weeklyDiscovery && activeProfile?.role !== "managed" && section === "discover",
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -62,6 +66,7 @@ export default function SourcesScreen() {
   useEffect(() => {
     activeProfileRef.current = activeProfileId;
     setFollowBusyId(null);
+    setEditionBusy(false);
     setFollowFeedback({});
   }, [activeProfileId]);
 
@@ -103,6 +108,22 @@ export default function SourcesScreen() {
   };
 
   const retryDiscover = (): void => { void discoverQuery.refetch(); };
+
+  const changeEdition = async (kind: "dismiss" | "more", sourceId?: string): Promise<void> => {
+    if (editionBusy || !discoverQuery.data) return;
+    const requestProfileId = activeProfileId;
+    setEditionBusy(true);
+    try {
+      const result = kind === "dismiss"
+        ? await weeklyEditionService.dismiss(requestProfileId, sourceId ?? "", discoverQuery.data, [...followedIds])
+        : await weeklyEditionService.showMore(requestProfileId, discoverQuery.data, [...followedIds]);
+      if (activeProfileRef.current === requestProfileId) queryClient.setQueryData(discoverKey, result);
+    } catch {
+      if (activeProfileRef.current === requestProfileId) Alert.alert("Weekly picks", "That change could not be saved. Try again.");
+    } finally {
+      if (activeProfileRef.current === requestProfileId) setEditionBusy(false);
+    }
+  };
 
   return (
     <>
@@ -186,7 +207,7 @@ export default function SourcesScreen() {
                 <Text style={type.caption}>Weekly picks</Text>
                 <Text style={styles.limitLabel}>FINITE · WEEKLY</Text>
               </View>
-              {interests.length === 0 ? (
+              {discoverQuery.data?.reason === "no_interests" ? (
                 <View>
                   <EmptyState title="Choose interests when you’re ready" body="Discover stays empty until you choose interests in Settings. You can still add and follow any trusted source manually." />
                   <Pressable onPress={() => router.push("/(tabs)/settings")} style={styles.settingsButton} accessibilityRole="button" testID="discover-choose-interests">
@@ -212,30 +233,37 @@ export default function SourcesScreen() {
                   <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "The weekly service is unavailable. No replacement recommendations were generated."} />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
-              ) : discoverQuery.data && discoverQuery.data.items.length > 0 ? (
+              ) : discoverQuery.data && (discoverQuery.data.items.length > 0 || discoverQuery.data.canShowMore) ? (
                 <View style={styles.weeklyList}>
                   {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing the saved weekly edition.</Text> : null}
+                  {discoverQuery.data.items.length === 0 ? <EmptyState title="You've seen these picks" body="There are more sources in this week's fixed pool if you want one." /> : null}
                   {discoverQuery.data.items.map((suggestion) => (
                     <WeeklyPickCard
                       key={`${suggestion.provider}:${suggestion.providerSourceId}`}
                       suggestion={suggestion}
                       interestName={interestNames.get(suggestion.interestId) ?? "Your interests"}
                       followed={followedIds.has(suggestion.providerSourceId)}
-                      busy={followBusyId === suggestion.providerSourceId}
+                      busy={editionBusy || followBusyId === suggestion.providerSourceId}
                       feedback={followFeedback[suggestion.providerSourceId]}
                       onFollow={() => { void followWeeklyPick(suggestion); }}
+                      onDismiss={() => { void changeEdition("dismiss", suggestion.providerSourceId); }}
                     />
                   ))}
+                  {discoverQuery.data.canShowMore ? (
+                    <Pressable onPress={() => { void changeEdition("more"); }} disabled={editionBusy} style={styles.settingsButton} accessibilityRole="button" accessibilityLabel="More like this from this week's picks" testID="weekly-picks-more">
+                      <Text style={styles.settingsButtonText}>More like this</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : (
-                <EmptyState title="No picks this week" body="There is no current publication for your interests. Your followed sources are still available." />
+                <EmptyState title="You're caught up" body="There are no more picks in your weekly edition. Your followed sources are still available." />
               )}
               <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />
                 <Text style={styles.endText}>End of weekly picks</Text>
                 <View style={styles.endLine} />
               </View>
-              <Text style={styles.discoverNote}>Frame shows no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} shared suggestions and checks for a new edition once every {PRODUCT_LIMITS.discoveryCadenceDays} days.</Text>
+              <Text style={styles.discoverNote}>Frame shows no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} shared suggestions. Next edition: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
             </View>
           )}
         </View>

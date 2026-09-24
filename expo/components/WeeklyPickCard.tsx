@@ -16,9 +16,10 @@ type Props = {
   busy: boolean;
   feedback?: Feedback;
   onFollow(): void;
+  onDismiss(): void;
 };
 
-export default function WeeklyPickCard({ suggestion, interestName, followed, busy, feedback, onFollow }: Props) {
+export default function WeeklyPickCard({ suggestion, interestName, followed, busy, feedback, onFollow, onDismiss }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const media = suggestion.featuredMedia;
@@ -83,6 +84,17 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
           <Text style={[styles.followText, followed && styles.followedText]}>{busy ? "Adding…" : followed ? "Followed" : "Follow source"}</Text>
         </Pressable>
 
+        <Pressable
+          onPress={onDismiss}
+          disabled={busy}
+          style={styles.dismissButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Not for me: ${suggestion.displayName}`}
+          testID={`weekly-pick-dismiss-${suggestion.providerSourceId}`}
+        >
+          <Text style={styles.dismissText}>Not for me</Text>
+        </Pressable>
+
         {feedback ? <Text style={[styles.feedback, !feedback.ok && styles.feedbackError]} accessibilityLiveRegion="polite">{feedback.message}</Text> : null}
       </View>
     </View>
@@ -114,6 +126,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
     followedButton: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.borderSoft },
     followText: { ...type.label, color: palette.onDark },
     followedText: { color: palette.active },
+    dismissButton: { minHeight: 48, justifyContent: "center", alignItems: "center", marginTop: spacing.xs },
+    dismissText: { ...type.label, color: palette.inkMuted },
     feedback: { ...type.bodySoft, color: palette.success, marginTop: spacing.sm, textAlign: "center" },
     feedbackError: { color: palette.danger },
     pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },

@@ -45,7 +45,7 @@ import { playbackControlsService } from "@/services/playbackControlsService";
 import { managedContentAccessService } from "@/services/managedContentAccessService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
-import { confirmSourceFollow } from "@/services/sourceResolutionFlow";
+import { checkSourceCapacity, confirmSourceFollow } from "@/services/sourceResolutionFlow";
 import { resolveSourceFromInput } from "@/services/youtube";
 import {
   getRevenueCatCustomerInfo,
@@ -577,6 +577,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await profileRepository.deleteLocal(profileId);
       setProfiles(await profileRepository.list());
       queryClient.removeQueries({ queryKey: ["library", profileId] });
+      queryClient.removeQueries({ queryKey: ["weekly-picks", profileId] });
       const cleanupSucceeded = await Promise.all([
         clearProfileStorage(AsyncStorage, profileId),
         clearProfileGoogleCredential(SecureStore, profileId),
@@ -1103,6 +1104,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const profile = profiles.find((candidate) => candidate.id === profileId);
       const overview = profile?.role === "managed" ? await managedContentAccessService.getOverview(profile) : null;
       if (overview?.policy.mode === "approvedSources" && !hasOwnerPin) throw new Error("Create an Owner PIN before approving sources for a Managed profile.");
+      const capacity = await checkSourceCapacity(profileId, channel.id, followedSourceRepository);
+      if (!capacity.allowed) throw new Error(capacity.message);
       await followedSourceRepository.follow(profileId, channel);
       if (profile?.role === "managed") {
         if (overview?.policy.mode === "approvedSources") await managedContentAccessService.approveSource(profile, channel);
@@ -1311,6 +1314,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     await clearAllData(activeProfileId);
     queueSourceLeaseReconciliation("local_change");
     await clearProfileStorage(AsyncStorage, activeProfileId);
+    queryClient.removeQueries({ queryKey: ["weekly-picks", activeProfileId] });
     await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     prefsRef.current = defaultPrefs;
     interestsRef.current = [];
@@ -1320,7 +1324,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setInterests([]);
     setRecentSearches([]);
     invalidateLibrary();
-  }, [activeProfileId, invalidateLibrary, authorizeProtectedAction]);
+  }, [activeProfileId, invalidateLibrary, authorizeProtectedAction, queryClient]);
 
   const eraseAllFrameData = useCallback(async (confirmedRecovery: boolean = false): Promise<void> => {
     // Forgotten-PIN recovery is a separately reviewed, typed, irreversible local wipe.

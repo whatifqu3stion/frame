@@ -33,6 +33,7 @@ describe("manual shared-source mobile flow", () => {
     expect(follows).toEqual([]);
     const result = await confirmSourceFollow("profile-one", resolution, {
       followedSources: {
+        async listForProfile() { return []; },
         async follow(profileId: string, channel: FollowedChannel): Promise<void> { follows.push({ profileId, channel }); },
       },
       reconcile: () => { reconciliations += 1; },
@@ -52,5 +53,19 @@ describe("manual shared-source mobile flow", () => {
       },
     }]);
     expect(reconciliations).toBe(1);
+  });
+
+  test("uses the same source ceiling as Google import without mutating a full profile", async () => {
+    let writes = 0;
+    const followedSources = {
+      async listForProfile() { return [{ id: "another-source" } as FollowedChannel]; },
+      async follow() { writes += 1; },
+    };
+    const full = await confirmSourceFollow("owner", resolution, { followedSources, reconcile() {}, maxSources: 1 });
+    expect(full.ok).toBe(false);
+    expect(writes).toBe(0);
+    const duplicate = await confirmSourceFollow("owner", { ...resolution, source: { ...resolution.source, providerSourceId: "another-source" } }, { followedSources, reconcile() {}, maxSources: 1 });
+    expect(duplicate.ok).toBe(true);
+    expect(writes).toBe(0);
   });
 });
