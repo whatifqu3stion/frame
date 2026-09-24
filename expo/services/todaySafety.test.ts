@@ -16,7 +16,7 @@ describe("Today playback and network safety", () => {
 
   test("marks Today watched only after allowance-approved playback actually starts", async () => {
     const source = await readFile(watchScreenPath.pathname, "utf8");
-    const beginIndex = source.indexOf("beginAllowancePlayback().then");
+    const beginIndex = source.indexOf("const status = await beginAllowancePlayback()");
     const approvedIndex = source.indexOf("if (!status.canPlay)", beginIndex);
     const dispositionIndex = source.indexOf('setDisposition(activeProfileId, todayPeriodKey, id, "watched"', approvedIndex);
     expect(beginIndex).toBeGreaterThan(-1);
