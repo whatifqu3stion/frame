@@ -36,6 +36,7 @@ import { useApp } from "@/providers/AppProvider";
 import { clearOrientationRequest, setOrientationRequest } from "@/services/orientation";
 import { formatDuration, formatRelativeDate, getVideo, parseVideoChapters, type VideoChapter } from "@/services/youtube";
 import type { ViewingAllowanceStatus, ViewingAllowanceWarning } from "@/models/viewingAllowance";
+import type { ManagedContentAccessStatus } from "@/models/managedContentAccess";
 import type { Video } from "@/types";
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
@@ -109,6 +110,7 @@ export default function WatchScreen() {
   const indexParam = firstParam(params.i);
   const {
     activeProfileId,
+    activeProfile,
     savedVideos,
     sessions,
     updateSessionPosition,
@@ -123,6 +125,10 @@ export default function WatchScreen() {
     checkpointAllowancePlayback,
     stopAllowancePlayback,
     authorizeProtectedAction,
+    getManagedContentAccess,
+    getManagedContentOverview,
+    requestManagedContentAccess,
+    approveManagedContent,
   } = useApp();
 
   const savedSessionId = firstParam(params.savedSessionId);
@@ -142,15 +148,15 @@ export default function WatchScreen() {
     return validIndex;
   }, [id, indexParam, savedSessionId, sessionIds]);
   const nextSessionId = sessionIndex >= 0 ? sessionIds[sessionIndex + 1] : undefined;
-  const localSessionVideo = useQuery({
-    queryKey: ["session-playback-video", activeProfileId, id],
+  const locallyStoredVideo = useQuery({
+    queryKey: ["local-playback-video", activeProfileId, id],
     queryFn: () => todayRepository.getVideo(activeProfileId, id),
-    enabled: Boolean(savedSessionId && sessionIndex >= 0 && !savedVideos.some((candidate) => candidate.id === id)),
+    enabled: Boolean(VIDEO_ID_PATTERN.test(id) && !savedVideos.some((candidate) => candidate.id === id)),
   });
   const isSession = sessionIds.length > 0;
 
   const baseVideo = useMemo<Video | undefined>(() => {
-    const stored = savedVideos.find((candidate) => candidate.id === id) ?? localSessionVideo.data;
+    const stored = savedVideos.find((candidate) => candidate.id === id) ?? locallyStoredVideo.data;
     if (stored) return stored;
     if (!VIDEO_ID_PATTERN.test(id)) return undefined;
 
@@ -167,17 +173,28 @@ export default function WatchScreen() {
       madeForKids: firstParam(params.madeForKids) === "1" ? true : firstParam(params.madeForKids) === "0" ? false : null,
       durationSeconds: Number.isFinite(routeDuration) && routeDuration > 0 ? routeDuration : 0,
     };
-  }, [id, localSessionVideo.data, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos]);
+  }, [id, locallyStoredVideo.data, params.fetchedAt, params.channelId, params.channelTitle, params.description, params.madeForKids, params.durationSeconds, params.publishedAt, params.thumbnailUrl, params.title, savedVideos]);
 
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
+  const [contentAccessStatus, setContentAccessStatus] = useState<ManagedContentAccessStatus | null>(null);
+  const managedOverviewQuery = useQuery({
+    queryKey: ["managed-content", activeProfileId],
+    queryFn: () => getManagedContentOverview(activeProfileId),
+    enabled: activeProfile?.role === "managed",
+    staleTime: Infinity,
+  });
+  const managedMode = activeProfile?.role === "managed" ? managedOverviewQuery.data?.policy.mode ?? null : null;
+  const hasLocallyTrustedMetadata = Boolean(savedVideos.some((candidate) => candidate.id === id) || locallyStoredVideo.data);
+  const needsManagedSourceVerification = managedMode === "approvedSources" && !locallyStoredVideo.isLoading && !hasLocallyTrustedMetadata;
 
   const metadataQuery = useQuery({
     queryKey: ["video", id],
     queryFn: () => getVideo(id),
-    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true && !usesCachedMetadata,
+    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true && (needsManagedSourceVerification || (contentAccessStatus?.canPlay === true && !usesCachedMetadata)),
     staleTime: 5 * 60_000,
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
+  const accessVideo = needsManagedSourceVerification ? verifiedVideo ?? undefined : baseVideo;
   const [retentionClock, setRetentionClock] = useState<number>(Date.now());
   useEffect(() => {
     const timer = setInterval(() => setRetentionClock(Date.now()), 60_000);
@@ -255,12 +272,36 @@ export default function WatchScreen() {
   useEffect(() => {
     let mounted = true;
     setAllowanceStatus(null);
+    setContentAccessStatus(null);
     allowanceEndingRef.current = false;
-    void getPlaybackAllowance().then((status) => { if (mounted) applyAllowanceStatus(status); }).catch(() => {
-      if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
-    });
+    if (activeProfile?.role === "managed" && (managedOverviewQuery.isLoading || locallyStoredVideo.isLoading)) return () => { mounted = false; };
+    if (activeProfile?.role === "managed" && managedOverviewQuery.isError) {
+      setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Managed content access could not be verified. Ask the Owner to review it." });
+      void getPlaybackAllowance().then((allowance) => { if (mounted) applyAllowanceStatus(allowance); }).catch(() => {
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+      });
+    } else if (needsManagedSourceVerification && !accessVideo) {
+      if (metadataQuery.isError || metadataQuery.data?.status && metadataQuery.data.status !== "success") {
+        setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Frame could not verify this video's source. Return and try again when verification is available." });
+      }
+      void getPlaybackAllowance().then((allowance) => { if (mounted) applyAllowanceStatus(allowance); }).catch(() => {
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+      });
+    } else if (!accessVideo) {
+      setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "This video needs Owner review before playback can continue." });
+      setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+    } else {
+      void Promise.all([getManagedContentAccess(accessVideo), getPlaybackAllowance()]).then(([access, allowance]) => {
+        if (!mounted) return;
+        setContentAccessStatus(access);
+        applyAllowanceStatus(allowance);
+      }).catch(() => {
+        if (mounted) setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Managed content access needs Owner review before playback can continue." });
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+      });
+    }
     return () => { mounted = false; void stopAllowancePlayback(); };
-  }, [activeProfileId, applyAllowanceStatus, getPlaybackAllowance, stopAllowancePlayback]);
+  }, [accessVideo, activeProfile?.role, activeProfileId, applyAllowanceStatus, getManagedContentAccess, getPlaybackAllowance, locallyStoredVideo.isLoading, managedOverviewQuery.isError, managedOverviewQuery.isLoading, metadataQuery.data, metadataQuery.isError, needsManagedSourceVerification, stopAllowancePlayback]);
 
   useEffect(() => {
     let mounted = true;
@@ -374,7 +415,16 @@ export default function WatchScreen() {
     if (playbackState !== "playing" || !playerReady || allowanceStatus?.canPlay !== true) return;
     const resumeInterval = setInterval(() => { void persist(); }, RESUME_WRITE_INTERVAL_MS);
     const allowanceInterval = setInterval(() => {
-      void checkpointAllowancePlayback().then((status) => {
+      if (!accessVideo) return;
+      void getManagedContentAccess(accessVideo).then(async (access) => {
+        setContentAccessStatus(access);
+        if (!access.canPlay) {
+          playerRef.current?.pause();
+          await stopAllowancePlayback();
+          void persist();
+          return;
+        }
+        const status = await checkpointAllowancePlayback();
         applyAllowanceStatus(status);
         if (!status.canPlay) {
           playerRef.current?.pause();
@@ -408,7 +458,7 @@ export default function WatchScreen() {
       clearInterval(countdownInterval);
       void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
-  }, [allowanceStatus?.canPlay, applyAllowanceStatus, checkpointAllowancePlayback, failClosedAllowance, persist, playbackState, playerReady, stopAllowancePlayback]);
+  }, [accessVideo, allowanceStatus?.canPlay, applyAllowanceStatus, checkpointAllowancePlayback, failClosedAllowance, getManagedContentAccess, persist, playbackState, playerReady, stopAllowancePlayback]);
 
   useEffect(() => {
     if (!resumeReady || playerReady || playerError || !isScreenFocused || !isAppActive) return;
@@ -457,7 +507,19 @@ export default function WatchScreen() {
     setPlaybackState(state);
     if (state === "playing") {
       allowanceEndingRef.current = false;
-      void beginAllowancePlayback().then((status) => {
+      if (!accessVideo) {
+        playerRef.current?.pause();
+        return;
+      }
+      void getManagedContentAccess(accessVideo).then(async (access) => {
+        setContentAccessStatus(access);
+        if (!access.canPlay) {
+          allowanceEndingRef.current = true;
+          playerRef.current?.pause();
+          void persist();
+          return;
+        }
+        const status = await beginAllowancePlayback();
         applyAllowanceStatus(status);
         if (!status.canPlay) {
           allowanceEndingRef.current = true;
@@ -476,7 +538,7 @@ export default function WatchScreen() {
     }
     void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
     if (state === "paused") void persist();
-  }, [activeProfileId, applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, id, persist, queryClient, stopAllowancePlayback, todayPeriodKey, todayProfileId]);
+  }, [accessVideo, activeProfileId, applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, getManagedContentAccess, id, persist, queryClient, stopAllowancePlayback, todayPeriodKey, todayProfileId]);
 
   const handleConnectivityChange = useCallback((nextOnline: boolean): void => {
     setIsOnline(nextOnline);
@@ -647,6 +709,24 @@ export default function WatchScreen() {
     }
   }, [beginAction, haptic, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
 
+  const requestAccess = useCallback(async (): Promise<void> => {
+    if (!accessVideo) return;
+    const result = await requestManagedContentAccess(accessVideo);
+    Alert.alert(result.ok ? "Request saved" : "Couldn’t request access", result.message);
+  }, [accessVideo, requestManagedContentAccess]);
+
+  const ownerApproveAccess = useCallback(async (): Promise<void> => {
+    if (!accessVideo) return;
+    const result = await approveManagedContent(accessVideo);
+    if (!result.ok) {
+      Alert.alert("Approval not completed", result.message);
+      return;
+    }
+    const access = await getManagedContentAccess(accessVideo);
+    setContentAccessStatus(access);
+    Alert.alert("Approved", result.message);
+  }, [accessVideo, approveManagedContent, getManagedContentAccess]);
+
   if (!video || invalidSavedSession || (savedSessionId && sessionIndex < 0)) {
     return (
       <View style={[styles.unavailableScreen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
@@ -664,8 +744,9 @@ export default function WatchScreen() {
   const durationLabel = formatDuration(firstPositiveDuration(durationRef.current, video.durationSeconds));
   const detailLabel = [dateLabel, durationLabel === "—" ? "" : durationLabel].filter(Boolean).join(" · ");
   const showEnded = playbackState === "ended";
+  const contentBlocked = contentAccessStatus !== null && !contentAccessStatus.canPlay;
   const allowanceBlocked = allowanceStatus !== null && !allowanceStatus.canPlay;
-  const shouldMountPlayer = resumeReady && allowanceStatus?.canPlay === true && isScreenFocused && isAppActive && !showEnded;
+  const shouldMountPlayer = resumeReady && contentAccessStatus?.canPlay === true && allowanceStatus?.canPlay === true && isScreenFocused && isAppActive && !showEnded;
   const showPlayer = shouldMountPlayer && playerReady && !playerError;
   const playerBusy = pendingAction === "retry";
 
@@ -695,7 +776,18 @@ export default function WatchScreen() {
         </View>
       ) : null}
 
-      {allowanceBlocked ? (
+      {contentBlocked ? (
+        <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+          <Text style={styles.endEyebrow}>Managed content access</Text>
+          <Text style={styles.endTitle}>{contentAccessStatus.kind === "ownerReview" ? "Owner review needed." : contentAccessStatus.kind === "videoApprovalRequired" ? "This video needs approval." : "This source needs approval."}</Text>
+          <Text style={styles.allowanceBody}>{contentAccessStatus.reason}</Text>
+          <View style={styles.stateActions}>
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Request</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Owner approve</Text></Pressable> : null}
+          </View>
+          <Pressable onPress={goToToday} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Today</Text></Pressable>
+        </View>
+      ) : allowanceBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
           <Text style={styles.endEyebrow}>{allowanceStatus.kind === "restricted" ? "Managed playback controls" : "Daily viewing allowance"}</Text>
           <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : allowanceStatus.kind === "restricted" ? "Playback isn’t available now." : "Today’s viewing is complete."}</Text>
@@ -707,7 +799,7 @@ export default function WatchScreen() {
         </View>
       ) : null}
 
-      {!allowanceBlocked && (!playerReady || allowanceStatus === null) && !playerError ? (
+      {!contentBlocked && !allowanceBlocked && (!playerReady || allowanceStatus === null || contentAccessStatus === null) && !playerError ? (
         <View style={styles.stateSurface} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
           <ActivityIndicator color={palette.wall} />
           <Text style={styles.playerStatusText}>{isOnline === false ? "You’re offline" : resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
