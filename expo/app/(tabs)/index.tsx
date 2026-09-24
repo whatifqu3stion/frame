@@ -10,6 +10,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import SnoozeModal from "@/components/SnoozeModal";
 import TodaySessionModal from "@/components/TodaySessionModal";
 import TodayVideoCard from "@/components/TodayVideoCard";
+import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { MAX_ITEMS_PER_SOURCE, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
@@ -28,7 +29,7 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, ready, profileSwitching } = useApp();
+  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching } = useApp();
   const [clock, setClock] = useState<number>(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [snoozeItem, setSnoozeItem] = useState<TodaySnapshotItem | null>(null);
@@ -39,7 +40,19 @@ export default function TodayScreen() {
   const activeProfileRef = useRef<string>(activeProfileId);
   activeProfileRef.current = activeProfileId;
   const period = getTodayPeriod(clock);
-  const sourceIds = useMemo<string[]>(() => followedChannels.map((source) => source.id), [followedChannels]);
+  const managedContentQuery = useQuery({
+    queryKey: ["managed-content", activeProfileId],
+    queryFn: () => getManagedContentOverview(activeProfileId),
+    enabled: ready && activeProfile?.role === "managed",
+    staleTime: Infinity,
+  });
+  const managedOverview = activeProfile?.role === "managed" ? managedContentQuery.data ?? null : null;
+  const sourceIds = useMemo<string[]>(() => {
+    if (activeProfile?.role !== "managed") return followedChannels.map((source) => source.id);
+    if (!managedOverview || managedOverview.policy.mode === "selectedVideos") return [];
+    const approved = new Set(managedOverview.approvedSources.map((source) => source.id));
+    return followedChannels.filter((source) => approved.has(source.id)).map((source) => source.id);
+  }, [activeProfile?.role, followedChannels, managedOverview]);
   const sourceIdentity = sourceIds.join(",");
   const queryKey = useMemo(() => ["today", activeProfileId, period.key] as const, [activeProfileId, period.key]);
   const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], queryFn: () => listTodaySourceRules(activeProfileId), enabled: ready, staleTime: Infinity });
@@ -178,9 +191,13 @@ export default function TodayScreen() {
 
   const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · local copy" : snapshot?.freshness === "stale" ? "Cached · refresh delayed" : isRefreshing ? "Checking shared cache…" : null;
   const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
-  const initialLoading = !snapshot && (sourcesLoading || todayQuery.isLoading);
+  const initialLoading = (activeProfile?.role === "managed" && managedContentQuery.isLoading) || (!snapshot && (sourcesLoading || todayQuery.isLoading));
   let content;
   if (initialLoading) content = <VideoFeedSkeleton count={3} accessibilityLabel="Loading today's finite inbox" />;
+  else if (managedOverview?.policy.mode === "selectedVideos") content = managedOverview.approvedVideos.length > 0
+    ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)
+    : <StateBlock title="No selected videos yet" body="An Owner can approve a requested video from Profiles & boundaries. Frame will not fill this screen with other videos." styles={styles} success />;
+  else if (activeProfile?.role === "managed" && managedOverview?.policy.mode === "approvedSources" && sourceIds.length === 0) content = <StateBlock title="No approved sources yet" body="An Owner can add or approve a source from Profiles & boundaries. Nothing else will appear here." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
   else if (sourceIds.length === 0) content = <StateBlock title="Choose one trusted source" body="Today begins with sources you select. Follow one source and this inbox can fill immediately." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
   else if (visible.length > 0) content = visible.map((item) => <TodayVideoCard key={item.id} item={item} busy={busyId === item.id} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} />);
   else if (hasOnlySnoozed) content = <StateBlock title="Resting for now" body={`Your next snoozed item returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}. Nothing else will replace it.`} styles={styles} />;
@@ -196,7 +213,7 @@ export default function TodayScreen() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
         <View style={styles.page}>
           <ScreenHeader eyebrow="Today" title={"A finite\ninbox."} subtitle="Trusted sources, a small number of choices, and a real stopping point." />
-          <View style={styles.boundaryRow} accessible accessibilityLabel={`Today is limited to ${TODAY_MAX_ITEMS} videos, with at most ${MAX_ITEMS_PER_SOURCE} per source`}><CircleCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>Up to {TODAY_MAX_ITEMS} videos · no more than {MAX_ITEMS_PER_SOURCE} per source</Text></View>
+          <View style={styles.boundaryRow} accessible accessibilityLabel={managedOverview?.policy.mode === "selectedVideos" ? "Only Owner-selected videos are available" : `Today is limited to ${TODAY_MAX_ITEMS} videos, with at most ${MAX_ITEMS_PER_SOURCE} per source`}><CircleCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>{managedOverview?.policy.mode === "selectedVideos" ? "Only videos selected by the Owner" : managedOverview?.policy.mode === "approvedSources" ? `Up to ${TODAY_MAX_ITEMS} videos · approved sources only` : `Up to ${TODAY_MAX_ITEMS} videos · no more than ${MAX_ITEMS_PER_SOURCE} per source`}</Text></View>
           {status ? <View style={styles.status}><CloudOff size={14} color={palette.inkMuted} /><Text style={styles.statusText}>{status}</Text></View> : null}
           <View style={styles.content}>{content}</View>
           {sourceIds.length > 0 ? <Pressable onPress={() => router.push("/(tabs)/sources")} style={styles.secondaryLink} accessibilityRole="button"><Text style={styles.secondaryText}>Open a source directly</Text><ArrowRight size={16} color={palette.accent} /></Pressable> : null}

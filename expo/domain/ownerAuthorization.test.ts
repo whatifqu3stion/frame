@@ -19,7 +19,7 @@ describe("Owner authorization visit", () => {
   });
 
   test("routes every protected Managed action through Owner authorization", () => {
-    expect(["createManaged", "deleteManaged", "changeAllowance", "disableAllowance", "addTimeToday", "playbackControls"].every((action) => requiresOwnerAuthorizationForManagedAction(action as Parameters<typeof requiresOwnerAuthorizationForManagedAction>[0]))).toBeTrue();
+    expect(["createManaged", "deleteManaged", "changeAllowance", "disableAllowance", "addTimeToday", "playbackControls", "contentAccess"].every((action) => requiresOwnerAuthorizationForManagedAction(action as Parameters<typeof requiresOwnerAuthorizationForManagedAction>[0]))).toBeTrue();
     expect(requiresPinForOwnerEntry("managed", true)).toBeTrue();
     expect(requiresPinForOwnerEntry("standard", true)).toBeTrue();
     expect(requiresPinForOwnerEntry("managed", false)).toBeFalse();

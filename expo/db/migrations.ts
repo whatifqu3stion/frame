@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 8;
+export const DATABASE_SCHEMA_VERSION = 9;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -149,6 +149,61 @@ export const CREATE_PROFILE_SESSION_USAGE_TABLE_SQL = `CREATE TABLE IF NOT EXIST
   consumedSeconds INTEGER NOT NULL DEFAULT 0,
   lockedUntil INTEGER,
   updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_MANAGED_CONTENT_POLICIES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS managed_content_policies (
+  profileId TEXT PRIMARY KEY NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('selectedVideos','approvedSources')),
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_MANAGED_APPROVED_VIDEOS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS managed_approved_videos (
+  profileId TEXT NOT NULL,
+  videoId TEXT NOT NULL,
+  title TEXT NOT NULL,
+  sourceId TEXT NOT NULL,
+  sourceTitle TEXT NOT NULL,
+  thumbnailUrl TEXT NOT NULL,
+  publishedAt TEXT NOT NULL,
+  durationSeconds INTEGER NOT NULL,
+  description TEXT NOT NULL,
+  madeForKids INTEGER,
+  fetchedAt INTEGER,
+  approvedAt INTEGER NOT NULL,
+  PRIMARY KEY (profileId, videoId),
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_MANAGED_APPROVED_SOURCES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS managed_approved_sources (
+  profileId TEXT NOT NULL,
+  sourceId TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  thumbnailUrl TEXT NOT NULL,
+  followedAt INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
+  fetchedAt INTEGER,
+  approvedAt INTEGER NOT NULL,
+  PRIMARY KEY (profileId, sourceId),
+  FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
+)`;
+
+export const CREATE_MANAGED_APPROVAL_REQUESTS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS managed_approval_requests (
+  profileId TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('video','source')),
+  targetId TEXT NOT NULL,
+  sourceId TEXT NOT NULL,
+  title TEXT NOT NULL,
+  sourceTitle TEXT NOT NULL,
+  thumbnailUrl TEXT NOT NULL,
+  publishedAt TEXT NOT NULL,
+  durationSeconds INTEGER NOT NULL,
+  description TEXT NOT NULL,
+  fetchedAt INTEGER,
+  requestedAt INTEGER NOT NULL,
+  PRIMARY KEY (profileId, kind, targetId),
   FOREIGN KEY (profileId) REFERENCES profiles(id) ON DELETE CASCADE
 )`;
 
@@ -309,6 +364,18 @@ export function buildVersion8MigrationPlan(): string[] {
   ];
 }
 
+/** Adds fail-closed local content selection, source approval, and request queues for Managed profiles. */
+export function buildVersion9MigrationPlan(): string[] {
+  return [
+    CREATE_MANAGED_CONTENT_POLICIES_TABLE_SQL,
+    CREATE_MANAGED_APPROVED_VIDEOS_TABLE_SQL,
+    CREATE_MANAGED_APPROVED_SOURCES_TABLE_SQL,
+    CREATE_MANAGED_APPROVAL_REQUESTS_TABLE_SQL,
+    "CREATE INDEX IF NOT EXISTS managed_approval_requests_profile_requested_idx ON managed_approval_requests(profileId, requestedAt DESC)",
+    "PRAGMA user_version = 9",
+  ];
+}
+
 function seedDefaultOwnerSql(): string {
   return `INSERT OR IGNORE INTO profiles (id, name, role, createdAt, updatedAt) VALUES ('${DEFAULT_OWNER_PROFILE_ID}', '${DEFAULT_OWNER_PROFILE_NAME}', 'owner', 0, 0)`;
 }
@@ -396,5 +463,9 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 8) {
     await executeMigrationTransaction(db, buildVersion8MigrationPlan());
+    currentVersion = 8;
+  }
+  if (currentVersion < 9) {
+    await executeMigrationTransaction(db, buildVersion9MigrationPlan());
   }
 }

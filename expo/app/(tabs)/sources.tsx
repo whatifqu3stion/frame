@@ -24,7 +24,7 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource } = useApp();
+  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, getManagedContentOverview } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [googleBusy, setGoogleBusy] = useState<boolean>(false);
@@ -34,11 +34,24 @@ export default function SourcesScreen() {
   const interestIds = interests.map((interest) => interest.id);
   const interestNames = useMemo(() => new Map(INTEREST_LIBRARY.map((interest) => [interest.id, interest.name])), []);
   const followedIds = useMemo(() => new Set(followedChannels.map((channel) => channel.id)), [followedChannels]);
+  const managedContentQuery = useQuery({
+    queryKey: ["managed-content", activeProfileId],
+    queryFn: () => getManagedContentOverview(activeProfileId),
+    enabled: activeProfile?.role === "managed",
+    staleTime: Infinity,
+  });
+  const managedOverview = activeProfile?.role === "managed" ? managedContentQuery.data ?? null : null;
+  const visibleChannels = useMemo(() => {
+    if (activeProfile?.role !== "managed") return followedChannels;
+    if (!managedOverview || managedOverview.policy.mode === "selectedVideos") return [];
+    const approved = new Set(managedOverview.approvedSources.map((source) => source.id));
+    return followedChannels.filter((source) => approved.has(source.id));
+  }, [activeProfile?.role, followedChannels, managedOverview]);
   const weeklyPeriod = weeklyDiscoveryPeriodKey();
   const discoverQuery = useQuery({
     queryKey: ["weekly-picks", activeProfileId, interestIds.join(","), weeklyPeriod],
     queryFn: () => discoveryService.getWeeklyPicks(activeProfileId, interestIds),
-    enabled: section === "discover" && shouldRequestWeeklyPicks(interestIds),
+    enabled: activeProfile?.role !== "managed" && section === "discover" && shouldRequestWeeklyPicks(interestIds),
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -51,6 +64,8 @@ export default function SourcesScreen() {
     setFollowBusyId(null);
     setFollowFeedback({});
   }, [activeProfileId]);
+
+  useEffect(() => { if (activeProfile?.role === "managed") setSection("followed"); }, [activeProfile?.role]);
 
   const openAddSource = (): void => {
     setAddOpen(true);
@@ -97,8 +112,8 @@ export default function SourcesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.page}>
-          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle="Follow trusted sources directly, or review three optional picks each week." />
-          {FOUNDATION_CAPABILITIES.weeklyDiscovery ? <View style={styles.segmented} accessibilityRole="tablist">
+          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle={activeProfile?.role === "managed" ? "Content follows the access choices set by the Owner." : "Follow trusted sources directly, or review three optional picks each week."} />
+          {FOUNDATION_CAPABILITIES.weeklyDiscovery && activeProfile?.role !== "managed" ? <View style={styles.segmented} accessibilityRole="tablist">
             {(["followed", "discover"] as const).map((item) => {
               const selected = section === item;
               return (
@@ -127,21 +142,23 @@ export default function SourcesScreen() {
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable>
 
-              {googleConfigured ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
+              {googleConfigured && managedOverview?.policy.mode !== "selectedVideos" ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
                 <View style={styles.importIcon}>{googleBusy ? <ActivityIndicator size="small" color={palette.active} /> : <Import size={17} color={palette.active} strokeWidth={1.8} />}</View>
                 <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose Google subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Select sources yourself. Nothing is followed automatically.</Text></View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable> : null}
 
-              {libraryLoading ? (
+              {libraryLoading || managedContentQuery.isLoading ? (
                 <VideoFeedSkeleton count={3} accessibilityLabel="Loading followed sources" />
               ) : sourcesError ? (
                 <EmptyState title="Sources couldn't load" body="Your saved source data was not changed. Close and reopen Frame to try again." />
-              ) : followedChannels.length === 0 ? (
-                <EmptyState title="No followed sources" body="Add one trusted source manually. Nothing is imported or followed automatically." />
+              ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
+                <EmptyState title="Selected Videos is on" body="Only individual videos approved by the Owner can play. Paste a video link to request one." />
+              ) : visibleChannels.length === 0 ? (
+                <EmptyState title={activeProfile?.role === "managed" ? "No approved sources" : "No followed sources"} body={activeProfile?.role === "managed" ? "An Owner can add a source here or approve a request from Profiles & boundaries." : "Add one trusted source manually. Nothing is imported or followed automatically."} />
               ) : (
                 <View style={styles.sourceList}>
-                  {followedChannels.map((channel) => (
+                  {visibleChannels.map((channel) => (
                     <Pressable
                       key={channel.id}
                       onPress={() => router.push({ pathname: "/channel/[id]", params: { id: channel.id } })}
