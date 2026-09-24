@@ -44,17 +44,21 @@ Pass condition: identity and all local state remain profile-scoped; protected ca
 1. In the Owner or Standard profile, paste and verify one supported channel, handle, or video URL.
 2. Confirm verification alone follows nothing; explicitly add the source.
 3. Confirm the source appears once, remains after restart, and can be unfollowed without affecting another profile.
-4. Open Discover in Sources. With no interests, confirm it remains empty and makes no replacement recommendation.
-5. With interests selected and a current publication available, confirm no more than three distinct Weekly Picks appear in total.
-6. Confirm adding a Weekly Pick still requires the protected explicit follow action.
-7. Confirm offline, maintenance, configuration, empty-publication, and backend-failure states are truthful and do not silently generate substitutes.
+4. At the shared beta source ceiling, confirm both manual Follow and selective Google import refuse one additional source without changing the existing follows.
+5. Open Discover in Sources. With no interests, confirm it remains empty and makes no replacement recommendation.
+6. With interests selected and a current publication available, confirm no more than three distinct Weekly Picks appear in total.
+7. Dismiss a pick with Not for me. Confirm it stays hidden after restart and does not automatically backfill.
+8. If the fixed weekly pool has another candidate, use More like this. Confirm it fills only an empty slot, stops when exhausted, and makes no YouTube or AI request.
+9. Follow a pick and confirm it disappears from the current edition without backfill; switch profiles and confirm their editions remain independent.
+10. Change interests during the week and confirm the issued edition stays stable until the next weekly period. Confirm the next edition date is shown.
+11. Confirm offline, maintenance, configuration, empty-publication, and backend-failure states are truthful and do not silently generate substitutes.
 
 Pass condition: Sources are deliberate, Weekly Picks are shared and finite, and the mobile app never performs search or AI work.
 
 ## 4. Finite Today
 
 1. Follow enough test sources to populate Today.
-2. Confirm Today displays at most 12 items and at most three from any source.
+2. Confirm Today displays at most 12 items and at most two from any source.
 3. Save one item, add one to a Session, snooze one, and dismiss one.
 4. Confirm each successful action removes or hides only the intended card; cancel or force one failed action and confirm the card remains.
 5. Pull to refresh and wait briefly. Confirm the same period does not refill behind the user or replace handled items.
