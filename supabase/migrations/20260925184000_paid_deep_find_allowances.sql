@@ -44,8 +44,10 @@ declare
   v_period date := date_trunc('month', now() at time zone 'UTC')::date;
   v_reset timestamptz := (date_trunc('month', now() at time zone 'UTC') + interval '1 month') at time zone 'UTC';
   v_day date := (now() at time zone 'UTC')::date;
+  v_youtube_day date := public.youtube_quota_date();
   v_monthly_count integer;
   v_daily_count bigint;
+  v_youtube_units bigint;
   v_reservation uuid;
 begin
   if p_installation_token is null or p_installation_token !~ '^[0-9a-f]{64}$' then
@@ -55,7 +57,8 @@ begin
 
   select controls.* into v_controls from public.service_controls as controls
   where controls.id = '00000000-0000-0000-0000-000000000001'::uuid for update;
-  if not found or v_controls.maintenance_mode or not v_controls.deep_find_enabled then
+  if not found or v_controls.maintenance_mode or not v_controls.deep_find_enabled
+    or v_controls.youtube_ingestion_halted_until > now() then
     return query select 'disabled'::text, 0, v_reset, null::uuid; return;
   end if;
 
@@ -77,6 +80,18 @@ begin
       v_controls.deep_find_monthly_entitlement_ceiling - v_monthly_count, v_reset, null::uuid; return;
   end if;
 
+  -- Search Queries has its own daily bucket (bounded above). Reserve one
+  -- provider-wide unit for channel verification even if search finds nothing.
+  insert into public.daily_provider_usage (provider, usage_date, request_count, estimated_quota_units)
+  values ('youtube', v_youtube_day, 0, 0)
+  on conflict on constraint daily_provider_usage_provider_date_key do nothing;
+  select usage.estimated_quota_units into v_youtube_units from public.daily_provider_usage as usage
+  where usage.provider = 'youtube' and usage.usage_date = v_youtube_day for update;
+  if v_youtube_units + 1 > v_controls.daily_youtube_unit_ceiling - v_controls.reserved_safety_units then
+    return query select 'quota_exhausted'::text,
+      v_controls.deep_find_monthly_entitlement_ceiling - v_monthly_count, v_reset, null::uuid; return;
+  end if;
+
   update public.deep_find_monthly_usage as usage
   set request_count = usage.request_count + 1, updated_at = now()
   where usage.installation_token_hash = v_hash and usage.period_start = v_period;
@@ -85,6 +100,11 @@ begin
       estimated_quota_units = usage.estimated_quota_units + 1,
       updated_at = now()
   where usage.provider = 'youtube_search' and usage.usage_date = v_day;
+  update public.daily_provider_usage as usage
+  set request_count = usage.request_count + 1,
+      estimated_quota_units = usage.estimated_quota_units + 1,
+      updated_at = now()
+  where usage.provider = 'youtube' and usage.usage_date = v_youtube_day;
   insert into public.deep_find_reservations (installation_token_hash, period_start)
   values (v_hash, v_period) returning id into v_reservation;
   return query select 'reserved'::text,
