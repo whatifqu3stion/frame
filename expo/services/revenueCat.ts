@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { APP_ENV, FEATURE_FLAGS } from "@/constants/config";
+import { installationIdentityStore } from "@/storage/installationIdentityStorage";
 import Purchases, {
   type CustomerInfo,
   type PurchasesOffering,
@@ -25,8 +26,34 @@ function getRevenueCatApiKey(): string | undefined {
 const revenueCatApiKey = getRevenueCatApiKey();
 export const isRevenueCatConfigured = Boolean(revenueCatApiKey);
 
-if (FEATURE_FLAGS.paidAccess && revenueCatApiKey) {
-  Purchases.configure({ apiKey: revenueCatApiKey });
+let configurationPromise: Promise<string> | null = null;
+
+/** Billing and server metering share one protected installation identity. */
+export async function configureRevenueCat(): Promise<string> {
+  if (!FEATURE_FLAGS.paidAccess || !revenueCatApiKey || Platform.OS === "web") {
+    throw new Error("RevenueCat is not configured for this build.");
+  }
+  const appUserID = await installationIdentityStore.getOrCreate();
+  if (!configurationPromise) {
+    configurationPromise = (async () => {
+      await Purchases.configure({ apiKey: revenueCatApiKey, appUserID });
+      return appUserID;
+    })().catch((error: unknown) => {
+      configurationPromise = null;
+      throw error;
+    });
+  }
+  const configuredID = await configurationPromise;
+  if (configuredID !== appUserID) {
+    configurationPromise = configurationPromise.then(async () => {
+      await Purchases.logIn(appUserID);
+      return appUserID;
+    }).catch((error: unknown) => {
+      configurationPromise = null;
+      throw error;
+    });
+  }
+  return configurationPromise;
 }
 
 /** Returns whether the Frame Premium entitlement is currently active. */
@@ -39,9 +66,10 @@ export async function getPremiumOffering(): Promise<PurchasesOffering> {
   if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) {
     throw new Error("RevenueCat is not configured for this build.");
   }
+  await configureRevenueCat();
 
   const offerings = await Purchases.getOfferings();
-  const offering = offerings.all[PREMIUM_OFFERING_ID] ?? offerings.current;
+  const offering = offerings.all[PREMIUM_OFFERING_ID];
   if (!offering) {
     throw new Error("Frame Premium is temporarily unavailable.");
   }
@@ -53,8 +81,12 @@ export function subscribeToRevenueCatCustomerInfo(
   listener: (customerInfo: CustomerInfo) => void,
 ): () => void {
   if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) return () => {};
-  Purchases.addCustomerInfoUpdateListener(listener);
+  let cancelled = false;
+  void configureRevenueCat().then(() => {
+    if (!cancelled) Purchases.addCustomerInfoUpdateListener(listener);
+  }).catch(() => {});
   return () => {
+    cancelled = true;
     Purchases.removeCustomerInfoUpdateListener(listener);
   };
 }
@@ -64,6 +96,7 @@ export async function getRevenueCatCustomerInfo(): Promise<CustomerInfo> {
   if (!FEATURE_FLAGS.paidAccess || !isRevenueCatConfigured) {
     throw new Error("RevenueCat is not configured for this build.");
   }
+  await configureRevenueCat();
   return Purchases.getCustomerInfo();
 }
 
@@ -72,6 +105,7 @@ export async function purchasePremiumPackage(aPackage: PurchasesPackage): Promis
   if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured) {
     throw new Error("Premium purchases are available in the iPhone and Android apps.");
   }
+  await configureRevenueCat();
   const result = await Purchases.purchasePackage(aPackage);
   return result.customerInfo;
 }
@@ -81,6 +115,7 @@ export async function restorePremiumPurchases(): Promise<CustomerInfo> {
   if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured) {
     throw new Error("Purchase restoration is available in the iPhone and Android apps.");
   }
+  await configureRevenueCat();
   return Purchases.restorePurchases();
 }
 
