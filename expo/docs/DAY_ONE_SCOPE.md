@@ -2,6 +2,8 @@
 
 The owner confirmed September 25, 2026: ship the agreed MVP feature set with Premium, tested through RevenueCat before public billing. This supersedes the September 6 free-beta and deferred-Premium statements in earlier execution plans. Development and staging use test purchase credentials; public release requires separate store products, platform keys, and approval.
 
+The app accepts monthly, yearly, or lifetime packages in the configured offering; the final store product and price are a commercial choice for the store setup. The server checks the matching active or unrefunded RevenueCat entitlement before each billable Deep Find request.
+
 | Capability | Free | Premium test entitlement |
 | --- | --- | --- |
 | Pasted-link watching, Today, Saved, Sessions, selective Google import, Weekly Picks | Yes | Yes |
