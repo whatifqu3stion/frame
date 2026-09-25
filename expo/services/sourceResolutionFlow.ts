@@ -1,5 +1,5 @@
 import type { FollowedSourceRepository } from "@/repositories/followedSourceRepository";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { capabilitiesFor } from "@/domain/capabilities";
 import type { AddChannelResult, SourceResolution } from "@/types";
 
 type FollowDependencies = {
@@ -14,7 +14,7 @@ export async function checkSourceCapacity(
   profileId: string,
   sourceId: string,
   followedSources: Pick<FollowedSourceRepository, "listForProfile">,
-  maxSources: number = PRODUCT_LIMITS.futureSourcesPerProfile,
+  maxSources: number = capabilitiesFor(false).sourceLimit,
 ): Promise<{ allowed: boolean; alreadyFollowed: boolean; message?: string }> {
   const existing = await followedSources.listForProfile(profileId);
   if (existing.some((source) => source.id === sourceId)) return { allowed: true, alreadyFollowed: true };
