@@ -23,8 +23,8 @@ export type ProfileRepository = {
 
 async function createProfile(name: string, role: Exclude<ProfileRole, "owner">, allowance?: ManagedAllowance): Promise<Profile> {
   const profiles = await listProfiles();
-  if (profiles.length >= PRODUCT_LIMITS.futureProfilesPerHousehold) {
-    throw new Error(`Frame supports up to ${PRODUCT_LIMITS.futureProfilesPerHousehold} local profiles.`);
+  if (profiles.length >= PRODUCT_LIMITS.premiumProfilesPerHousehold) {
+    throw new Error(`Frame supports up to ${PRODUCT_LIMITS.premiumProfilesPerHousehold} local profiles.`);
   }
   const validation = validateProfileName(name, profiles);
   if (!validation.ok) throw new Error(validation.message);
