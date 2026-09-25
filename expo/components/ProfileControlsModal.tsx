@@ -4,7 +4,6 @@ import { AccessibilityInfo, ActivityIndicator, Alert, Modal, Pressable, ScrollVi
 import AllowancePicker from "@/components/AllowancePicker";
 import ManagedPlaybackControlsEditor from "@/components/ManagedPlaybackControlsEditor";
 import ManagedContentAccessEditor from "@/components/ManagedContentAccessEditor";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
@@ -35,6 +34,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     createStandardProfile, createManagedProfile, renameLocalProfile, reorderLocalProfile, deleteLocalProfile,
     setProfileViewingAllowance, getManagedPlaybackControls, setManagedPlaybackControls, cancelPendingOwnerAllowance, getPlaybackAllowance, switchProfile, saveOwnerPin, clearOwnerPin, relockOwnerAccess,
     getManagedContentOverview, setManagedContentMode, reviewManagedApprovalRequest, revokeManagedContent,
+    capabilities, isPremium, openPremium,
   } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -207,7 +207,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     return `${role} · ${status.allowanceMinutes} min daily`;
   };
 
-  const canCreate = profiles.length < PRODUCT_LIMITS.futureProfilesPerHousehold;
+  const canCreate = profiles.length < capabilities.profileLimit;
   const localProfiles = profiles.filter((profile) => profile.role !== "owner");
   const pinUnavailable = ownerPinAvailability !== "available";
   const editorNeedsName = editor?.kind === "createStandard" || editor?.kind === "createManaged" || editor?.kind === "rename";
@@ -223,8 +223,8 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
         <View style={styles.headerRow}><View><Text style={styles.eyebrow}>Protected controls</Text><Text style={styles.heading}>Profiles & boundaries</Text></View><Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close protected controls"><X size={18} color={palette.inkMuted} /></Pressable></View>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.boundaryCard}><ShieldCheck size={20} color={palette.active} /><Text style={styles.boundaryText}>Daily time, schedules, quiet hours, and Pause Frame limit playback only inside Frame. They do not block YouTube, browsers, or other apps.</Text></View>
-          <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>Profiles · {profiles.length} of {PRODUCT_LIMITS.futureProfilesPerHousehold}</Text></View>
-          {canCreate ? <View style={styles.actionRow}><Pressable onPress={() => begin({ kind: "createStandard" })} style={styles.secondaryButton}><Plus size={15} color={palette.active} /><Text style={styles.secondaryButtonText}>Add Standard</Text></Pressable><Pressable onPress={() => begin({ kind: "createManaged" })} style={styles.secondaryButton}><Clock3 size={15} color={palette.active} /><Text style={styles.secondaryButtonText}>Add Managed</Text></Pressable></View> : null}
+          <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>Profiles · {profiles.length} of {capabilities.profileLimit}</Text></View>
+          {canCreate ? <View style={styles.actionRow}><Pressable onPress={() => begin({ kind: "createStandard" })} style={styles.secondaryButton}><Plus size={15} color={palette.active} /><Text style={styles.secondaryButtonText}>Add Standard</Text></Pressable>{isPremium ? <Pressable onPress={() => begin({ kind: "createManaged" })} style={styles.secondaryButton}><Clock3 size={15} color={palette.active} /><Text style={styles.secondaryButtonText}>Add Managed</Text></Pressable> : null}</View> : !isPremium ? <Pressable onPress={() => { onClose(); openPremium("additionalProfiles"); }} style={styles.secondaryButton} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Get more profiles with Premium</Text></Pressable> : null}
           <View style={styles.profileList}>{profiles.map((profile) => {
             const active = profile.id === activeProfileId;
             const localIndex = localProfiles.findIndex((candidate) => candidate.id === profile.id);
