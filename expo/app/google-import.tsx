@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -19,6 +18,7 @@ export default function GoogleImportScreen() {
     googleConnected,
     followedChannels,
     importing,
+    capabilities,
     loadGoogleSubscriptions,
     importGoogleSubscriptions,
   } = useApp();
@@ -29,7 +29,7 @@ export default function GoogleImportScreen() {
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
   const followedIds = useMemo(() => new Set(followedChannels.map((source) => source.id)), [followedChannels]);
-  const availableSlots = Math.max(0, PRODUCT_LIMITS.futureSourcesPerProfile - followedIds.size);
+  const availableSlots = Math.max(0, capabilities.sourceLimit - followedIds.size);
 
   const loadPage = useCallback(async (pageToken?: string): Promise<void> => {
     if (!googleConnected || loadState !== "idle") return;
