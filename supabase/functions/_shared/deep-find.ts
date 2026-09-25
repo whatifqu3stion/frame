@@ -27,6 +27,18 @@ export type DeepFindDependencies = {
   cacheSources(sources: readonly SanitizedSource[]): Promise<void>;
 };
 
+/** Raw Interactions REST responses place text in the final model_output step. */
+export function geminiChannelQuery(value: unknown): string {
+  if (!isRecord(value) || !Array.isArray(value.steps)) throw new Error("invalid translation");
+  const output = [...value.steps].reverse().find((step) => isRecord(step) && step.type === "model_output");
+  if (!isRecord(output) || !Array.isArray(output.content)) throw new Error("invalid translation");
+  const texts = output.content.filter((part) => isRecord(part) && part.type === "text" && typeof part.text === "string");
+  if (texts.length !== 1) throw new Error("invalid translation");
+  const parsed: unknown = JSON.parse(texts[0].text);
+  if (!isRecord(parsed) || typeof parsed.query !== "string") throw new Error("invalid translation");
+  return parsed.query.trim();
+}
+
 /** Only a current subscription product can authorize a costly server action. */
 export function hasServerPremiumEntitlement(value: unknown, now: number, allowSandbox: boolean): boolean {
   const subscriber = isRecord(value) ? value.subscriber : null;
@@ -44,7 +56,7 @@ export function validateDeepFindRequest(input: unknown): { identity: string; que
   if (!isRecord(input) || typeof input.installationToken !== "string" || !identityPattern.test(input.installationToken)) return null;
   if (input.action === "status" && Object.keys(input).length === 2) return { identity: input.installationToken };
   if (Object.keys(input).length !== 2 || typeof input.query !== "string" || input.query !== input.query.trim()) return null;
-  if (input.query.length < 8 || input.query.length > 160 || /[\x00-\x1f\x7f]/.test(input.query)) return null;
+  if (input.query.length < 8 || input.query.length > 160 || hasControlCharacters(input.query)) return null;
   return { identity: input.installationToken, query: input.query };
 }
 
@@ -77,7 +89,7 @@ export async function executeDeepFind(input: unknown, deps: DeepFindDependencies
   let translated: string;
   try {
     translated = await deps.translate(request.query);
-    if (!translated || translated.length > 100 || /[\x00-\x1f\x7f]/.test(translated)) throw new Error("invalid translation");
+    if (!translated || translated.length > 100 || hasControlCharacters(translated)) throw new Error("invalid translation");
   } catch {
     try {
       await deps.release(request.identity, reservation.reservationId);
@@ -108,4 +120,12 @@ function failure(state: Exclude<DeepFindResponse["state"], "ready" | "status">, 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
 }
