@@ -27,7 +27,7 @@ function dependencies(overrides = {}) {
 test("an inactive entitlement never reaches Gemini or YouTube", async () => {
   const { deps, calls } = dependencies({ async verifyPremium() { calls.push("verify"); return false; } });
   assert.deepEqual(await executeDeepFind({ installationToken: identity, query: "bridge engineers" }, deps), {
-    state: "premium_required", message: "Deep Find requires an active Premium subscription.",
+    state: "premium_required", message: "Deep Find requires an active Premium entitlement.",
   });
   assert.deepEqual(calls, ["verify"]);
 });
@@ -78,4 +78,15 @@ test("Gemini REST translation reads the final model output step", () => {
   ] };
   assert.equal(geminiChannelQuery(response), "bridge engineering channels");
   assert.throws(() => geminiChannelQuery({ output_text: '{"query":"wrong shape"}' }));
+});
+
+test("a lifetime Premium product is verified without accepting a refund or production sandbox purchase", () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  const lifetime = { subscriber: {
+    entitlements: { premium: { product_identifier: "frame_lifetime", purchase_date: "2026-09-20T00:00:00Z", expires_date: null } },
+    subscriptions: {}, non_subscriptions: { frame_lifetime: [{ purchase_date: "2026-09-20T00:00:00Z", is_sandbox: false }] },
+  } };
+  assert.equal(hasServerPremiumEntitlement(lifetime, now, false), true);
+  assert.equal(hasServerPremiumEntitlement({ subscriber: { ...lifetime.subscriber, non_subscriptions: { frame_lifetime: [{ purchase_date: "2026-09-20T00:00:00Z", is_sandbox: false, refunded_at: "2026-09-21T00:00:00Z" }] } } }, now, false), false);
+  assert.equal(hasServerPremiumEntitlement({ subscriber: { ...lifetime.subscriber, non_subscriptions: { frame_lifetime: [{ purchase_date: "2026-09-20T00:00:00Z", is_sandbox: true }] } } }, now, false), false);
 });
