@@ -1,6 +1,6 @@
 # Frame pre-design functional acceptance
 
-This is the current native acceptance pass for Frame’s implemented feature contract. Run it before graphic-design polish, the broad copy edit, or paywall work. Billing is intentionally disabled during the free beta and is not part of this pass.
+This is the current native acceptance pass for Frame’s day-one feature contract, including Premium in test mode. Run it before graphic-design polish and the broad copy edit. A paid public release requires separate store-product and production-key checks.
 
 Codex owns the automated logic, persistence, backend, and security checks. Rork owns running this checklist in real iOS and Android builds, native presentation fixes, signing, and build delivery. Never mark a device step complete from a web preview or export alone.
 
@@ -29,7 +29,7 @@ Pass condition: the shell hydrates without a wrong-profile flash, obsolete Home/
 
 ## 2. Profiles, Owner PIN, and isolation
 
-1. From Settings, create one Standard and one Managed profile.
+1. Without a Premium entitlement, confirm the Owner profile works and the second profile opens Premium without creating data. With a test entitlement, create one Standard and one Managed profile.
 2. Add an Owner PIN. Confirm entering the Owner from another profile requires it.
 3. Rename and reorder the non-Owner profiles, then restart the app.
 4. In each profile, create distinct interests, sources, Saved items, progress, and a Session.
@@ -44,7 +44,7 @@ Pass condition: identity and all local state remain profile-scoped; protected ca
 1. In the Owner or Standard profile, paste and verify one supported channel, handle, or video URL.
 2. Confirm verification alone follows nothing; explicitly add the source.
 3. Confirm the source appears once, remains after restart, and can be unfollowed without affecting another profile.
-4. At the shared beta source ceiling, confirm both manual Follow and selective Google import refuse one additional source without changing the existing follows.
+4. At five free sources and 25 Premium sources, confirm both manual Follow and selective Google import refuse one additional source without changing existing follows. Existing sources stay readable after entitlement expiry.
 5. Open Discover in Sources. With no interests, confirm it remains empty and makes no replacement recommendation.
 6. With interests selected and a current publication available, confirm no more than three distinct Weekly Picks appear in total.
 7. Dismiss a pick with Not for me. Confirm it stays hidden after restart and does not automatically backfill.
@@ -66,6 +66,17 @@ Pass condition: Sources are deliberate, Weekly Picks are shared and finite, and 
 7. Restart offline and confirm the persisted snapshot renders with an honest offline/cached label.
 
 Pass condition: Today is deterministic, finite, locally actionable, and never becomes an endless feed.
+
+## Premium test purchases and Deep Find
+
+1. Use a development build with RevenueCat Test Store products, entitlement `premium`, and offering `frame_premium`. Confirm purchase cancellation and failure grant nothing.
+2. Confirm a successful test purchase unlocks 25 source slots, three profiles, Managed profile creation, and Deep Find. Confirm purchase status persists across restart and Restore Purchases works after an app reinstall with the same store account.
+3. As a free user, confirm five sources, one profile, and that Deep Find opens Premium without any Gemini or provider call. Basic Today, Saved, Sessions, selective import, and Weekly Picks remain usable.
+4. Make three successful paid Deep Find requests. Confirm each makes at most one channel search, returns at most three independently verified sources, and a fourth request fails on the server with its next UTC reset date.
+5. Turn off Deep Find with the server service control; confirm the app shows a paused state while other features continue working.
+6. Allow the test entitlement to expire; confirm new paid actions stop, while existing followed sources, Saved items, profiles, and protective Managed restrictions stay on the device. Confirm a renewed or restored entitlement resumes paid access.
+
+Pass condition: paid capabilities follow real RevenueCat state; provider work is bounded and only starts after server-side entitlement verification and allowance reservation.
 
 ## 5. Managed — Selected Videos
 
