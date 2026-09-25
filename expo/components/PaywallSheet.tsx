@@ -31,11 +31,10 @@ import {
 } from "@/services/revenueCat";
 
 const FEATURES: string[] = [
-  "Save videos and build a personal shelf",
-  "Keep a calm Watch Later list",
-  "Resume exactly where you stopped",
-  "Create intentional one-to-three-video sessions",
-  "Follow trusted creators and use enhanced discovery",
+  "Follow up to 25 trusted sources instead of five",
+  "Create up to three local profiles instead of one",
+  "Use Managed profiles and protected controls",
+  "Make up to three Deep Find requests each month",
 ];
 
 function packageLabel(aPackage: PurchasesPackage): string {
@@ -185,7 +184,7 @@ export default function PaywallSheet() {
 
             <Text style={styles.title}>Keep only what{"\n"}matters to you.</Text>
             <Text style={styles.subtitle}>{paywallMessage}</Text>
-            <Text style={styles.freeNote}>Watching a valid pasted link is always free. Premium covers every library, organization, creator, and discovery feature.</Text>
+            <Text style={styles.freeNote}>Today, Saved, Sessions, Google import, and Weekly Picks remain available without Premium. The limits above apply to new actions; existing local records stay on this device.</Text>
 
             <View style={styles.features}>
               {FEATURES.map((feature) => (
