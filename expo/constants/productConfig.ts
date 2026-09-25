@@ -2,8 +2,8 @@ export const PRODUCT_LIMITS = {
   todayMaxItems: 12,
   maxItemsPerSource: 2,
   discoveryCadenceDays: 7,
-  futureSourcesPerProfile: 100,
-  futureProfilesPerHousehold: 6,
+  premiumSourcesPerProfile: 25,
+  premiumProfilesPerHousehold: 3,
   sessionDraftMaxItems: 3,
   onboardingInterestMax: 5,
   weeklyDiscoveryDisplayMax: 3,
@@ -22,7 +22,7 @@ export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandid
 
 /** Central kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
-  paidAccess: false,
+  paidAccess: true,
   localLibrary: true,
   finiteSessions: true,
   youtubeDiscovery: false,
