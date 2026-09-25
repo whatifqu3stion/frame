@@ -21,7 +21,11 @@ Hosted Supabase projects may expose current keys as JSON maps. The function supp
 - `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` — singular development or manually configured values.
 - `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` — legacy/tooling fallbacks.
 - `SUPABASE_URL` — automatically supplied project URL.
-- `YOUTUBE_API_KEY` — reserved for a later ingestion slice; unused by Weekly Picks.
+- `YOUTUBE_API_KEY` — used by bounded source resolution and shared ingestion, and by paid Deep Find when enabled; unused by Weekly Picks.
+
+Paid Deep Find additionally requires `REVENUECAT_SECRET_API_KEY` (server-side RevenueCat subscriber verification), `GEMINI_API_KEY`, `DEEP_FIND_GEMINI_MODEL`, and `YOUTUBE_API_KEY`. The public RevenueCat Test Store SDK key goes in `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` for development/staging builds; never place the RevenueCat secret, Gemini key, or YouTube key in the client. Apply `20260925184000_paid_deep_find_allowances.sql` and deploy the `deep-find` function in development before enabling the `deep_find_enabled` service control. Its default is off; the server verifies a current Premium entitlement on every search or allowance read.
+
+Deep Find uses a UTC calendar-month allowance, a separate daily provider-search ceiling, and one YouTube `search.list` call per reserved search. The server records only a SHA-256 hash of the installation identity. A failed Gemini translation releases the monthly slot; a request begun at YouTube retains its slot even if its provider response fails. Monitor actual search quota before adjusting the 10-per-day default.
 
 Because `verify_jwt = false` is required for current publishable-key clients, the function performs its own `apikey` validation before any database read. Never place secret or service-role values in Expo public variables, mobile code, logs, URLs, query strings, or committed files.
 
