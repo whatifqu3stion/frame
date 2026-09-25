@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { executeDeepFind, hasServerPremiumEntitlement, type DeepFindDependencies, type DeepFindReservation, type DeepFindResponse } from "../_shared/deep-find.ts";
+import { executeDeepFind, geminiChannelQuery, hasServerPremiumEntitlement, type DeepFindDependencies, type DeepFindReservation, type DeepFindResponse } from "../_shared/deep-find.ts";
 import { getSupabaseSecretKey, hasValidPublishableKey, readBoundedJsonBody } from "../_shared/edge-security.ts";
 import type { SanitizedSource } from "../_shared/source-resolution.ts";
 
@@ -83,10 +83,7 @@ function createDependencies(
         }),
       });
       if (!response.ok) throw new Error("translation unavailable");
-      const body = record(await response.json());
-      const result = typeof body?.output_text === "string" ? record(JSON.parse(body.output_text)) : null;
-      if (!result || typeof result.query !== "string") throw new Error("invalid translation");
-      return result.query.trim();
+      return geminiChannelQuery(await response.json());
     },
     async searchChannels(query): Promise<readonly string[]> {
       const endpoint = new URL("https://www.googleapis.com/youtube/v3/search");
