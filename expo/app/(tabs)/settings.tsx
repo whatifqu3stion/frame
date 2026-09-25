@@ -128,7 +128,7 @@ export default function SettingsScreen() {
 
       {FEATURE_FLAGS.paidAccess ? <Section label="Premium">
         {premiumAccessState === "checking" ? <StatusRow title="Checking Premium" body="Confirming your access." loading />
-          : isPremium ? <StatusRow title="Premium active" body="Your complete Frame library is unlocked." />
+          : isPremium ? <StatusRow title="Premium active" body="Expanded sources, profiles, and Deep Find are available." />
           : premiumAccessState === "inactive" ? (
             <Pressable onPress={() => openPremium("library")} style={({ pressed }) => [styles.premiumCard, pressed && styles.pressed]} accessibilityRole="button" testID="open-premium">
               <Crown size={19} color={palette.onDark} /><View style={styles.flex}><Text style={styles.premiumTitle}>Frame Premium</Text><Text style={styles.premiumBody}>View plans or restore your purchase.</Text></View><ChevronRight size={17} color={palette.onDarkSoft} />
