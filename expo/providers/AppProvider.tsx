@@ -696,6 +696,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const profile = profiles.find((candidate) => candidate.id === profileId);
     if (!profile || profile.role !== "managed") return { ok: false, message: "Managed profile unavailable." };
     try {
+      const overview = await managedContentAccessService.getOverview(profile);
+      if (overview.policy.mode === "approvedSources") {
+        const capacity = await checkSourceCapacity(profile.id, video.channelId, followedSourceRepository, capabilities.sourceLimit);
+        if (!capacity.allowed) return { ok: false, message: capacity.message ?? "Source limit reached." };
+      }
       const approvedSource = await managedContentAccessService.approveVideo(profile, video);
       if (approvedSource) {
         await followedSourceRepository.follow(profile.id, approvedSource);
@@ -710,7 +715,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t approve that content." };
     }
-  }, [authorizeProtectedAction, hasOwnerPin, profiles, queryClient]);
+  }, [authorizeProtectedAction, capabilities.sourceLimit, hasOwnerPin, profiles, queryClient]);
 
   const reviewManagedApprovalRequest = useCallback(async (profileId: string, request: ManagedApprovalRequest, decision: "approve" | "deny"): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required." };
@@ -719,6 +724,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!profile || profile.role !== "managed") return { ok: false, message: "Managed profile unavailable." };
     try {
       if (decision === "approve") {
+        if (request.kind === "source") {
+          const capacity = await checkSourceCapacity(profile.id, request.sourceId, followedSourceRepository, capabilities.sourceLimit);
+          if (!capacity.allowed) return { ok: false, message: capacity.message ?? "Source limit reached." };
+        }
         const approvedSource = await managedContentAccessService.approveRequest(profile, request);
         if (approvedSource) {
           await followedSourceRepository.follow(profile.id, approvedSource);
@@ -736,7 +745,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t review that request." };
     }
-  }, [authorizeProtectedAction, hasOwnerPin, profiles, queryClient]);
+  }, [authorizeProtectedAction, capabilities.sourceLimit, hasOwnerPin, profiles, queryClient]);
 
   const revokeManagedContent = useCallback(async (profileId: string, kind: "video" | "source", targetId: string): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required." };
