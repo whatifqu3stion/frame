@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { executeDeepFind, hasServerPremiumEntitlement } from "../functions/_shared/deep-find.ts";
+import { executeDeepFind, geminiChannelQuery, hasServerPremiumEntitlement } from "../functions/_shared/deep-find.ts";
 
 const identity = "a".repeat(64);
 const channelId = `UC${"b".repeat(22)}`;
@@ -69,4 +69,13 @@ test("server verification rejects expired, refunded, or sandbox-only production 
   assert.equal(hasServerPremiumEntitlement({ subscriber: { ...purchase.subscriber, subscriptions: { premium_monthly: { is_sandbox: false, refunded_at: null } } } }, now, false), true);
   assert.equal(hasServerPremiumEntitlement(purchase, Date.parse("2026-10-02T00:00:00Z"), true), false);
   assert.equal(hasServerPremiumEntitlement({ subscriber: { ...purchase.subscriber, subscriptions: { premium_monthly: { is_sandbox: false, refunded_at: "2026-09-20T00:00:00Z" } } } }, now, false), false);
+});
+
+test("Gemini REST translation reads the final model output step", () => {
+  const response = { steps: [
+    { type: "thought", summary: [{ type: "text", text: "internal" }] },
+    { type: "model_output", content: [{ type: "text", text: '{"query":"bridge engineering channels"}' }] },
+  ] };
+  assert.equal(geminiChannelQuery(response), "bridge engineering channels");
+  assert.throws(() => geminiChannelQuery({ output_text: '{"query":"wrong shape"}' }));
 });
