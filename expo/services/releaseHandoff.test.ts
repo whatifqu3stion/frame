@@ -16,8 +16,7 @@ describe("pre-design release handoff", () => {
       "Selective Google import",
       "database version 9",
     ]) expect(smoke).toContain(boundary);
-    expect(smoke).toContain("Billing is intentionally disabled during the free beta");
-    expect(smoke).not.toContain("paywall and restore");
+    expect(smoke).toContain("Premium in test mode");
     expect(smoke).not.toContain("add it to Watch Later");
   });
 
@@ -26,7 +25,7 @@ describe("pre-design release handoff", () => {
     expect(handoff).toContain("Rork owns next");
     expect(handoff).toContain("Codex retains");
     expect(handoff).toContain("without rewriting product logic");
-    expect(handoff).toContain("Later paywall entitlement correctness");
+    expect(handoff).toContain("Day-one Premium capability logic");
     expect(handoff).toContain("Unreviewed or automatic Weekly Picks publication");
   });
 
