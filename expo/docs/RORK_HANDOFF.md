@@ -24,7 +24,8 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Produce installable iOS and Android development/staging builds.
 - Run the native checklist in `SMOKE_TEST.md` and attach screenshots/recordings.
 - Fix native-only presentation issues: safe areas, keyboard behavior, time pickers, back gestures, orientation, and device-specific layout.
-- Later, execute the graphic-design pass, broad copy-edit pass, store-facing assets/metadata, and the visual purchase surface.
+- Connect RevenueCat Test Store to native development builds and verify purchase, restore, expiry, and both device layouts with the Codex entitlement contract.
+- Later, execute the graphic-design pass, broad copy-edit pass, store-facing assets/metadata, and visual purchase polish.
 
 ## Codex retains
 
@@ -33,19 +34,17 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Supabase functions, migrations, operational workflows, and security rules.
 - Automated regression tests and release-contract checks.
 - Environment/configuration review, including final bundle identifiers and secret/public-variable separation.
-- Later paywall entitlement correctness, restore-state logic, and tests.
+- Day-one Premium capability logic, paid Deep Find, server-side entitlement verification and allowances, restore-state logic, and tests.
 
 ## Shared checkpoints
 
 - Bundle identifiers and environment names are chosen once and reviewed before signed builds.
-- Rork may wire RevenueCat’s native/store surface later; Codex verifies entitlement behavior and failure states before release.
+- Rork wires RevenueCat’s native/store surface for test builds; Codex verifies entitlement behavior and failure states before release.
 - Any Rork-generated native change that affects playback, persistence, profiles, Managed access, networking, or reset behavior returns for code review and automated validation.
 
 ## Explicitly deferred
 
 - Graphic design and visual polish.
 - Broad text/copy editing.
-- Paid-access activation and paywall launch.
-- Deep Find or broad search.
 - Remote approvals/notifications and cloud profile sync.
 - Unreviewed or automatic Weekly Picks publication.
