@@ -38,14 +38,19 @@ const FEATURES: string[] = [
 ];
 
 function packageLabel(aPackage: PurchasesPackage): string {
-  return aPackage.identifier === "$rc_annual" ? "Yearly" : "Monthly";
+  if (aPackage.identifier === "$rc_annual") return "Yearly";
+  if (aPackage.identifier === "$rc_monthly") return "Monthly";
+  if (aPackage.identifier === "$rc_lifetime") return "Lifetime";
+  return aPackage.product.title;
 }
 
 function packageDetail(aPackage: PurchasesPackage): string {
   if (aPackage.identifier === "$rc_annual") {
-    return `${aPackage.product.priceString} per year · best value`;
+    return `${aPackage.product.priceString} per year`;
   }
-  return `${aPackage.product.priceString} per month`;
+  if (aPackage.identifier === "$rc_monthly") return `${aPackage.product.priceString} per month`;
+  if (aPackage.identifier === "$rc_lifetime") return `${aPackage.product.priceString} one-time`;
+  return aPackage.product.priceString;
 }
 
 export default function PaywallSheet() {
@@ -68,8 +73,8 @@ export default function PaywallSheet() {
   const packages = useMemo<PurchasesPackage[]>(() => {
     const available = offeringQuery.data?.availablePackages ?? [];
     return available
-      .filter((item) => item.identifier === "$rc_annual" || item.identifier === "$rc_monthly")
-      .sort((a, b) => (a.identifier === "$rc_annual" ? -1 : b.identifier === "$rc_annual" ? 1 : 0));
+      .filter((item) => ["$rc_annual", "$rc_monthly", "$rc_lifetime"].includes(item.identifier))
+      .sort((a, b) => (["$rc_annual", "$rc_monthly", "$rc_lifetime"].indexOf(a.identifier) - ["$rc_annual", "$rc_monthly", "$rc_lifetime"].indexOf(b.identifier)));
   }, [offeringQuery.data]);
 
   useEffect(() => {
@@ -115,7 +120,7 @@ export default function PaywallSheet() {
     }
     if (!selectedPackage) {
       setFeedbackIsSuccess(false);
-      setFeedback("Subscription options are unavailable right now. Please try again.");
+      setFeedback("Purchase options are unavailable right now. Please try again.");
       return;
     }
 
@@ -149,7 +154,7 @@ export default function PaywallSheet() {
         setFeedbackIsSuccess(true);
         setFeedback("Restored successfully. Premium is active for this store account.");
       } else {
-        setFeedback("Restore finished, but no active Frame Premium subscription was found for this store account.");
+        setFeedback("Restore finished, but no active Frame Premium purchase was found for this store account.");
       }
     } catch (error) {
       setFeedback(getPurchaseErrorMessage(error) ?? "Restore cancelled. No changes were made.");
@@ -230,7 +235,7 @@ export default function PaywallSheet() {
             </View>
 
             {plansUnavailable ? (
-              <Text style={styles.feedback}>Subscription options are unavailable. Check your connection and try again.</Text>
+              <Text style={styles.feedback}>Purchase options are unavailable. Check your connection and try again.</Text>
             ) : null}
             {feedback ? <Text style={[styles.feedback, feedbackIsSuccess && styles.feedbackSuccess]}>{feedback}</Text> : null}
 
