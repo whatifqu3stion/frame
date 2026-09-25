@@ -17,6 +17,7 @@ import type { ManagedPlaybackControls, PlaybackControlStatus } from "@/models/pl
 import type { ManagedApprovalRequest, ManagedContentAccessStatus, ManagedContentMode, ManagedContentOverview } from "@/models/managedContentAccess";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
+import { canUseFeature, capabilitiesFor, type PremiumFeature } from "@/domain/capabilities";
 import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
@@ -105,18 +106,21 @@ function combinePlaybackStatus(allowance: ViewingAllowanceStatus, controls: Play
 }
 
 export type PremiumAccessState = "checking" | "active" | "inactive" | "unavailable" | "misconfigured";
-export type PremiumFeature = "library" | "save" | "watchLater" | "resume" | "interests" | "creators" | "import" | "sessions" | "discovery";
+export type { PremiumFeature } from "@/domain/capabilities";
 
 const PREMIUM_FEATURE_MESSAGES: Record<PremiumFeature, string> = {
-  library: "Premium unlocks playback from your personal library.",
-  save: "Premium lets you save this video to your private library.",
-  watchLater: "Premium keeps a calm Watch Later list on this device.",
-  resume: "Premium remembers where you stopped across your library.",
-  interests: "Premium uses your chosen interests to build quiet Explore collections.",
-  creators: "Premium lets you follow trusted creators on your shelf.",
-  import: "Connect Google to choose subscriptions you want to follow in Frame.",
-  sessions: "Premium lets you create and edit reusable one-to-three-video sessions.",
-  discovery: "Premium unlocks interest-led browsing without an endless feed.",
+  library: "Premium adds more room for trusted sources and profiles.",
+  save: "Premium adds more room for trusted sources and profiles.",
+  watchLater: "Premium adds more room for trusted sources and profiles.",
+  resume: "Premium adds more room for trusted sources and profiles.",
+  interests: "Premium adds more room for trusted sources and profiles.",
+  creators: "Premium lets you follow more trusted sources.",
+  import: "Premium lets you import more of your chosen subscriptions.",
+  sessions: "Premium adds more room for trusted sources and profiles.",
+  discovery: "Premium adds more room for trusted sources and profiles.",
+  additionalProfiles: "Premium unlocks up to three profiles on this device.",
+  managedControls: "Premium unlocks Managed profiles and protected controls.",
+  deepFind: "Premium includes three deliberate Deep Find searches per month.",
 };
 
 type GoogleCredential = {
@@ -283,6 +287,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const authorizationSessionRef = useRef<OwnerAuthorizationSession>(new OwnerAuthorizationSession());
   const authorizationResolverRef = useRef<((authorized: boolean) => void) | null>(null);
   const queryClient = useQueryClient();
+  const customerInfoQuery = useQuery({
+    queryKey: REVENUECAT_CUSTOMER_INFO_KEY,
+    queryFn: getRevenueCatCustomerInfo,
+    enabled: ready && FEATURE_FLAGS.paidAccess && isRevenueCatConfigured,
+    staleTime: 1000 * 60 * 5,
+  });
+  const isPremium = !customerInfoQuery.isError && hasPremiumEntitlement(customerInfoQuery.data);
+  const premiumAccessState = useMemo<PremiumAccessState>(() => {
+    if (!isRevenueCatConfigured) return "misconfigured";
+    if (customerInfoQuery.isLoading) return "checking";
+    if (customerInfoQuery.isError) return "unavailable";
+    return isPremium ? "active" : "inactive";
+  }, [customerInfoQuery.isError, customerInfoQuery.isLoading, isPremium]);
+  const capabilities = useMemo(() => capabilitiesFor(isPremium), [isPremium]);
   const draftWritesRef = useRef<Map<string, Promise<void>>>(new Map());
   const switchingRef = useRef<boolean>(false);
   const pinVerificationRef = useRef<boolean>(false);
@@ -517,6 +535,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [applyProfileSnapshot, profiles, queryClient, relockOwnerAccess, authorizeProtectedAction]);
 
   const createStandardProfile = useCallback(async (name: string): Promise<AddChannelResult> => {
+    if (profiles.length >= capabilities.profileLimit) return { ok: false, message: `Premium lets you use up to ${PRODUCT_LIMITS.premiumProfilesPerHousehold} profiles.` };
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required." };
     let createdProfile: Profile | null = null;
     try {
@@ -528,9 +547,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that profile." };
     }
-  }, [authorizeProtectedAction]);
+  }, [authorizeProtectedAction, capabilities.profileLimit, profiles.length]);
 
   const createManagedProfile = useCallback(async (name: string, allowance: ManagedAllowance): Promise<AddChannelResult> => {
+    if (!isPremium) return { ok: false, message: "Managed profiles are part of Premium." };
+    if (profiles.length >= capabilities.profileLimit) return { ok: false, message: `Frame supports up to ${capabilities.profileLimit} profiles.` };
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required to create a Managed profile." };
     let createdProfile: Profile | null = null;
     try {
@@ -542,7 +563,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that Managed profile." };
     }
-  }, [authorizeProtectedAction]);
+  }, [authorizeProtectedAction, capabilities.profileLimit, isPremium, profiles.length]);
 
   const renameLocalProfile = useCallback(async (profileId: string, name: string): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required." };
@@ -845,6 +866,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && previousState !== "active") {
         queueSourceLeaseReconciliation("foreground");
+        if (FEATURE_FLAGS.paidAccess && isRevenueCatConfigured) void queryClient.invalidateQueries({ queryKey: REVENUECAT_CUSTOMER_INFO_KEY });
         refreshRetention();
         void clearLegacyThumbnailCaches().catch(() => console.warn("[retention] Thumbnail cleanup pending; retrying on foreground."));
       }
@@ -913,20 +935,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     void persistSearches([]);
   }, [persistSearches]);
 
-  const customerInfoQuery = useQuery({
-    queryKey: REVENUECAT_CUSTOMER_INFO_KEY,
-    queryFn: getRevenueCatCustomerInfo,
-    enabled: ready && FEATURE_FLAGS.paidAccess && isRevenueCatConfigured,
-    staleTime: 1000 * 60 * 5,
-  });
-  const isPremium = hasPremiumEntitlement(customerInfoQuery.data);
-  const premiumAccessState = useMemo<PremiumAccessState>(() => {
-    if (!isRevenueCatConfigured) return "misconfigured";
-    if (customerInfoQuery.isLoading) return "checking";
-    if (customerInfoQuery.isError) return "unavailable";
-    return isPremium ? "active" : "inactive";
-  }, [customerInfoQuery.isError, customerInfoQuery.isLoading, isPremium]);
-
   useEffect(() => {
     if (!FEATURE_FLAGS.paidAccess) return;
     return subscribeToRevenueCatCustomerInfo((customerInfo) => {
@@ -946,7 +954,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, []);
 
   const requirePurchase = useCallback((feature: PremiumFeature = "library"): boolean => {
-    if (!FEATURE_FLAGS.paidAccess || premiumAccessState === "active") return true;
+    if (!FEATURE_FLAGS.paidAccess || canUseFeature(feature, isPremium)) return true;
     if (premiumAccessState === "inactive") {
       openPremium(feature);
       return false;
@@ -968,7 +976,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       ],
     );
     return false;
-  }, [openPremium, premiumAccessState, refreshPremiumAccess]);
+  }, [isPremium, openPremium, premiumAccessState, refreshPremiumAccess]);
 
   const replaceInterests = useCallback(async (items: InterestTopic[]): Promise<void> => {
     await persistInterests(items);
@@ -998,10 +1006,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
-    if (FEATURE_FLAGS.paidAccess && premiumAccessState !== "active") return;
     await upsertResume(activeProfileId, video, timestampSeconds);
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
-  }, [activeProfileId, premiumAccessState, queryClient]);
+  }, [activeProfileId, queryClient]);
 
   const clearVideoResume = useCallback(async (videoId: string): Promise<void> => {
     await clearResume(activeProfileId, videoId);
@@ -1104,7 +1111,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const profile = profiles.find((candidate) => candidate.id === profileId);
       const overview = profile?.role === "managed" ? await managedContentAccessService.getOverview(profile) : null;
       if (overview?.policy.mode === "approvedSources" && !hasOwnerPin) throw new Error("Create an Owner PIN before approving sources for a Managed profile.");
-      const capacity = await checkSourceCapacity(profileId, channel.id, followedSourceRepository);
+      const capacity = await checkSourceCapacity(profileId, channel.id, followedSourceRepository, capabilities.sourceLimit);
       if (!capacity.allowed) throw new Error(capacity.message);
       await followedSourceRepository.follow(profileId, channel);
       if (profile?.role === "managed") {
@@ -1231,9 +1238,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setImporting(true);
     try {
       const existing = await followedSourceRepository.listForProfile(profileId);
-      const plan = planSelectiveGoogleImport(selected, new Set(existing.map((source) => source.id)), PRODUCT_LIMITS.futureSourcesPerProfile);
+      const plan = planSelectiveGoogleImport(selected, new Set(existing.map((source) => source.id)), capabilities.sourceLimit);
       if (plan.overflowCount > 0) {
-        return { ok: false, importedCount: 0, message: `This profile can follow up to ${PRODUCT_LIMITS.futureSourcesPerProfile} sources. Choose fewer subscriptions.` };
+        return { ok: false, importedCount: 0, message: `This profile can follow up to ${capabilities.sourceLimit} sources. Choose fewer subscriptions.` };
       }
       if (plan.channels.length === 0) {
         return { ok: true, importedCount: 0, message: plan.alreadyFollowedCount > 0 ? "Those subscriptions are already followed in Frame." : "No new subscriptions were selected." };
@@ -1259,7 +1266,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     } finally {
       setImporting(false);
     }
-  }, [activeProfileId, authorizeProtectedAction, hasOwnerPin, profiles, queryClient]);
+  }, [activeProfileId, authorizeProtectedAction, capabilities.sourceLimit, hasOwnerPin, profiles, queryClient]);
 
   const signOutGoogle = useCallback(async (): Promise<AddChannelResult> => {
     if (googleCredential) {
@@ -1286,6 +1293,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const result = await confirmSourceFollow(activeProfileId, resolution, {
         followedSources: followedSourceRepository,
         reconcile: () => queueSourceLeaseReconciliation("local_change"),
+        maxSources: capabilities.sourceLimit,
       });
       if (result.ok && profile?.role === "managed") {
         if (managedOverview?.policy.mode === "approvedSources") {
@@ -1303,7 +1311,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await invalidateLibrary();
       return result;
     },
-    [activeProfileId, invalidateLibrary, authorizeProtectedAction, hasOwnerPin, profiles],
+    [activeProfileId, invalidateLibrary, authorizeProtectedAction, capabilities.sourceLimit, hasOwnerPin, profiles],
   );
 
   const wipeAllData = useCallback(async (): Promise<void> => {
@@ -1420,7 +1428,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       finishOnboarding,
       isPremium,
       premiumAccessState,
-      canUseLibrary: !FEATURE_FLAGS.paidAccess || premiumAccessState === "active",
+      canUseLibrary: true,
+      capabilities,
       subscriptionStatusLoading: customerInfoQuery.isLoading,
       subscriptionStatusError: customerInfoQuery.isError,
       refreshPremiumAccess,
@@ -1528,6 +1537,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       finishOnboarding,
       isPremium,
       premiumAccessState,
+      capabilities,
       customerInfoQuery.isLoading,
       customerInfoQuery.isError,
       refreshPremiumAccess,
