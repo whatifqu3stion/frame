@@ -17,7 +17,7 @@ type InstallationIdentityOptions = {
   randomBytes(length: number): Promise<Uint8Array>;
 };
 
-/** Creates one installation-scoped accounting identity; it is not an authentication credential. */
+/** Creates one private installation identity for billing and bounded server accounting. */
 export function createInstallationIdentityStore(options: InstallationIdentityOptions): InstallationIdentityStore {
   let inFlight: Promise<string> | null = null;
   return {
