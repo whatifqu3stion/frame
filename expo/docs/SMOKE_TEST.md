@@ -74,7 +74,7 @@ Pass condition: Today is deterministic, finite, locally actionable, and never be
 3. As a free user, confirm five sources, one profile, and that Deep Find opens Premium without any Gemini or provider call. Basic Today, Saved, Sessions, selective import, and Weekly Picks remain usable.
 4. Make three successful paid Deep Find requests. Confirm each makes at most one channel search, returns at most three independently verified sources, and a fourth request fails on the server with its next UTC reset date.
 5. Turn off Deep Find with the server service control; confirm the app shows a paused state while other features continue working.
-6. Allow the test entitlement to expire; confirm new paid actions stop, while existing followed sources, Saved items, profiles, and protective Managed restrictions stay on the device. Confirm a renewed or restored entitlement resumes paid access.
+6. For a test subscription, allow the entitlement to expire; confirm new paid actions stop, while existing followed sources, Saved items, profiles, and protective Managed restrictions stay on the device. Confirm a renewed or restored entitlement resumes paid access. If the offering uses a lifetime product, verify restore and a refunded or revoked test entitlement instead.
 
 Pass condition: paid capabilities follow real RevenueCat state; provider work is bounded and only starts after server-side entitlement verification and allowance reservation.
 
