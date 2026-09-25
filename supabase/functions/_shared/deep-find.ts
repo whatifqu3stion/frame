@@ -39,17 +39,26 @@ export function geminiChannelQuery(value: unknown): string {
   return parsed.query.trim();
 }
 
-/** Only a current subscription product can authorize a costly server action. */
+/** Only a current RevenueCat product can authorize a costly server action. */
 export function hasServerPremiumEntitlement(value: unknown, now: number, allowSandbox: boolean): boolean {
   const subscriber = isRecord(value) ? value.subscriber : null;
-  if (!isRecord(subscriber) || !isRecord(subscriber.entitlements) || !isRecord(subscriber.subscriptions)) return false;
+  if (!isRecord(subscriber) || !isRecord(subscriber.entitlements)) return false;
   const entitlement = subscriber.entitlements.premium;
   if (!isRecord(entitlement) || typeof entitlement.product_identifier !== "string" || typeof entitlement.purchase_date !== "string") return false;
-  const subscription = subscriber.subscriptions[entitlement.product_identifier];
-  if (!isRecord(subscription) || subscription.refunded_at != null || (subscription.is_sandbox !== false && !allowSandbox)) return false;
+  if (Date.parse(entitlement.purchase_date) > now || !Number.isFinite(Date.parse(entitlement.purchase_date))) return false;
+  const product = entitlement.product_identifier;
   const expires = typeof entitlement.expires_date === "string" ? Date.parse(entitlement.expires_date) : NaN;
   const grace = typeof entitlement.grace_period_expires_date === "string" ? Date.parse(entitlement.grace_period_expires_date) : NaN;
-  return Number.isFinite(expires) && expires > now || Number.isFinite(grace) && grace > now;
+  if (Number.isFinite(expires) || Number.isFinite(grace)) {
+    const subscription = isRecord(subscriber.subscriptions) ? subscriber.subscriptions[product] : null;
+    return isRecord(subscription) && subscription.refunded_at == null && (subscription.is_sandbox === false || allowSandbox)
+      && (Number.isFinite(expires) && expires > now || Number.isFinite(grace) && grace > now);
+  }
+  if (entitlement.expires_date !== null) return false;
+  const purchases = isRecord(subscriber.non_subscriptions) ? subscriber.non_subscriptions[product] : null;
+  return Array.isArray(purchases) && purchases.some((purchase) => isRecord(purchase)
+    && typeof purchase.purchase_date === "string" && Date.parse(purchase.purchase_date) <= now
+    && purchase.refunded_at == null && (purchase.is_sandbox === false || allowSandbox));
 }
 
 export function validateDeepFindRequest(input: unknown): { identity: string; query?: string } | null {
@@ -66,7 +75,7 @@ export async function executeDeepFind(input: unknown, deps: DeepFindDependencies
   if (!request) return failure("invalid_request", "Enter a specific source request (8–160 characters).");
 
   try {
-    if (!await deps.verifyPremium(request.identity)) return failure("premium_required", "Deep Find requires an active Premium subscription.");
+    if (!await deps.verifyPremium(request.identity)) return failure("premium_required", "Deep Find requires an active Premium entitlement.");
   } catch {
     return failure("unavailable", "Premium could not be verified. Try again later.");
   }
