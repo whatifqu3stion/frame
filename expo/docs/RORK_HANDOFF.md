@@ -34,7 +34,7 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Supabase functions, migrations, operational workflows, and security rules.
 - Automated regression tests and release-contract checks.
 - Environment/configuration review, including final bundle identifiers and secret/public-variable separation.
-- Day-one Premium capability logic, paid Deep Find, server-side entitlement verification and allowances, restore-state logic, and tests.
+- Day-one Premium capability logic, purchase and restore-state checks, and tests.
 
 ## Shared checkpoints
 
@@ -48,3 +48,4 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Broad text/copy editing.
 - Remote approvals/notifications and cloud profile sync.
 - Unreviewed or automatic Weekly Picks publication.
+- Deep Find and its paid search backend.
