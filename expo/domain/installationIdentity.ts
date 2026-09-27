@@ -17,7 +17,7 @@ type InstallationIdentityOptions = {
   randomBytes(length: number): Promise<Uint8Array>;
 };
 
-/** Creates one private installation identity for billing and bounded server accounting. */
+/** Creates one private installation identity for billing and bounded source actions. */
 export function createInstallationIdentityStore(options: InstallationIdentityOptions): InstallationIdentityStore {
   let inFlight: Promise<string> | null = null;
   return {
