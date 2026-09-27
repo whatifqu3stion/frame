@@ -37,6 +37,3 @@ verify_jwt = false
 
 [functions.draft-weekly-picks]
 verify_jwt = false
-
-[functions.deep-find]
-verify_jwt = false
