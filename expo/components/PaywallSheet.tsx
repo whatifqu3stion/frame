@@ -34,7 +34,6 @@ const FEATURES: string[] = [
   "Follow up to 25 trusted sources instead of five",
   "Create up to three local profiles instead of one",
   "Use Managed profiles and protected controls",
-  "Make up to three Deep Find requests each month",
 ];
 
 function packageLabel(aPackage: PurchasesPackage): string {
