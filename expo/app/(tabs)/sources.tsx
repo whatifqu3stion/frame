@@ -25,7 +25,7 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, getManagedContentOverview, requirePurchase } = useApp();
+  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, getManagedContentOverview } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [googleBusy, setGoogleBusy] = useState<boolean>(false);
@@ -264,10 +264,6 @@ export default function SourcesScreen() {
                 <View style={styles.endLine} />
               </View>
               <Text style={styles.discoverNote}>Frame shows no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} shared suggestions. Next edition: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
-              <Pressable onPress={() => { if (requirePurchase("deepFind")) router.push("/deep-find"); }} style={styles.settingsButton} accessibilityRole="button" testID="discover-deep-find">
-                <Text style={styles.settingsButtonText}>Deep Find · Premium</Text>
-                <ArrowRight size={16} color={palette.active} />
-              </Pressable>
             </View>
           )}
         </View>
