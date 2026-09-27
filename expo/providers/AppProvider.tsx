@@ -120,7 +120,6 @@ const PREMIUM_FEATURE_MESSAGES: Record<PremiumFeature, string> = {
   discovery: "Premium adds more room for trusted sources and profiles.",
   additionalProfiles: "Premium unlocks up to three profiles on this device.",
   managedControls: "Premium unlocks Managed profiles and protected controls.",
-  deepFind: "Premium includes three deliberate Deep Find searches per month.",
 };
 
 type GoogleCredential = {
