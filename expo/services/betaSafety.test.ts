@@ -13,12 +13,12 @@ describe("day-one Premium boundaries", () => {
     for (const feature of ["library", "save", "watchLater", "resume", "interests", "creators", "import", "sessions", "discovery"] as const) {
       expect(canUseFeature(feature, false)).toBeTrue();
     }
-    for (const feature of ["additionalProfiles", "managedControls", "deepFind"] as const) {
+    for (const feature of ["additionalProfiles", "managedControls"] as const) {
       expect(canUseFeature(feature, false)).toBeFalse();
       expect(canUseFeature(feature, true)).toBeTrue();
     }
-    expect(capabilitiesFor(false)).toEqual({ sourceLimit: 5, profileLimit: 1, monthlyDeepFindLimit: 0 });
-    expect(capabilitiesFor(true)).toEqual({ sourceLimit: 25, profileLimit: 3, monthlyDeepFindLimit: 3 });
+    expect(capabilitiesFor(false)).toEqual({ sourceLimit: 5, profileLimit: 1 });
+    expect(capabilitiesFor(true)).toEqual({ sourceLimit: 25, profileLimit: 3 });
   });
 
   test("free playback is independent of purchase status and paid access uses the actual entitlement", async () => {
