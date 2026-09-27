@@ -66,7 +66,6 @@ function AppContent() {
       <Stack.Screen name="terms" options={{ title: "Terms" }} />
       <Stack.Screen name="diagnostics" options={{ title: "Beta Support" }} />
       <Stack.Screen name="google-import" options={{ title: "Import subscriptions", presentation: "modal" }} />
-      <Stack.Screen name="deep-find" options={{ title: "Deep Find" }} />
       <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to Session" }} />
       <Stack.Screen name="session" options={{ presentation: "modal", title: "Named Session" }} />
       <Stack.Screen name="session/[id]" options={{ title: "" }} />
