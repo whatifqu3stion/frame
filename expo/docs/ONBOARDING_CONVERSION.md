@@ -10,7 +10,7 @@ A new viewer should understand why Frame is useful, make a meaningful choice, se
 
 | Stage | User question | Implemented answer and action |
 | --- | --- | --- |
-| Welcome | Why use Frame for YouTube? | “Your YouTube. At your pace.” Familiar creators, a daily selection capped by the real product limit, and sessions with a stopping point. “Build my Frame” starts customization. |
+| Welcome | Why use Frame? | “Worth watching. At your pace.” Familiar creators, a daily selection capped by the real product limit, and sessions with a stopping point. “Build my Frame” starts customization. |
 | Interests | Will this be relevant to me? | Optional interests lead to the existing weekly source suggestions. No additional questionnaire or account is required. |
 | Sources | How much work will setup take? | Show relevant source suggestions before manual link entry. Source descriptions and interest labels help with the decision; review and follow remain separate, explicit actions. |
 | Personal reveal | What did my choices create? | The real finite Today selection, with a prominent Save action. A successful save confirms that their library has begun. |

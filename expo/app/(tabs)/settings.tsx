@@ -76,7 +76,7 @@ export default function SettingsScreen() {
         {googleConnected ? (
           <View style={styles.accountBlock}>
             <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google connected"}</Text>
-            <Text style={styles.supporting}>Choose which YouTube subscriptions to follow in Frame.</Text>
+            <Text style={styles.supporting}>Choose which subscriptions to follow in Frame.</Text>
             <Pressable onPress={() => router.push("/google-import")} style={styles.inlineAction} accessibilityRole="button" testID="settings-google-import">
               <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
             </Pressable>
@@ -156,7 +156,7 @@ export default function SettingsScreen() {
       </Section>
 
       {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Replay setup and try the sample checkout. No charge.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
-      <Section label="About"><Text style={styles.infoText}>Frame brings together the YouTube sources you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
+      <Section label="About"><Text style={styles.infoText}>Frame brings together the creators you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
       {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
       <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />

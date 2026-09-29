@@ -200,7 +200,7 @@ export default function SessionBuilder() {
                 {isSelected ? <Text style={styles.indexText}>{order}</Text> : null}
               </View>
               <View style={styles.flex}>
-                <Text style={type.caption} numberOfLines={1}>{item.channelTitle || "YouTube"}</Text>
+                <Text style={type.caption} numberOfLines={1}>{item.channelTitle || "Source"}</Text>
                 <Text style={[styles.rowTitle, isSelected && styles.selectedTitle]} numberOfLines={2}>{item.title}</Text>
               </View>
               <Text style={styles.duration}>{formatDuration(item.durationSeconds)}</Text>

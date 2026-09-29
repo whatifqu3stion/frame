@@ -86,8 +86,8 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       {replay ? <Text style={styles.replayNote}>Welcome preview · source and interest changes are saved to this profile.</Text> : null}
       {current === "welcome" ? <>
-        <Text style={styles.title} accessibilityRole="header">Your YouTube.{"\n"}At your pace.</Text>
-        <Text style={styles.body}>Keep the YouTube creators you love. Bring their videos into a calmer space, where you choose what plays and when you’re done.</Text>
+        <Text style={styles.title} accessibilityRole="header">Worth watching.{"\n"}At your pace.</Text>
+        <Text style={styles.body}>Bring the creators you love into a calmer space. Find something worth your time, choose what plays, and decide when you’re done.</Text>
         <View style={styles.introduction}>
           <Text style={styles.introTitle}>A daily selection. A natural ending.</Text>
           <Text style={styles.introBody}>Today brings you up to {TODAY_MAX_ITEMS} videos from your sources. Save what catches your eye, or plan a short session for later.</Text>
@@ -174,12 +174,12 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     </View> : null}
     {!resolution ? <>
     <Text style={styles.fieldLabel}>{interests.length > 0 && activeProfile?.role !== "managed" ? "Or bring a favorite" : "Source link or @handle"}</Text>
-    <Text style={styles.sourceMeta}>Paste a YouTube channel or video link, an @handle, or a channel ID.</Text>
-    <View style={styles.inputRow}><Link2 size={18} color={palette.inkMuted} /><TextInput value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" /></View>
+    <Text style={styles.sourceMeta}>Paste a supported channel or video link, an @handle, or a channel ID.</Text>
+    <View style={styles.inputRow}><Link2 size={18} color={palette.inkMuted} /><TextInput value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="@creator" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" /></View>
     </> : null}
     {resolution ? <View style={styles.sourcePreview} testID="onboard-source-preview">
       <MediaImage source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
-      <View style={styles.flex}><Text style={type.heading}>{resolution.source.displayName}</Text><Text style={styles.sourceMeta}>{resolution.source.handle ?? "YouTube channel"}</Text>{resolution.video ? <Text style={styles.sourceMeta}>From video: {resolution.video.title}</Text> : null}</View>
+      <View style={styles.flex}><Text style={type.heading}>{resolution.source.displayName}</Text><Text style={styles.sourceMeta}>{resolution.source.handle ?? "Channel"}</Text>{resolution.video ? <Text style={styles.sourceMeta}>From video: {resolution.video.title}</Text> : null}</View>
     </View> : null}
     <Pressable disabled={busy || (!resolution && !link.trim())} onPress={() => { void submit(); }} accessibilityRole="button" accessibilityState={{ busy, disabled: busy || (!resolution && !link.trim()) }} style={[styles.sourceAction, (busy || (!resolution && !link.trim())) && styles.disabled]} testID={resolution ? "onboard-confirm-source" : "onboard-resolve-source"}><Text style={styles.primaryText}>{busy ? (resolution ? "Following…" : "Finding source…") : resolution ? "Follow source" : "Find source"}</Text></Pressable>
     {resolution ? <Pressable disabled={busy} onPress={() => { setResolution(null); setLink(""); setFeedback(null); }} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Choose another source</Text></Pressable> : null}

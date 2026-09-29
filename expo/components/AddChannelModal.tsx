@@ -112,15 +112,15 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Find a YouTube source</Text>
+          <Text style={styles.heading}>Find a source</Text>
           <Text style={styles.body}>Use a channel or video link, an @handle, or a channel ID. Check the result before following.</Text>
-          <Text style={[type.label, { marginTop: spacing.md }]}>YouTube source or video link</Text>
+          <Text style={[type.label, { marginTop: spacing.md }]}>Source or video link</Text>
           <View style={styles.inputRow}>
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
             <TextInput
               value={value}
               onChangeText={(text) => { setValue(text); setResolution(null); setResolutionProfileId(null); setFeedback(null); }}
-              placeholder="youtube.com/@source"
+              placeholder="@creator"
               placeholderTextColor={palette.inkMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -129,7 +129,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               onSubmitEditing={() => { void submit(); }}
               returnKeyType="done"
               editable={!busy}
-              accessibilityLabel="YouTube source or video link"
+              accessibilityLabel="Source or video link"
               testID="add-channel-input"
             />
           </View>
@@ -140,7 +140,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               <Image source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
               <View style={styles.previewCopy}>
                 <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
-                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "YouTube channel"}</Text>
+                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Channel"}</Text>
                 {resolution.video ? <Text style={styles.videoTitle} numberOfLines={2}>Video · {resolution.video.title}</Text> : null}
               </View>
             </View>

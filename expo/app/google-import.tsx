@@ -110,7 +110,7 @@ export default function GoogleImportScreen() {
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>Optional setup</Text>
           <Text style={styles.title}>Bring your sources along.</Text>
-          <Text style={styles.body}>Choose the YouTube subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
+          <Text style={styles.body}>Choose the subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
           <TextInput value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" style={[type.body, { minHeight: 48, padding: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control }]} />
           <View style={styles.counterRow}>

@@ -164,7 +164,7 @@ export default function WatchScreen() {
     return {
       id,
       fetchedAt: Number(firstParam(params.fetchedAt) ?? 0),
-      title: optionalText(firstParam(params.title)) || "YouTube video",
+      title: optionalText(firstParam(params.title)) || "Video",
       channelId: optionalText(firstParam(params.channelId)),
       channelTitle: optionalText(firstParam(params.channelTitle)),
       thumbnailUrl: optionalText(firstParam(params.thumbnailUrl)),
@@ -665,7 +665,7 @@ export default function WatchScreen() {
     try {
       await Linking.openURL(url);
     } catch {
-      void AccessibilityInfo.announceForAccessibility("Couldn’t open YouTube.");
+      void AccessibilityInfo.announceForAccessibility("Couldn’t open the original video.");
     }
   }, [activeProfileId, authorizeProtectedAction]);
 
@@ -827,7 +827,7 @@ export default function WatchScreen() {
             </Pressable>
             <Pressable onPress={openInYouTube} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="link" testID="open-youtube">
               <ExternalLink size={15} color={palette.wall} />
-              <Text style={styles.darkButtonText}>Open in YouTube</Text>
+              <Text style={styles.darkButtonText}>Open original video</Text>
             </Pressable>
           </View>
           {isSession ? (
@@ -978,7 +978,7 @@ export default function WatchScreen() {
             onPress={() => router.push({ pathname: "/channel/[id]", params: { id: video.channelId } })}
             style={({ pressed }) => [styles.channelLink, pressed && styles.pressed]}
             accessibilityRole="link"
-            accessibilityLabel={`View source: ${video.channelTitle || "YouTube channel"}`}
+            accessibilityLabel={`View source: ${video.channelTitle || "Channel"}`}
           >
             <Text style={[type.caption, { color: watchPalette.inkSoft }]}>Source</Text>
             <Text style={[type.heading, styles.channelTitle, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>

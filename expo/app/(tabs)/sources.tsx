@@ -140,7 +140,7 @@ export default function SourcesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.page}>
-          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle={activeProfile?.role === "managed" ? "Videos and sources need the Owner’s approval." : "Follow YouTube channels you enjoy, or explore this week’s picks."} />
+          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle={activeProfile?.role === "managed" ? "Videos and sources need the Owner’s approval." : "Follow creators you enjoy, or explore this week’s picks."} />
           {FOUNDATION_CAPABILITIES.weeklyDiscovery && activeProfile?.role !== "managed" ? <View style={styles.segmented} accessibilityRole="tablist">
             {(["followed", "discover"] as const).map((item) => {
               const selected = section === item;
@@ -165,14 +165,14 @@ export default function SourcesScreen() {
                 <View style={styles.addIcon}><Plus size={17} color={palette.active} strokeWidth={2} /></View>
                 <View style={styles.flex}>
                   <Text style={type.label}>Add a source</Text>
-                  <Text style={styles.supporting}>Use a YouTube link or @handle.</Text>
+                  <Text style={styles.supporting}>Use a supported channel link or @handle.</Text>
                 </View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable>
 
               {googleConfigured && managedOverview?.policy.mode !== "selectedVideos" ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
                 <View style={styles.importIcon}>{googleBusy ? <ActivityIndicator size="small" color={palette.active} /> : <Import size={17} color={palette.active} strokeWidth={1.8} />}</View>
-                <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose YouTube subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Choose which YouTube subscriptions to follow in Frame.</Text></View>
+                <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Choose which subscriptions to follow in Frame.</Text></View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable> : null}
 
@@ -183,7 +183,7 @@ export default function SourcesScreen() {
               ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
                 <EmptyState title="Selected Videos is on" body="Only individual videos approved by the Owner can play. Paste a video link to request one." />
               ) : visibleChannels.length === 0 ? (
-                <EmptyState title={activeProfile?.role === "managed" ? "No approved sources" : "No followed sources"} body={activeProfile?.role === "managed" ? "An Owner can add a source here or approve a request from Profiles & boundaries." : "Add a YouTube channel to see its videos in Today."} />
+                <EmptyState title={activeProfile?.role === "managed" ? "No approved sources" : "No followed sources"} body={activeProfile?.role === "managed" ? "An Owner can add a source here or approve a request from Profiles & boundaries." : "Follow a source to see its videos in Today."} />
               ) : (
                 <View style={styles.sourceList}>
                   {visibleChannels.map((channel) => (

@@ -268,14 +268,14 @@ Frame sounds calm, clear, and interested in what the viewer enjoys. Use short, n
 | Term | Use |
 | --- | --- |
 | Today | The tab and its daily selection of videos. Call the contents “today’s selection,” not an inbox. |
-| Source | A YouTube channel followed in Frame. Explain that connection when adding or importing one. |
+| Source | A creator’s channel followed in Frame. Explain that following a source adds its videos to Today. |
 | Saved | The destination; “saved videos” for the items within it. |
 | Session | A short, ordered viewing plan. Use lowercase “session” in ordinary copy and sentence case in labels. |
 | Weekly picks | Optional source suggestions; “this week’s selection” in explanatory text. |
 | Owner / Standard / Managed | Existing profile roles. Preserve the role names and explain what their controls do. |
 | Owner PIN | The PIN protecting Frame’s controls. Do not call it device protection or a household password. |
 
-Use specific actions such as “Find source,” “Request approval,” “Open in YouTube,” and “Start session.” Error messages state what failed and the available recovery. Unknown durations remain explicitly unavailable; partial duration totals say “At least.” Finish estimates exclude breaks. Keep deletion, privacy, purchase, and restriction consequences explicit. Align accessibility names with the visible action.
+Use specific actions such as “Find source,” “Request approval,” “Open original video,” and “Start session.” Error messages state what failed and the available recovery. Unknown durations remain explicitly unavailable; partial duration totals say “At least.” Finish estimates exclude breaks. Keep deletion, privacy, purchase, and restriction consequences explicit. Align accessibility names with the visible action.
 
 
 ### First-run experience and Premium demo
@@ -292,3 +292,7 @@ Settings → Demo → Preview welcome & Premium replays this flow without resett
 ### Conversion intent
 
 Onboarding explicitly explains the value of Frame through familiar creators, a bounded daily selection, saved finds, and sessions with an ending. Personalized source suggestions precede manual link entry. The reveal makes the first real save visually prominent; only after that persisted action does the footer promote the Premium demo. The offer uses real progress counts and describes the ongoing benefit of the library. Its checkout CTA names the sample plan and billing period, with one primary action at a time and a visible continuation without purchase. No new personalization questionnaire, artificial scarcity, or fabricated proof is introduced. See `expo/docs/ONBOARDING_CONVERSION.md` for the hypothesis, research limitations, and uninstrumented validation plan.
+
+### Frame-led brand language
+
+Lead with “Worth watching. At your pace.” Frame-authored onboarding, offers, everyday controls, and recovery messages use Frame’s voice without YouTube names, logos, or branded URL examples. Use “@creator” as the source-input example and “Open original video” for external playback. This is a copy and identity decision, not a change to supported providers. Preserve provider identifiers and URLs in integrations, creator-supplied metadata, the official embedded player, and accurate Terms/Privacy disclosures. The external player and account authorization screens may display their own branding.

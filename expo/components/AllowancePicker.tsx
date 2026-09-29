@@ -40,7 +40,7 @@ export default function AllowancePicker({ value, onChange }: Props) {
         <Pressable onPress={() => { setCustomMode(false); onChange({ mode: "unlimited" }); }} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
       </View>
       {value.mode === "dailyLimit" && customMode ? <View><Text style={styles.note}>Custom minutes (1–1440)</Text><TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</View> : null}
-      <Text style={styles.note}>This allowance limits playback only inside Frame. It does not block YouTube, browsers, or other apps.</Text>
+      <Text style={styles.note}>This allowance limits playback only inside Frame. It does not limit viewing in browsers or other apps.</Text>
     </View>
   );
 }
