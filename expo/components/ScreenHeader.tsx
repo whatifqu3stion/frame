@@ -31,11 +31,10 @@ export default function ScreenHeader({ eyebrow, title, subtitle }: Props) {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    root: { paddingTop: spacing.md, paddingBottom: spacing.lg },
+    root: { paddingTop: spacing.md, paddingBottom: spacing.lg, marginBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
     topRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
-    profileButton: { minHeight: 48, maxWidth: 180, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 22, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+    profileButton: { minHeight: 48, maxWidth: 180, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 10, backgroundColor: palette.surface },
     profileName: { ...type.label, maxWidth: 88, color: palette.inkMuted, fontSize: 12 },
-    eyebrow: { ...type.caption, color: palette.accent },
     title: { ...type.title, flexShrink: 1 },
     subtitle: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 480 },
     pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },

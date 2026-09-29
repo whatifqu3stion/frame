@@ -8,6 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import MediaMount from "@/components/MediaMount";
 import { radii, spacing, type FramePalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
@@ -73,7 +74,7 @@ function VideoSkeletonCard({ variant, palette }: { variant: SkeletonVariant; pal
   if (variant === "full") {
     return (
       <View style={styles.fullCard}>
-        <View style={styles.fullThumbnail} />
+        <MediaMount><View style={styles.fullThumbnail} /></MediaMount>
         <View style={styles.fullMeta}>
           <View style={[styles.bar, styles.eyebrowBar]} />
           <View style={[styles.bar, styles.fullTitleBar]} />
@@ -145,9 +146,7 @@ function createStyles(palette: FramePalette) {
       width: "100%",
       aspectRatio: 16 / 9,
       backgroundColor: skeletonColor,
-      borderRadius: radii.card,
-      borderWidth: 1,
-      borderColor: palette.borderSoft,
+      borderRadius: radii.media,
     },
     fullMeta: { marginTop: spacing.md, paddingRight: spacing.xl, gap: spacing.sm },
     fullTitleBar: { width: "88%", height: 16 },

@@ -37,10 +37,23 @@ PR #18 covers the five initial priority groups and the remaining frontend implem
 
 ## Validation and remaining device checks
 
-TypeScript passes. Expo lint has no errors and one pre-existing unused-disable warning in generated `src/integrations/supabase/types.ts`. The Expo Bun suite passes 203 tests across 45 files (992 assertions), including six appearance contrast cases and eight schedule/link recovery cases. The earlier Impeccable source detector had no findings; its markup-oriented result is not a native visual audit.
+TypeScript passes. Expo lint has no errors and one pre-existing unused-disable warning in generated `src/integrations/supabase/types.ts`. The Expo Bun suite passes 204 tests across 45 files (1,050 assertions), including six expanded appearance contrast cases, one viewing-room contrast case, and eight schedule/link recovery cases. The earlier Impeccable source detector had no findings; its markup-oriented result is not a native visual audit.
 
 The real app still needs device verification. The available localhost browser preview was blocked, and no iOS/Android runtime was available. No mockup was substituted for this check.
 
 Verify 320px width and enlarged text, long profile/video names, keyboard-open sheets and session/search fields, native date/time pickers, player completion/error/approval states in both orientations, VoiceOver/TalkBack focus and announcements, long Saved/import lists, broken images and reduced motion. Exercise rejected network mutations and a valid/invalid web time edit, then check that only the intended values save.
 
 PR #18 remains a draft; these changes are not merged or deployed to Rork/main.
+
+## Static material and composition pass
+
+Approved after the functional refinement: contemporary, calm and curated, with material references expressed through tonal surfaces and precise construction. Literal marble veining, wood grain, curtains and decorative gold are intentionally absent. Motion is reserved for the next phase.
+
+- Shared light surfaces now use a warm stone range; dark surfaces use warm charcoal. Existing blue, green and rose accents remain selectable, with restrained selection tints.
+- `MediaMount` gives Today, full video cards and weekly features an 8px matte surround with a fine edge. Media retains its own 16:9 viewport and tighter 6px corners. Full-card skeletons use the same mount.
+- The current session is an ordered programme on deep umber. Its title, truthful runtime status and locally available video titles are visible before opening. Reads stay profile-scoped and participate in existing library retention invalidation.
+- Session detail shares the programme surface; the Begin/Continue action is prominent, and secondary actions remain outside it. Ordered items use clear typography and dividing rules.
+- Headers, Sources rows, Settings notes and player information use calmer spacing and fewer repeated card borders. Sheets use the established soft elevation without a competing outline.
+- Existing motion behavior and playback controls are unchanged.
+
+Expanded color tests exercise six tonal backgrounds, all three accents, inverse programme actions and viewing-room text. A separate source reviewer identified retention refresh and enlarged-label risks; both were corrected and confirmed. Real-device visual verification remains outstanding.

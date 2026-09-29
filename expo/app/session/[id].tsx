@@ -89,18 +89,19 @@ export default function SavedSessionScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
-      <Text style={styles.eyebrow}>Named session</Text>
+      <View style={styles.programme}>
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
       <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}{runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}</Text>
       <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete · Rest here, or begin again when you choose." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${formatDuration(remaining.seconds)} known remaining` : "Runtime unknown"}${finishTime ? ` · Finish around ${finishTime}` : ""}`}</Text>
 
       {session.orderedVideoIds.length > 0 ? (
         <Pressable onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
-          <Play size={17} color={palette.onDark} fill={palette.onDark} />
+          <Play size={17} color={palette.programme} fill={palette.programme} />
           <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Begin again" : position > 0 ? `Continue with video ${position + 1}` : "Begin session"}</Text>
         </Pressable>
       ) : null}
 
+      </View>
       <View style={styles.actions}>
         <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
           <Pencil size={16} color={palette.accent} /><Text style={styles.actionText}>Edit</Text>
@@ -141,27 +142,27 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: palette.wall },
     missing: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", padding: spacing.page },
-    eyebrow: { ...type.caption, color: palette.accent },
-    title: { ...type.title, marginTop: spacing.xs },
-    subtitle: { ...type.bodySoft, marginTop: spacing.sm, color: palette.inkMuted },
-    actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xl },
+    programme: { padding: spacing.lg, backgroundColor: palette.programme, borderRadius: radii.card },
+    title: { ...type.title, color: palette.onProgramme },
+    subtitle: { ...type.bodySoft, marginTop: spacing.sm, color: palette.onProgrammeSoft },
+    actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.xl },
     actionButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
     actionText: { ...type.label, color: palette.accent },
     iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
-    list: { marginTop: spacing.xl, gap: spacing.md },
-    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
-    orderMark: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentDeep },
-    orderText: { ...type.label, color: palette.onDark },
+    list: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
+    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
+    orderMark: { minWidth: 32, alignItems: "flex-start", justifyContent: "center" },
+    orderText: { ...type.heading, color: palette.inkMuted, fontSize: 24, fontVariant: ["tabular-nums"] },
     videoMain: { flex: 1, minHeight: 76, justifyContent: "center" },
     channel: { ...type.caption, color: palette.inkMuted },
-    videoTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
+    videoTitle: { ...type.heading, fontSize: 20, lineHeight: 27, marginTop: 2 },
     unavailable: { color: palette.danger },
     duration: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xs },
     rowActions: { gap: spacing.xs },
     smallButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
     disabled: { opacity: 0.22 },
-    beginButton: { minHeight: 52, marginTop: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
-    beginText: { ...type.label, color: palette.onDark },
+    beginButton: { minHeight: 52, marginTop: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.onProgramme, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+    beginText: { ...type.label, color: palette.programme, flexShrink: 1, textAlign: "center" },
     stopNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
     secondaryButton: { minHeight: 48, marginTop: spacing.lg, alignItems: "center", justifyContent: "center" },
     secondaryText: { ...type.label, color: palette.accent },

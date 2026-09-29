@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,8 +22,8 @@ export default function TabLayout() {
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: 48 },
         tabBarStyle: {
           backgroundColor: palette.surfaceHigh,
-          borderTopWidth: 1,
-          borderTopColor: palette.borderSoft,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: palette.border,
           elevation: 0,
           height: 64 + bottomInset,
           paddingTop: 8,

@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
+import SessionProgramme from "@/components/SessionProgramme";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
-import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
+import { sessionPosition } from "@/domain/sessionFlow";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { shellProfileQueryKeys } from "@/domain/productShell";
 import { filterSavedLibrary, resolveSavedCriteria, type SavedFilterCriteria, type SavedViewingFilter } from "@/domain/savedLibrary";
@@ -46,7 +47,6 @@ export default function SavedScreen() {
   }), [resumeList, savedVideos]);
   const currentSession = sessions.find((item) => item.orderedVideoIds.length > 0 && sessionPosition(item) < item.orderedVideoIds.length) ?? sessions[0] ?? null;
   const draft = sessionDraft?.name || sessionDraft?.orderedVideoIds.length ? sessionDraft : null;
-  const sessionEstimate = currentSession ? sessionRuntime(currentSession.orderedVideoIds, savedVideos, sessionPosition(currentSession)) : null;
   const hasActiveFilter = searchQuery.trim().length > 0 || viewingFilter !== "all";
 
   const openSessionBuilder = (): void => {
@@ -77,24 +77,12 @@ export default function SavedScreen() {
           </Pressable>
         ) : null}
         {currentSession ? (
-          <Pressable
-            onPress={() => {
-              if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
-            }}
-            style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`Open current session ${currentSession.name}`}
-          >
-            <View style={styles.sessionIcon}><Play size={17} color={palette.active} fill={palette.active} /></View>
-            <View style={styles.flex}>
-              <Text style={styles.sessionName}>{currentSession.name}</Text>
-              <Text style={styles.sessionMeta}>{currentSession.orderedVideoIds.length} videos · {sessionPosition(currentSession) >= currentSession.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(currentSession) + 1}`}{sessionEstimate?.seconds ? ` · ${Math.ceil(sessionEstimate.seconds / 60)} min known left` : ""}{sessionEstimate?.unknown ? " + unknown time" : ""}</Text>
-            </View>
-            <ArrowRight size={17} color={palette.inkMuted} />
-          </Pressable>
+          <SessionProgramme profileId={activeProfileId} session={currentSession} savedVideos={savedVideos} onOpen={() => {
+            if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
+          }} />
         ) : (
           <View>
-            <EmptyState title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
+            <EmptyState compact title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
             <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
               <Plus size={16} color={palette.onDark} />
               <Text style={styles.createSessionText}>Create a session</Text>
@@ -102,7 +90,7 @@ export default function SavedScreen() {
           </View>
         )}
         {currentSession ? (
-          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, { marginTop: spacing.md }, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.onDark} /><Text style={styles.createSessionText}>Create another session</Text></Pressable>
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createAnother, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.active} /><Text style={[type.label, { color: palette.active }]}>Create another session</Text></Pressable>
         ) : null}
         {sessions.length > 1 ? <Pressable onPress={() => setShowOtherSessions((value) => !value)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ expanded: showOtherSessions }}><Text style={type.label}>{showOtherSessions ? "Hide other sessions" : `Other sessions · ${sessions.length - 1}`}</Text></Pressable> : null}
         {showOtherSessions ? sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
@@ -178,7 +166,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     page: { paddingHorizontal: spacing.page },
     flex: { flex: 1 },
     otherSessions: { minHeight: 48, justifyContent: "center", marginTop: spacing.sm },
-    sectionTitle: { ...type.caption, marginTop: spacing.xl, marginBottom: spacing.md },
+    sectionTitle: { ...type.heading, marginTop: spacing.xl, marginBottom: spacing.md },
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
     searchField: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingLeft: spacing.md, paddingRight: spacing.xs, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     searchInput: { ...type.body, flex: 1, minHeight: 50, paddingVertical: 0 },
@@ -189,10 +177,11 @@ function createStyles(palette: FramePalette, type: FrameType) {
     filterText: { ...type.label, color: palette.inkSoft, textAlign: "center" },
     filterTextSelected: { color: palette.active },
     resultCount: { ...type.caption, marginTop: spacing.md, marginBottom: spacing.md, color: palette.inkMuted },
-    sessionCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    sessionCard: { minHeight: 80, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
     sessionIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: palette.activeSoft },
     sessionName: { ...type.heading, fontSize: 18, lineHeight: 23 },
     sessionMeta: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
+    createAnother: { minHeight: 48, flexDirection: "row", gap: spacing.sm, alignItems: "center", marginTop: spacing.sm },
     createSession: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: -spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     createSessionText: { ...type.label, color: palette.onDark },
     pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] },

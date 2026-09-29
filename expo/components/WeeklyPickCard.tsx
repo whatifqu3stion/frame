@@ -1,3 +1,4 @@
+import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { Check, Plus, Play } from "lucide-react-native";
 import { useMemo } from "react";
@@ -30,7 +31,8 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
   return (
     <View style={styles.card} testID={`weekly-pick-${suggestion.providerSourceId}`}>
       {media?.thumbnailUrl ? (
-        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.preview}>
+        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.previewAction}>
+          <MediaMount><View style={styles.preview}>
           <Image
             source={{ uri: media.thumbnailUrl }}
             style={styles.previewImage}
@@ -40,6 +42,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
             accessibilityLabel={`Featured video from ${suggestion.displayName}`}
           />
           {duration ? <View style={styles.durationBadge}><Text style={styles.durationText}>{duration}</Text></View> : null}
+          </View></MediaMount>
         </Pressable>
       ) : null}
 
@@ -58,9 +61,8 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
             ) : <Text style={styles.avatarFallback}>{suggestion.displayName.slice(0, 1).toUpperCase()}</Text>}
           </View>
           <View style={styles.sourceCopy}>
-            <Text style={styles.interestLabel}>{interestName}</Text>
             <Text style={styles.sourceName} numberOfLines={2}>{suggestion.displayName}</Text>
-            {suggestion.handle ? <Text style={styles.handle} numberOfLines={1}>{suggestion.handle}</Text> : null}
+            <Text style={styles.handle} numberOfLines={2}>{[suggestion.handle, interestName].filter(Boolean).join(" · ")}</Text>
           </View>
         </View>
 
@@ -105,19 +107,20 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    card: { overflow: "hidden", borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    preview: { aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep },
+    card: { paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
+    previewAction: { width: "100%" },
+    preview: { aspectRatio: 16 / 9, borderRadius: radii.media, overflow: "hidden", backgroundColor: palette.surfaceDeep },
     previewImage: { width: "100%", height: "100%" },
     durationBadge: { position: "absolute", right: spacing.sm, bottom: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radii.small, backgroundColor: palette.overlay },
     durationText: { ...type.caption, color: palette.onDark, fontSize: 12, lineHeight: 17, letterSpacing: 0.4 },
-    content: { padding: spacing.md },
+    content: { paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
     sourceHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
     avatar: { width: 48, height: 48, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 24, backgroundColor: palette.surfaceDeep },
     avatarImage: { width: "100%", height: "100%" },
     avatarFallback: { ...type.heading, color: palette.active },
     sourceCopy: { flex: 1 },
     interestLabel: { ...type.caption, color: palette.active, marginBottom: 2 },
-    sourceName: { ...type.heading, fontSize: 18, lineHeight: 23 },
+    sourceName: { ...type.heading, fontSize: 22, lineHeight: 29 },
     handle: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1 },
     reason: { ...type.body, color: palette.inkSoft, marginTop: spacing.md },
     description: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.md },

@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T00:00:00Z",
+  "title": "Design System: Frame",
+  "extensions": {
+    "colorMeta": {
+      "light-mount": {
+        "role": "neutral",
+        "displayName": "Light Mount"
+      },
+      "light-mount-edge": {
+        "role": "neutral",
+        "displayName": "Light Mount Edge"
+      },
+      "light-programme": {
+        "role": "neutral",
+        "displayName": "Light Programme"
+      },
+      "light-on-programme": {
+        "role": "neutral",
+        "displayName": "Light On Programme"
+      },
+      "light-on-programme-soft": {
+        "role": "neutral",
+        "displayName": "Light On Programme Soft"
+      },
+      "light-programme-rule": {
+        "role": "neutral",
+        "displayName": "Light Programme Rule"
+      },
+      "dark-mount": {
+        "role": "neutral",
+        "displayName": "Dark Mount"
+      },
+      "dark-mount-edge": {
+        "role": "neutral",
+        "displayName": "Dark Mount Edge"
+      },
+      "dark-programme": {
+        "role": "neutral",
+        "displayName": "Dark Programme"
+      },
+      "dark-on-programme": {
+        "role": "neutral",
+        "displayName": "Dark On Programme"
+      },
+      "dark-on-programme-soft": {
+        "role": "neutral",
+        "displayName": "Dark On Programme Soft"
+      },
+      "dark-programme-rule": {
+        "role": "neutral",
+        "displayName": "Dark Programme Rule"
+      },
+      "light-blue-accent": {
+        "role": "primary",
+        "displayName": "Light Blue Accent"
+      },
+      "light-blue-accent-deep": {
+        "role": "primary",
+        "displayName": "Light Blue Accent Deep"
+      },
+      "light-blue-accent-soft": {
+        "role": "primary",
+        "displayName": "Light Blue Accent Soft"
+      },
+      "dark-blue-accent": {
+        "role": "primary",
+        "displayName": "Dark Blue Accent"
+      },
+      "dark-blue-accent-deep": {
+        "role": "primary",
+        "displayName": "Dark Blue Accent Deep"
+      },
+      "dark-blue-accent-soft": {
+        "role": "primary",
+        "displayName": "Dark Blue Accent Soft"
+      },
+      "light-green-accent": {
+        "role": "primary",
+        "displayName": "Light Green Accent"
+      },
+      "light-green-accent-deep": {
+        "role": "primary",
+        "displayName": "Light Green Accent Deep"
+      },
+      "light-green-accent-soft": {
+        "role": "primary",
+        "displayName": "Light Green Accent Soft"
+      },
+      "dark-green-accent": {
+        "role": "primary",
+        "displayName": "Dark Green Accent"
+      },
+      "dark-green-accent-deep": {
+        "role": "primary",
+        "displayName": "Dark Green Accent Deep"
+      },
+      "dark-green-accent-soft": {
+        "role": "primary",
+        "displayName": "Dark Green Accent Soft"
+      },
+      "light-rose-accent": {
+        "role": "primary",
+        "displayName": "Light Rose Accent"
+      },
+      "light-rose-accent-deep": {
+        "role": "primary",
+        "displayName": "Light Rose Accent Deep"
+      },
+      "light-rose-accent-soft": {
+        "role": "primary",
+        "displayName": "Light Rose Accent Soft"
+      },
+      "dark-rose-accent": {
+        "role": "primary",
+        "displayName": "Dark Rose Accent"
+      },
+      "dark-rose-accent-deep": {
+        "role": "primary",
+        "displayName": "Dark Rose Accent Deep"
+      },
+      "dark-rose-accent-soft": {
+        "role": "primary",
+        "displayName": "Dark Rose Accent Soft"
+      },
+      "light-on-accent": {
+        "role": "primary",
+        "displayName": "Light On Accent"
+      },
+      "dark-on-accent": {
+        "role": "primary",
+        "displayName": "Dark On Accent"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Existing native serif display role."
+      },
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "Native section and media hierarchy."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Native control labels."
+      }
+    },
+    "native": {
+      "platform": "Expo / React Native",
+      "dimensionConvention": "Frontmatter px strings encode React Native logical units; source styles use numbers.",
+      "sourceOfTruth": "expo/constants/theme.ts",
+      "softShadow": {
+        "shadowColor": "#3C291E",
+        "shadowOpacity": 0.08,
+        "shadowRadius": 24,
+        "shadowOffset": {
+          "width": 0,
+          "height": 10
+        },
+        "elevation": 2
+      },
+      "verification": "Current code inspected. Runtime verification unavailable; final visual approval pending.",
+      "motionScope": "Static pass only. No new motion designed; existing behavior retained for the next motion phase.",
+      "previewPolicy": "Use real native components. No HTML/CSS shadow-DOM replicas or synthesized tonal ramps."
+    }
+  },
+  "components": [
+    {
+      "name": "MediaMount",
+      "kind": "custom",
+      "refersTo": "media-mount-light",
+      "description": "expo/components/MediaMount.tsx \u2014 native matte surround with inset outside the media ratio."
+    },
+    {
+      "name": "SessionProgramme",
+      "kind": "custom",
+      "refersTo": "session-programme-light",
+      "description": "expo/components/SessionProgramme.tsx \u2014 labelled native programme button with ordered metadata and current position."
+    },
+    {
+      "name": "Watch button",
+      "kind": "button",
+      "refersTo": "watch-button-light-blue",
+      "description": "expo/components/TodayVideoCard.tsx \u2014 native Pressable with busy/disabled semantics; theme-resolved colors."
+    },
+    {
+      "name": "Follow button",
+      "kind": "button",
+      "refersTo": "follow-button-light-blue",
+      "description": "expo/components/WeeklyPickCard.tsx \u2014 native follow/followed states and feedback."
+    },
+    {
+      "name": "Saved search",
+      "kind": "input",
+      "refersTo": "saved-search-light",
+      "description": "expo/app/(tabs)/saved.tsx \u2014 labelled native TextInput and clear button."
+    },
+    {
+      "name": "Saved filter",
+      "kind": "chip",
+      "refersTo": "saved-filter-light",
+      "description": "expo/app/(tabs)/saved.tsx \u2014 native radio group with selected-state semantics."
+    },
+    {
+      "name": "Sheet",
+      "kind": "custom",
+      "refersTo": "sheet-light",
+      "description": "expo/components/Sheet.tsx \u2014 native modal, safe areas, keyboard avoidance and scrollable content."
+    },
+    {
+      "name": "ScreenHeader",
+      "kind": "custom",
+      "description": "expo/components/ScreenHeader.tsx \u2014 semantic native header and profile switcher."
+    },
+    {
+      "name": "Tab navigation",
+      "kind": "nav",
+      "description": "expo/app/(tabs)/_layout.tsx \u2014 four labelled native tabs with safe-area-aware bar."
+    }
+  ],
+  "narrative": {
+    "northStar": "A curated museum-inspired viewing space",
+    "overview": "The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.\n\nThis is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. Motion is explicitly the next phase: this pass adds no motion and defines no new motion system.",
+    "keyCharacteristics": [
+      "Warm tonal surfaces with restrained mineral accents.",
+      "Serif editorial hierarchy paired with precise sans-serif controls.",
+      "Matte-mounted media and an ordered, deep umber programme.",
+      "Four native tabs and explicit, finite viewing."
+    ],
+    "rules": [],
+    "dos": [
+      "Do resolve colors and typography through `useFrameTheme`; preserve all six theme combinations.",
+      "Do use the actual native components and metadata, including unavailable and unknown-runtime states.",
+      "Do preserve safe areas, scrollable sheets, meaningful accessibility labels and explicit viewing actions.",
+      "Do review the real app on target devices before granting final visual approval."
+    ],
+    "donts": [
+      "Don't add literal marble veins, wood grain, curtains or gold luxury tropes.",
+      "Don't replace Libre Caslon Text or Hanken Grotesk, or collapse the six themes into one palette.",
+      "Don't substitute approximate HTML mockups for native implementation or introduce infinite viewing or autoplay.",
+      "Don't add or design new motion in this static refinement; motion belongs to the next phase."
+    ]
+  }
+}

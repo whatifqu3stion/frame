@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AccessibilityInfo, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { radii, spacing } from "@/constants/theme";
+import { radii, spacing, softShadow } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 type Props = {
@@ -36,7 +36,7 @@ export default function Sheet({ visible, onClose, children, contentStyle, conten
           showsVerticalScrollIndicator
           bounces={false}
         >
-          <View style={[styles.card, { backgroundColor: palette.surfaceHigh, borderColor: palette.border }, contentStyle]} accessibilityViewIsModal>
+          <View style={[styles.card, { backgroundColor: palette.surfaceHigh }, contentStyle]} accessibilityViewIsModal>
             {children}
           </View>
         </ScrollView>
@@ -48,5 +48,5 @@ export default function Sheet({ visible, onClose, children, contentStyle, conten
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   container: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: spacing.md },
-  card: { width: "100%", maxWidth: 560, alignSelf: "center", padding: spacing.lg, borderRadius: radii.card, borderWidth: 1 },
+  card: { ...softShadow, width: "100%", maxWidth: 560, alignSelf: "center", padding: spacing.lg, borderRadius: radii.card },
 });

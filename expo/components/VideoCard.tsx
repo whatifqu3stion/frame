@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -82,7 +83,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.fullRoot, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
-      {thumbnail(styles.fullThumbWrap, styles.thumb)}
+      <MediaMount>{thumbnail(styles.fullThumbWrap, styles.thumb)}</MediaMount>
       <View style={styles.fullMeta}>
         {video.channelTitle ? <Text style={type.caption} numberOfLines={1}>{video.channelTitle}</Text> : null}
         <Text style={styles.fullTitle} numberOfLines={3}>{video.title}</Text>
@@ -95,18 +96,18 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     fullRoot: { width: "100%", marginBottom: spacing.xl },
-    fullThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
-    fullMeta: { marginTop: spacing.md, paddingRight: spacing.xl },
+    fullThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.media, position: "relative" },
+    fullMeta: { marginTop: spacing.md, paddingHorizontal: spacing.xs },
     fullTitle: { ...type.heading, marginTop: spacing.xs, fontSize: 22, lineHeight: 29 },
     compactRoot: { width: 264, marginRight: spacing.lg },
-    compactThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.card, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
+    compactThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.media, position: "relative" },
     compactMeta: { marginTop: spacing.md, paddingHorizontal: spacing.xs },
     compactTitle: { ...type.heading, fontSize: 16, lineHeight: 21, marginTop: spacing.xs },
     wideRoot: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg, alignItems: "flex-start", minHeight: 82 },
-    wideThumbWrap: { width: 142, aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.control, position: "relative", borderWidth: 1, borderColor: palette.borderSoft },
+    wideThumbWrap: { width: 142, aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.media, position: "relative" },
     thumb: { width: "100%", height: "100%" },
     wideMeta: { flex: 1, paddingRight: spacing.sm, paddingTop: 1 },
-    wideTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: spacing.xs },
+    wideTitle: { ...type.label, fontSize: 16, lineHeight: 22, marginTop: spacing.xs },
     date: { marginTop: spacing.sm },
     durationBadge: { position: "absolute", right: spacing.sm, bottom: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(20,18,16,0.82)", borderRadius: 6 },
     durationText: { color: "#F7F1E7", fontFamily: "HankenGrotesk_600SemiBold", fontSize: 12, letterSpacing: 0.3 },
