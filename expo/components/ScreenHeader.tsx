@@ -15,13 +15,14 @@ export default function ScreenHeader({ eyebrow, title, subtitle }: Props) {
   const [chooserOpen, setChooserOpen] = useState<boolean>(false);
   return (
     <View style={styles.root}>
+      <View style={styles.topRow}>
+      <Text style={styles.title} accessibilityRole="header">{eyebrow || title.replace(/\n/g, " ")}</Text>
       <Pressable onPress={() => setChooserOpen(true)} style={({ pressed }) => [styles.profileButton, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Current profile: ${activeProfile?.name ?? "Owner"}. Change profile.`} testID="open-profile-switcher">
         <UserRound size={15} color={palette.active} />
         <Text style={styles.profileName} numberOfLines={1}>{activeProfile?.name ?? "Owner"}</Text>
         <ChevronDown size={14} color={palette.inkMuted} />
       </Pressable>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title} accessibilityRole="header">{title}</Text>
+      </View>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       <ProfileSwitcherModal visible={chooserOpen} onClose={() => setChooserOpen(false)} />
     </View>
@@ -30,12 +31,14 @@ export default function ScreenHeader({ eyebrow, title, subtitle }: Props) {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    root: { paddingTop: spacing.xl, paddingBottom: spacing.lg, paddingRight: spacing.xxl },
-    profileButton: { position: "absolute", top: spacing.xl, right: 0, zIndex: 1, minHeight: 44, maxWidth: 156, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 22, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+    root: { paddingTop: spacing.md, paddingBottom: spacing.lg },
+    topRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+    profileButton: { minHeight: 48, maxWidth: 180, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 22, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
     profileName: { ...type.label, maxWidth: 88, color: palette.inkMuted, fontSize: 12 },
     eyebrow: { ...type.caption, color: palette.accent },
-    title: { ...type.display, marginTop: spacing.sm },
-    subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 320 },
+    title: { ...type.title, flexShrink: 1 },
+    subtitle: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 480 },
     pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   });
 }
+

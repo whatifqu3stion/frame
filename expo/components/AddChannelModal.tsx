@@ -2,7 +2,8 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import Sheet from "@/components/Sheet";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -45,7 +46,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     if (result.status === "success") {
       setResolutionProfileId(expectedProfile);
       setResolution(result.data);
-      setFeedback({ ok: true, message: result.data.provenance === "cache" ? "Verified from Frame’s shared catalog." : "Verified with YouTube." });
+      setFeedback({ ok: true, message: "Source found. Check the details, then choose Follow." });
       return;
     }
     setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
@@ -57,7 +58,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     const result = await confirmSource(resolution);
     setBusy(false);
     setFeedback(result);
-    if (result.ok) setTimeout(close, 700);
+    if (result.ok) { setResolution(null); setValue(""); }
   };
 
   const watch = (): void => {
@@ -97,9 +98,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={close}>
-      <Pressable onPress={close} style={styles.backdrop} accessibilityLabel="Close add source">
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.card} accessibilityRole="none">
+    <Sheet visible={visible} onClose={close}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.eyebrow}>Add a trusted source</Text>
@@ -108,7 +107,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             </Pressable>
           </View>
           <Text style={styles.heading}>Paste a link.</Text>
-          <Text style={styles.body}>Use a channel ID, @handle, channel URL, or individual YouTube video. Frame verifies it before anything is followed.</Text>
+          <Text style={styles.body}>Use a channel ID, @handle, channel URL, or individual YouTube video. Choose Follow after checking the source.</Text>
           <View style={styles.inputRow}>
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
             <TextInput
@@ -122,11 +121,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               style={styles.input}
               onSubmitEditing={() => { void submit(); }}
               returnKeyType="done"
+              editable={!busy}
               accessibilityLabel="YouTube source or video link"
               testID="add-channel-input"
             />
           </View>
-          {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
+          {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
 
           {resolution ? (
             <View style={styles.preview} testID="resolved-source-preview">
@@ -161,9 +161,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Verify source</Text>}
             </Pressable>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -196,3 +194,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   });
 }
+

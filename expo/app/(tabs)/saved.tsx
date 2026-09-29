@@ -27,6 +27,7 @@ export default function SavedScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, requirePurchase } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
+  const [showOtherSessions, setShowOtherSessions] = useState(false);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
   const { query: searchQuery, filter: viewingFilter } = resolveSavedCriteria(criteria, activeProfileId);
   const filteredSaved = useMemo(() => filterSavedLibrary(savedVideos, resumeList, searchQuery, viewingFilter), [resumeList, savedVideos, searchQuery, viewingFilter]);
@@ -61,18 +62,60 @@ export default function SavedScreen() {
       keyboardDismissMode="on-drag"
     >
       <View style={styles.page}>
-        <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="One place for the videos you chose, where you stopped, and the session in front of you." />
+        <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Your viewing plan, saved videos, and where you left off." />
+
+        <SectionTitle label="Current Session" styles={styles} />
+        {draft ? (
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your unfinished Session draft" testID="session-draft-card">
+            <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
+            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Unfinished plan"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
+            <ArrowRight size={17} color={palette.inkMuted} />
+          </Pressable>
+        ) : null}
+        {currentSession ? (
+          <Pressable
+            onPress={() => {
+              if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
+            }}
+            style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Open current session ${currentSession.name}`}
+          >
+            <View style={styles.sessionIcon}><Play size={17} color={palette.active} fill={palette.active} /></View>
+            <View style={styles.flex}>
+              <Text style={styles.sessionName}>{currentSession.name}</Text>
+              <Text style={styles.sessionMeta}>{currentSession.orderedVideoIds.length} videos · {sessionPosition(currentSession) >= currentSession.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(currentSession) + 1}`}{sessionEstimate?.seconds ? ` · ${Math.ceil(sessionEstimate.seconds / 60)} min known left` : ""}{sessionEstimate?.unknown ? " + unknown time" : ""}</Text>
+            </View>
+            <ArrowRight size={17} color={palette.inkMuted} />
+          </Pressable>
+        ) : (
+          <View>
+            <EmptyState title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
+            <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
+              <Plus size={16} color={palette.onDark} />
+              <Text style={styles.createSessionText}>Create a session</Text>
+            </Pressable>
+          </View>
+        )}
+        {currentSession ? (
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, { marginTop: spacing.md }, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.onDark} /><Text style={styles.createSessionText}>Create another session</Text></Pressable>
+        ) : null}
+        {sessions.length > 1 ? <Pressable onPress={() => setShowOtherSessions((value) => !value)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ expanded: showOtherSessions }}><Text style={type.label}>{showOtherSessions ? "Hide other sessions" : `Other sessions · ${sessions.length - 1}`}</Text></Pressable> : null}
+        {showOtherSessions ? sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
+          <Pressable key={item.id} onPress={() => router.push({ pathname: "/session/[id]", params: { id: item.id } })} style={({ pressed }) => [styles.sessionCard, { marginTop: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open session ${item.name}`}>
+            <View style={styles.sessionIcon}><Play size={17} color={palette.active} /></View><View style={styles.flex}><Text style={styles.sessionName}>{item.name}</Text><Text style={styles.sessionMeta}>{item.orderedVideoIds.length} videos · {sessionPosition(item) >= item.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(item) + 1}`}</Text></View><ArrowRight size={17} color={palette.inkMuted} />
+          </Pressable>
+        )) : null}
 
         <SectionTitle label="Continue Watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
         {libraryLoading ? <VideoFeedSkeleton count={2} accessibilityLabel="Loading continue watching" /> : continueWatching.length === 0 ? (
-          <EmptyState title="Nothing in progress" body="When you stop partway through a video, it will wait here at the same point." />
+          <Text style={type.bodySoft}>Videos you pause will wait here.</Text>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
             {continueWatching.map((item) => <VideoCard key={item.video.id} video={item.video} variant="compact" progressSeconds={item.progressSeconds} />)}
           </ScrollView>
         )}
 
-        <Text style={type.bodySoft}>Expired details are cleared, not your saved links or playback position.</Text>
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
         <View style={styles.searchField}>
           <Search size={18} color={palette.inkMuted} strokeWidth={1.8} />
@@ -115,59 +158,19 @@ export default function SavedScreen() {
           <Text style={styles.resultCount} accessibilityLiveRegion="polite">{filteredSaved.length} of {savedVideos.length} saved</Text>
         ) : null}
         {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? (
-          <EmptyState title="Nothing saved" body="Use Save while watching. Your former Watch Later links are here too—one collection, one Save button." />
+          <EmptyState title="Nothing saved" body="Save a video from Today or while watching to find it here." />
         ) : filteredSaved.length === 0 ? (
           <EmptyState title="No matches here" body={hasActiveFilter ? "Try another title, source, or viewing status. Your saved videos are unchanged." : "Your saved videos are still here."} />
         ) : filteredSaved.map((item) => <VideoCard key={item.video.id} video={item.video} variant="wide" progressSeconds={item.progressSeconds} />)}
 
-        <SectionTitle label="Current Session" styles={styles} />
-        {draft ? (
-          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your unfinished Session draft" testID="session-draft-card">
-            <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
-            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Unfinished plan"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
-            <ArrowRight size={17} color={palette.inkMuted} />
-          </Pressable>
-        ) : null}
-        {currentSession ? (
-          <Pressable
-            onPress={() => {
-              if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
-            }}
-            style={({ pressed }) => [styles.sessionCard, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`Open current session ${currentSession.name}`}
-          >
-            <View style={styles.sessionIcon}><Play size={17} color={palette.active} fill={palette.active} /></View>
-            <View style={styles.flex}>
-              <Text style={styles.sessionName}>{currentSession.name}</Text>
-              <Text style={styles.sessionMeta}>{currentSession.orderedVideoIds.length} videos · {sessionPosition(currentSession) >= currentSession.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(currentSession) + 1}`}{sessionEstimate?.seconds ? ` · ${Math.ceil(sessionEstimate.seconds / 60)} min known left` : ""}{sessionEstimate?.unknown ? " + unknown time" : ""}</Text>
-            </View>
-            <ArrowRight size={17} color={palette.inkMuted} />
-          </Pressable>
-        ) : (
-          <View>
-            <EmptyState title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
-            <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
-              <Plus size={16} color={palette.onDark} />
-              <Text style={styles.createSessionText}>Create a session</Text>
-            </Pressable>
-          </View>
-        )}
-        {currentSession ? (
-          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, { marginTop: spacing.md }, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.onDark} /><Text style={styles.createSessionText}>Create another session</Text></Pressable>
-        ) : null}
-        {sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
-          <Pressable key={item.id} onPress={() => router.push({ pathname: "/session/[id]", params: { id: item.id } })} style={({ pressed }) => [styles.sessionCard, { marginTop: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open session ${item.name}`}>
-            <View style={styles.sessionIcon}><Play size={17} color={palette.active} /></View><View style={styles.flex}><Text style={styles.sessionName}>{item.name}</Text><Text style={styles.sessionMeta}>{item.orderedVideoIds.length} videos · {sessionPosition(item) >= item.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(item) + 1}`}</Text></View><ArrowRight size={17} color={palette.inkMuted} />
-          </Pressable>
-        ))}
+
       </View>
     </ScrollView>
   );
 }
 
 function SectionTitle({ label, testID, styles }: { label: string; testID?: string; styles: ReturnType<typeof createStyles> }) {
-  return <Text style={styles.sectionTitle} testID={testID}>{label}</Text>;
+  return <Text accessibilityRole="header" style={styles.sectionTitle} testID={testID}>{label}</Text>;
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
@@ -175,6 +178,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     screen: { flex: 1, backgroundColor: palette.wall },
     page: { paddingHorizontal: spacing.page },
     flex: { flex: 1 },
+    otherSessions: { minHeight: 48, justifyContent: "center", marginTop: spacing.sm },
     sectionTitle: { ...type.caption, marginTop: spacing.xl, marginBottom: spacing.md },
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
     searchField: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingLeft: spacing.md, paddingRight: spacing.xs, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
@@ -195,3 +199,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] },
   });
 }
+

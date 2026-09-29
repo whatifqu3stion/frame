@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { todayRepository } from "@/repositories/todayRepository";
+import { expireVideo } from "@/domain/metadataRetention";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { Check, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
@@ -44,7 +47,15 @@ export default function SessionBuilder() {
     void saveSessionDraft({ name, orderedVideoIds: selected }).catch(() => Alert.alert("Draft not saved", "Try again before leaving this session."));
   }, [activeProfileId, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected]);
 
-  const pool: Video[] = savedVideos;
+  const selectedMedia = useQuery({
+    queryKey: ["session-editor-media", activeProfileId, selected.join(",")],
+    queryFn: async () => Promise.all(selected.map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
+    enabled: hydratedProfile === activeProfileId && selected.length > 0,
+  });
+  const pool = useMemo<Video[]>(() => [...new Map([
+    ...(selectedMedia.data ?? []).filter((video): video is Video => Boolean(video)),
+    ...savedVideos,
+  ].map((video) => [video.id, expireVideo(video, Date.now())])).values()], [savedVideos, selectedMedia.data]);
 
   const runtime = useMemo(() => sessionRuntime(selected, pool), [pool, selected]);
   const durationSummary = `${runtime.seconds > 0 ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}${runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}`;
@@ -251,3 +262,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });
 }
+

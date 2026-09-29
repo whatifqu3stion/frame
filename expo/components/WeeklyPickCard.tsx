@@ -80,7 +80,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
           accessibilityLabel={followed ? `${suggestion.displayName} is followed` : `Follow ${suggestion.displayName}`}
           testID={`weekly-pick-follow-${suggestion.providerSourceId}`}
         >
-          {busy ? <ActivityIndicator size="small" color={palette.onDark} /> : followed ? <Check size={17} color={palette.active} strokeWidth={2.2} /> : <Plus size={17} color={palette.onDark} strokeWidth={2.2} />}
+          {busy ? <ActivityIndicator size="small" color={palette.onAccent} /> : followed ? <Check size={17} color={palette.active} strokeWidth={2.2} /> : <Plus size={17} color={palette.onAccent} strokeWidth={2.2} />}
           <Text style={[styles.followText, followed && styles.followedText]}>{busy ? "Adding…" : followed ? "Followed" : "Follow source"}</Text>
         </Pressable>
 
@@ -124,7 +124,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     featuredTitle: { ...type.label, color: palette.ink, marginTop: spacing.xs, fontSize: 14, lineHeight: 20 },
     followButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.active },
     followedButton: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.borderSoft },
-    followText: { ...type.label, color: palette.onDark },
+    followText: { ...type.label, color: palette.onAccent },
     followedText: { color: palette.active },
     dismissButton: { minHeight: 48, justifyContent: "center", alignItems: "center", marginTop: spacing.xs },
     dismissText: { ...type.label, color: palette.inkMuted },
@@ -133,3 +133,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   });
 }
+

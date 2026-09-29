@@ -64,7 +64,7 @@ export default function SettingsScreen() {
           <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : activeProfile?.role === "managed" ? "Managed" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
         </View>
         <Pressable onPress={() => { void openProfileControls(); }} style={({ pressed }) => [styles.protectedRow, pressed && styles.pressed]} accessibilityRole="button" testID="open-profile-controls">
-          <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & Protected Controls</Text><Text style={styles.supporting}>Create or rename Standard profiles, remove profiles, and manage the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
+          <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & boundaries</Text><Text style={styles.supporting}>Create or rename Standard profiles, remove profiles, and manage the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
         </Pressable>
         {googleConnected ? (
           <View style={styles.accountBlock}>
@@ -80,7 +80,7 @@ export default function SettingsScreen() {
           </View>
         ) : googleConfigured ? (
           <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" testID="connect-google">
-            {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
+            {accountBusy || importing ? <ActivityIndicator color={palette.onAccent} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
           </Pressable>
         ) : <Text style={styles.infoText}>Google connection is unavailable in this build. Manual source setup remains available.</Text>}
       </Section>
@@ -102,8 +102,8 @@ export default function SettingsScreen() {
 
       <Section label="Appearance" hint="The video room stays dark and focused.">
         <View style={styles.choiceRow} accessibilityRole="radiogroup">
-          <AppearanceChoice label="Bone" selected={prefs.theme === "warm"} onPress={() => { void setTheme("warm"); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
-          <AppearanceChoice label="Smoked umber" selected={prefs.theme === "ink"} onPress={() => { void setTheme("ink"); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
+          <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { void setTheme("warm"); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
+          <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { void setTheme("ink"); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
         </View>
         <View style={styles.accentRow} accessibilityRole="radiogroup">
           {accentOptions.map((option) => {
@@ -111,7 +111,7 @@ export default function SettingsScreen() {
             const swatch = createPalette(isDark, option.id).accent;
             return (
               <Pressable key={option.id} onPress={() => { void setAccent(option.id); }} style={[styles.accentChoice, selected && styles.accentChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${option.label} accent`}>
-                <View style={[styles.swatch, { backgroundColor: swatch }]}>{selected ? <Check size={14} color={palette.onDark} strokeWidth={2.4} /> : null}</View>
+                <View style={[styles.swatch, { backgroundColor: swatch }]}>{selected ? <Check size={14} color={palette.onAccent} strokeWidth={2.4} /> : null}</View>
                 <Text style={styles.accentText}>{option.label}</Text>
               </Pressable>
             );
@@ -131,7 +131,7 @@ export default function SettingsScreen() {
           : isPremium ? <StatusRow title="Premium active" body="Your complete Frame library is unlocked." />
           : premiumAccessState === "inactive" ? (
             <Pressable onPress={() => openPremium("library")} style={({ pressed }) => [styles.premiumCard, pressed && styles.pressed]} accessibilityRole="button" testID="open-premium">
-              <Crown size={19} color={palette.onDark} /><View style={styles.flex}><Text style={styles.premiumTitle}>Frame Premium</Text><Text style={styles.premiumBody}>View plans or restore your purchase.</Text></View><ChevronRight size={17} color={palette.onDarkSoft} />
+              <Crown size={19} color={palette.onAccent} /><View style={styles.flex}><Text style={styles.premiumTitle}>Frame Premium</Text><Text style={styles.premiumBody}>View plans or restore your purchase.</Text></View><ChevronRight size={17} color={palette.onDarkSoft} />
             </Pressable>
           ) : premiumAccessState === "unavailable" ? (
             <View><StatusRow title="Premium status unavailable" body="Frame could not verify access." /><Pressable onPress={() => { void refreshPremiumAccess(); }} style={styles.inlineAction}><Text style={styles.linkText}>Try again</Text></Pressable></View>
@@ -190,3 +190,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     dangerRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginTop: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft }, dangerText: { ...type.label, color: palette.danger }, version: { ...type.caption, color: palette.inkMuted, marginTop: spacing.lg }, pressed: { opacity: 0.78 },
   });
 }
+

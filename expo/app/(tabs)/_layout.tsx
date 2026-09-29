@@ -17,7 +17,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: palette.active,
         tabBarInactiveTintColor: palette.inkMuted,
         tabBarShowLabel: true,
-        tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 10, letterSpacing: 1.15, textTransform: "uppercase" },
+        tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 12 },
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: 48 },
         tabBarStyle: {
           backgroundColor: palette.surfaceHigh,
@@ -39,3 +39,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+

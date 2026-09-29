@@ -1,7 +1,8 @@
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { AccessibilityInfo, ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
+import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -21,8 +22,8 @@ export default function OwnerPinModal() {
   const [busy, setBusy] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
   const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
-  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
-  useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion); }, []);
+
+
   const remainingSeconds = Math.max(0, Math.ceil((ownerPinCooldownUntil - now) / 1000));
 
   useEffect(() => {
@@ -51,9 +52,7 @@ export default function OwnerPinModal() {
 
   return (
     <>
-    <Modal visible={ownerPinPromptOpen} animationType={reduceMotion ? "none" : "fade"} transparent statusBarTranslucent onRequestClose={close}>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
+    <Sheet visible={ownerPinPromptOpen} onClose={close}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <View style={styles.icon}><LockKeyhole size={20} color={palette.active} /></View>
@@ -78,7 +77,7 @@ export default function OwnerPinModal() {
             testID="owner-pin-input"
             onSubmitEditing={() => { void submit(); }}
           />
-          {ownerPinPromptError ? <Text style={styles.error}>{ownerPinPromptError}</Text> : null}
+          {ownerPinPromptError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{ownerPinPromptError}</Text> : null}
           {remainingSeconds > 0 ? <Text style={styles.cooldown}>Try again in {remainingSeconds} seconds.</Text> : null}
           <Pressable
             onPress={() => { void submit(); }}
@@ -93,9 +92,7 @@ export default function OwnerPinModal() {
             <Text style={styles.forgotText}>Forgot PIN?</Text>
           </Pressable>
           <Text style={styles.recovery}>There is no cloud PIN recovery. The only recovery is to erase all local Frame data and start over.</Text>
-        </View>
-      </View>
-    </Modal>
+    </Sheet>
     <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} forgottenPinRecovery />
     </>
   );
@@ -123,3 +120,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     recovery: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", fontSize: 12 },
   });
 }
+

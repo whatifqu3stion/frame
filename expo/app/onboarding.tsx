@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Check, Link2, Lock } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_STEPS } from "@/constants/navigation";
@@ -13,10 +13,11 @@ import { isInterestOptionDisabled } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
 import type { SourceResolution } from "@/types";
 
-const { width } = Dimensions.get("window");
 const LAST_STEP = ONBOARDING_STEPS.length - 1;
 
 export default function Onboarding() {
+  const { width } = useWindowDimensions();
+  const [finishing, setFinishing] = useState(false);
   const insets = useSafeAreaInsets();
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -29,24 +30,32 @@ export default function Onboarding() {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
   }, []);
 
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  useEffect(() => { scrollRef.current?.scrollTo({ x: stepRef.current * width, animated: false }); }, [width]);
+
+
   const goTo = (index: number): void => {
     const clamped = Math.max(0, Math.min(LAST_STEP, index));
     setStep(clamped);
     scrollRef.current?.scrollTo({ x: clamped * width, animated: !reduceMotion });
   };
   const finish = async (): Promise<void> => {
-    await finishOnboarding();
-    router.replace("/(tabs)");
+    if (finishing) return;
+    setFinishing(true);
+    try { await finishOnboarding(); router.replace("/(tabs)"); }
+    catch { Alert.alert("Couldn’t finish setup", "Your choices are still here. Try again."); }
+    finally { setFinishing(false); }
   };
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <LinearGradient colors={isDark ? ["#1D2022", palette.wall, "#121211"] : ["#FFFDF8", palette.wall, "#F5F0E7"]} locations={[0, 0.52, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[styles.topRow, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.dots} accessibilityLabel={`Step ${step + 1} of ${ONBOARDING_STEPS.length}`}>
           {ONBOARDING_STEPS.map((name, index) => <View key={name} style={[styles.dot, index === step && styles.dotActive]} />)}
         </View>
-        {step === 2 ? <Pressable onPress={() => goTo(3)} style={styles.topAction} accessibilityRole="button"><Text style={styles.mutedCaption}>Skip source</Text></Pressable> : <View style={styles.topAction} />}
+        <Pressable disabled={finishing} onPress={() => { void finish(); }} style={styles.topAction} accessibilityRole="button"><Text style={styles.mutedCaption}>Skip setup</Text></Pressable>
       </View>
       <ScrollView ref={scrollRef} horizontal pagingEnabled scrollEnabled={false} showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <ApproachStep stepWidth={width} />
@@ -56,11 +65,11 @@ export default function Onboarding() {
       </ScrollView>
       <View style={[styles.bottomRow, { paddingBottom: insets.bottom + spacing.md }]}>
         {step > 0 ? <Pressable onPress={() => goTo(step - 1)} style={styles.backButton} accessibilityRole="button"><Text style={styles.mutedCaption}>Back</Text></Pressable> : <View style={styles.backButton} />}
-        <Pressable onPress={() => { if (step === LAST_STEP) void finish(); else goTo(step + 1); }} style={styles.nextButton} accessibilityRole="button" testID="onboarding-next">
-          <Text style={styles.nextText}>{step === LAST_STEP ? "Enter Today" : "Continue"}</Text>
+        <Pressable onPress={() => { if (step === LAST_STEP) void finish(); else goTo(step + 1); }} disabled={finishing} accessibilityState={{ busy: finishing, disabled: finishing }} style={styles.nextButton} accessibilityRole="button" testID="onboarding-next">
+          <Text style={styles.nextText}>{finishing ? "Opening…" : step === LAST_STEP ? "Enter Today" : "Continue"}</Text>
         </Pressable>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -68,7 +77,7 @@ function ApproachStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
-    <View style={[styles.step, { width: stepWidth }]}>
+    <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>Frame</Text>
       <View style={styles.frameSymbol}><View style={styles.frameOuter} /></View>
       <Text style={styles.bigTitle}>A finite inbox.{"\n"}Then, stop.</Text>
@@ -78,7 +87,7 @@ function ApproachStep({ stepWidth }: { stepWidth: number }) {
         <Text style={styles.principle}>02 · Today has a visible end.</Text>
         <Text style={styles.principle}>03 · Playback stays intentional.</Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -86,14 +95,14 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
-    <View style={[styles.step, { width: stepWidth }]}>
+    <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>Choose up to 5.</Text>
       <Text style={styles.stepTitle}>What matters{"\n"}to you?</Text>
       <Text style={styles.stepBody}>Interests shape occasional source suggestions. Choose none or up to five, and change them later in Settings.</Text>
       <Text style={styles.selectionStatus} accessibilityLiveRegion="polite">
         {selectedIds.length === 0 ? "Optional · none selected" : `${selectedIds.length} of ${ONBOARDING_INTEREST_MAX} selected`}
       </Text>
-      <ScrollView style={styles.chipScroll} contentContainerStyle={styles.chipGrid} showsVerticalScrollIndicator={false}>
+      <View style={[styles.chipScroll, styles.chipGrid]}>
         {INTEREST_LIBRARY.map((interest) => {
           const selected = selectedIds.includes(interest.id);
           const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
@@ -113,8 +122,8 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
             </Pressable>
           );
         })}
-      </ScrollView>
-    </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -158,7 +167,7 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
       <Text style={styles.stepBody}>Paste a channel ID, @handle, channel URL, or individual YouTube video. You can skip this and add a source later.</Text>
       <View style={styles.inputRow}>
         <Link2 size={17} color={palette.inkMuted} strokeWidth={1.7} />
-        <TextInput value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
+        <TextInput editable={!busy} value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
       </View>
       {resolution ? (
         <View style={styles.sourcePreview} testID="onboard-source-preview">
@@ -170,7 +179,7 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
       <Pressable onPress={() => { if (resolution) void followSource(); else void resolveSource(); }} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} disabled={busy || (!resolution && !link.trim())} accessibilityRole="button" testID={resolution ? "onboard-confirm-source" : "onboard-resolve-source"}>
         {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>{resolution ? "Follow source" : "Verify source"}</Text>}
       </Pressable>
-      {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
+      {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
       <View style={styles.googleNotice} accessible>
         <Text style={styles.noticeTitle}>{googleConnected ? "Google connected" : "No Google sign-in needed"}</Text>
         <Text style={styles.noticeBody}>Manual source setup works on its own. Frame never follows Google subscriptions automatically.</Text>
@@ -182,13 +191,14 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
 function EnterTodayStep({ stepWidth }: { stepWidth: number }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const { followedChannels } = useApp();
   return (
-    <View style={[styles.step, { width: stepWidth }]}>
+    <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>You’re ready</Text>
       <Text style={styles.bigTitle}>Enter Today.{"\n"}Leave whole.</Text>
-      <Text style={styles.bigBody}>Today may be empty until Frame’s shared service exists. That is intentional: no fake feed, no automatic polling, and no invented videos.</Text>
+      <Text style={styles.bigBody}>{followedChannels.length > 0 ? "Your sources are saved. Open Today to see what’s available, and return to Sources whenever you want to add more." : "Open Sources to follow someone you trust. Today will show a small selection from the sources you choose."}</Text>
       <View style={styles.endMark}><View style={styles.endLine} /><Text style={styles.endLabel}>A REAL END</Text><View style={styles.endLine} /></View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -198,6 +208,7 @@ function createStyles(palette: FramePalette, frameType: FrameType) {
     topRow: { minHeight: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.page, paddingBottom: spacing.sm },
     dots: { flexDirection: "row", gap: 6 }, dot: { width: 22, height: 3, borderRadius: 2, backgroundColor: palette.surfaceDeep }, dotActive: { backgroundColor: palette.accent },
     topAction: { minWidth: 88, minHeight: 48, alignItems: "flex-end", justifyContent: "center" }, mutedCaption: { ...frameType.caption, color: palette.inkMuted },
+    stepContent: { paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xl },
     step: { flex: 1, paddingHorizontal: spacing.page, paddingTop: spacing.lg }, accentCaption: { ...frameType.caption, color: palette.accent },
     frameSymbol: { width: 78, height: 78, marginTop: spacing.xl, alignItems: "center", justifyContent: "center" }, frameOuter: { width: 68, height: 68, borderRadius: radii.large, borderWidth: 1.5, borderColor: palette.accent },
     bigTitle: { ...frameType.display, fontSize: 42, lineHeight: 49, marginTop: spacing.xl }, bigBody: { ...frameType.body, color: palette.inkSoft, maxWidth: 330, marginTop: spacing.lg },
@@ -213,3 +224,4 @@ function createStyles(palette: FramePalette, frameType: FrameType) {
     pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   });
 }
+

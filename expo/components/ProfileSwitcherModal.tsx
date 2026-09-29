@@ -1,6 +1,7 @@
 import { Check, ChevronRight, Clock3, LockKeyhole, UserRound, X } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
-import { AccessibilityInfo, ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import Sheet from "@/components/Sheet";
 import { radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -13,8 +14,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
-  useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion); }, []);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const close = (): void => {
     if (profileSwitching) return;
@@ -23,16 +23,17 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   };
 
   const choose = async (profileId: string): Promise<void> => {
+    if (switchingId) return;
     setFeedback(null);
+    setSwitchingId(profileId);
     const result = await switchProfile(profileId);
+    setSwitchingId(null);
     if (result.ok) close();
     else if (result.message !== "Profile switch cancelled.") setFeedback(result.message);
   };
 
   return (
-    <Modal visible={visible} animationType={reduceMotion ? "none" : "fade"} transparent statusBarTranslucent onRequestClose={close}>
-      <Pressable onPress={close} style={styles.backdrop} accessibilityLabel="Close profile chooser">
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.card}>
+    <Sheet visible={visible} onClose={close}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <View><Text style={styles.eyebrow}>This device</Text><Text style={styles.heading}>Who’s watching?</Text></View>
@@ -55,16 +56,14 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
                 >
                   <View style={[styles.avatar, isActive && styles.avatarActive]}>{profile.role === "managed" ? <Clock3 size={19} color={isActive ? palette.active : palette.inkMuted} /> : <UserRound size={19} color={isActive ? palette.active : palette.inkMuted} />}</View>
                   <View style={styles.flex}><Text style={styles.name}>{profile.name}</Text><Text style={styles.role}>{profile.role === "owner" ? "Owner" : profile.role === "managed" ? "Managed · Playback boundaries" : "Standard"}{profile.role === "owner" && hasOwnerPin ? " · PIN" : ""}</Text></View>
-                  {profileSwitching && !isActive ? <ActivityIndicator size="small" color={palette.active} /> : isActive ? <Check size={18} color={palette.active} /> : profile.role === "owner" && hasOwnerPin ? <LockKeyhole size={16} color={palette.inkMuted} /> : <ChevronRight size={17} color={palette.inkMuted} />}
+                  {switchingId === profile.id ? <ActivityIndicator size="small" color={palette.active} /> : isActive ? <Check size={18} color={palette.active} /> : profile.role === "owner" && hasOwnerPin ? <LockKeyhole size={16} color={palette.inkMuted} /> : <ChevronRight size={17} color={palette.inkMuted} />}
                 </Pressable>
               );
             })}
           </View>
-          {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+          {feedback ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text> : null}
           <Text style={styles.note}>Each profile keeps its own sources, library, progress, interests, appearance, and playback boundaries on this device.</Text>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -90,3 +89,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
   });
 }
+

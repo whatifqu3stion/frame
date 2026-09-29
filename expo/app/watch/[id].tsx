@@ -746,12 +746,13 @@ export default function WatchScreen() {
   const showEnded = playbackState === "ended";
   const contentBlocked = contentAccessStatus !== null && !contentAccessStatus.canPlay;
   const allowanceBlocked = allowanceStatus !== null && !allowanceStatus.canPlay;
-  const shouldMountPlayer = resumeReady && contentAccessStatus?.canPlay === true && allowanceStatus?.canPlay === true && isScreenFocused && isAppActive && !showEnded;
+  const shouldMountPlayer = resumeReady && contentAccessStatus?.canPlay === true && allowanceStatus?.canPlay === true && isScreenFocused && isAppActive && !showEnded && !playerError;
   const showPlayer = shouldMountPlayer && playerReady && !playerError;
   const playerBusy = pendingAction === "retry";
+  const hasMessage = contentBlocked || allowanceBlocked || Boolean(playerError) || showEnded;
 
   const stage = (
-    <View style={styles.playerStage}>
+    <View style={[styles.playerStage, hasMessage && styles.messageStage]}>
       {shouldMountPlayer ? (
         <View
           style={[styles.playerEmbed, !showPlayer && styles.playerEmbedHidden]}
@@ -800,7 +801,7 @@ export default function WatchScreen() {
       ) : null}
 
       {!contentBlocked && !allowanceBlocked && (!playerReady || allowanceStatus === null || contentAccessStatus === null) && !playerError ? (
-        <View style={styles.stateSurface} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
+        <View style={[styles.stateSurface, StyleSheet.absoluteFillObject]} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
           <ActivityIndicator color={palette.wall} />
           <Text style={styles.playerStatusText}>{isOnline === false ? "You’re offline" : resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
         </View>
@@ -844,21 +845,54 @@ export default function WatchScreen() {
             {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
           </Text>
           <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done. Pause here?" : "That’s it."}</Text>
-          <Text style={styles.allowanceBody}>{nextSessionId ? "The next video waits until you choose Continue." : "Nothing plays next. Your Session has a quiet end."}</Text>
+          <Text style={styles.allowanceBody}>{nextSessionId ? "The next video waits until you choose Continue." : "Nothing plays next. Stop here whenever you’re ready."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={() => { void rewatch(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
               <RotateCcw size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>Watch again</Text>
             </Pressable>
             <Pressable onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
-              <Text style={styles.lightButtonText}>{nextSessionId ? "Continue" : "Done"}</Text>
+              <Text style={styles.lightButtonText}>{nextSessionId ? "Continue" : "Done for now"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
             </Pressable>
           </View>
+          {nextSessionId ? <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for now</Text></Pressable> : null}
         </View>
       ) : null}
     </View>
   );
+
+  if (hasMessage) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
+        <StatusBar style="light" />
+        <Pressable onPress={closePlayer} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close video" testID="watch-back"><ChevronLeft size={22} color={watchPalette.ink} /><Text style={styles.closeLabel}>Close</Text></Pressable>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingBottom: insets.bottom + spacing.lg }} showsVerticalScrollIndicator>{stage}<View style={styles.content}>
+        {video.channelTitle ? <Text style={[type.caption, { color: watchPalette.inkSoft }]}>{video.channelTitle}</Text> : null}
+        <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
+        {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
+
+        <View style={styles.actionRow} accessibilityRole="toolbar">
+          <Pressable
+            onPress={toggleSave}
+            hitSlop={CONTROL_HIT_SLOP}
+            android_ripple={DARK_CONTROL_RIPPLE}
+            disabled={pendingAction === "save"}
+            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "save") && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: pendingAction === "save" }}
+            accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
+            testID="action-save"
+          >
+            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} />}
+            <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
+          </Pressable>
+        </View>
+
+        </View></ScrollView>
+      </View>
+    );
+  }
 
   if (isImmersiveLandscape) {
     return (
@@ -909,7 +943,7 @@ export default function WatchScreen() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
-        {video.channelTitle ? <Text style={type.caption}>{video.channelTitle}</Text> : null}
+        {video.channelTitle ? <Text style={[type.caption, { color: watchPalette.inkSoft }]}>{video.channelTitle}</Text> : null}
         <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
         {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
 
@@ -934,7 +968,7 @@ export default function WatchScreen() {
 
         {video.description ? (
           <View style={styles.notes}>
-            <Text style={type.caption}>About</Text>
+            <Text style={[type.caption, { color: watchPalette.inkSoft }]}>About</Text>
             <Text style={[type.body, styles.description]}>{video.description}</Text>
           </View>
         ) : null}
@@ -946,7 +980,7 @@ export default function WatchScreen() {
             accessibilityRole="link"
             accessibilityLabel={`View ${video.channelTitle || "video"} channel`}
           >
-            <Text style={type.caption}>Channel</Text>
+            <Text style={[type.caption, { color: watchPalette.inkSoft }]}>Channel</Text>
             <Text style={[type.heading, styles.channelTitle, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
             <Text style={[type.caption, styles.channelLinkLabel]}>View channel →</Text>
           </Pressable>
@@ -977,12 +1011,12 @@ const styles = StyleSheet.create({
   },
   closeLabel: { ...type.label, color: palette.wall },
   fullscreenStatus: { ...type.caption, color: palette.wall, marginRight: spacing.sm },
-  portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center", shadowColor: watchPalette.accent, shadowOpacity: 0.12, shadowRadius: 28, shadowOffset: { width: 0, height: 12 } },
+  portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center" },
   playerStage: { width: "100%", height: "100%", backgroundColor: watchPalette.stage, overflow: "hidden" },
   playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: watchPalette.stage },
   playerEmbedHidden: { opacity: 0 },
+  messageStage: { height: "auto", overflow: "visible" },
   stateSurface: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: watchPalette.wall,
     alignItems: "center",
     justifyContent: "center",
@@ -1022,3 +1056,4 @@ const styles = StyleSheet.create({
   primaryLightButton: { alignSelf: "flex-start", minHeight: 48, justifyContent: "center", marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radii.control, overflow: "hidden" },
   pressed: { opacity: 0.58 },
 });
+

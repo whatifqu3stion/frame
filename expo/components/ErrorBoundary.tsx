@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { palette, spacing, type as typography } from "@/constants/theme";
 
 type Props = { children: ReactNode };
@@ -25,8 +25,9 @@ export default class ErrorBoundary extends Component<Props, State> {
         <View style={styles.root}>
           <Text style={typography.caption}>Something went wrong</Text>
           <Text style={[typography.body, { marginTop: spacing.md }]}>
-            {this.state.error.message}
+            Frame couldn’t show this screen. Try again. If this keeps happening, close and reopen Frame.
           </Text>
+          <Pressable onPress={() => this.setState({ error: null })} style={styles.retry} accessibilityRole="button"><Text style={[typography.label, { color: palette.onDark }]}>Try again</Text></Pressable>
         </View>
       );
     }
@@ -35,6 +36,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 }
 
 const styles = StyleSheet.create({
+  retry: { minHeight: 48, paddingHorizontal: spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentDeep, borderRadius: 10, marginTop: spacing.lg },
   wrapper: {
     flex: 1,
   },
@@ -46,3 +48,4 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
 });
+

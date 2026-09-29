@@ -223,14 +223,14 @@ export default function SourcesScreen() {
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data?.reason === "configuration" ? (
-                <EmptyState title="Discover isn't configured" body={discoverQuery.data.message ?? "Weekly picks are not configured for this build."} />
+                <EmptyState title="Weekly picks aren’t available" body={discoverQuery.data.message ?? "You can still add a source you know."} />
               ) : discoverQuery.data?.reason === "maintenance" ? (
                 <EmptyState title="Weekly picks are paused" body={discoverQuery.data.message ?? "Frame is preparing the next weekly publication."} />
               ) : discoverQuery.data?.reason === "empty" ? (
                 <EmptyState title="No picks this week" body={discoverQuery.data.message ?? "There is no current publication for your interests."} />
               ) : discoverQuery.isError || discoverQuery.data?.reason === "backend" || discoverQuery.data?.status === "temporarily_unavailable" ? (
                 <View>
-                  <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "The weekly service is unavailable. No replacement recommendations were generated."} />
+                  <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "Weekly picks couldn’t load. Try again, or open a source you follow."} />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data && (discoverQuery.data.items.length > 0 || discoverQuery.data.canShowMore) ? (
@@ -250,8 +250,8 @@ export default function SourcesScreen() {
                     />
                   ))}
                   {discoverQuery.data.canShowMore ? (
-                    <Pressable onPress={() => { void changeEdition("more"); }} disabled={editionBusy} style={styles.settingsButton} accessibilityRole="button" accessibilityLabel="More like this from this week's picks" testID="weekly-picks-more">
-                      <Text style={styles.settingsButtonText}>More like this</Text>
+                    <Pressable onPress={() => { void changeEdition("more"); }} disabled={editionBusy} style={styles.settingsButton} accessibilityRole="button" accessibilityLabel="More sources from this week" testID="weekly-picks-more">
+                      <Text style={styles.settingsButtonText}>More from this week</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -318,3 +318,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   });
 }
+
