@@ -1,3 +1,5 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import MotionView from "@/components/motion/MotionView";
 import { PauseCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
@@ -11,6 +13,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 type Props = { value: ManagedPlaybackControls; onChange: (value: ManagedPlaybackControls) => void; onValidityChange?: (valid: boolean) => void };
 
 export default function ManagedPlaybackControlsEditor({ value, onChange, onValidityChange }: Props) {
+  const touch = useFeedback();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [invalidTimes, setInvalidTimes] = useState<Record<string, boolean>>({});
@@ -51,17 +54,17 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
         <PauseCircle size={19} color={palette.active} /><View style={styles.flex}><Text style={styles.title}>Pause Frame</Text><Text style={styles.body}>{pauseLabel}</Text></View>
       </View>
       <View style={styles.pauseActions}>
-        <PauseButton label="1 hour" onPress={() => onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 })} styles={styles} />
-        <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); onChange({ ...value, pausedUntil: tomorrow.getTime() }); }} styles={styles} />
-        <PauseButton label="Until resumed" onPress={() => onChange({ ...value, pausedUntil: INDEFINITE_PAUSE })} styles={styles} />
-        {value.pausedUntil !== null ? <PauseButton label="Resume now" onPress={() => onChange({ ...value, pausedUntil: null })} styles={styles} /> : null}
+        <PauseButton label="1 hour" onPress={() => { onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 }); touch.selection(); }} styles={styles} />
+        <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); if (value.pausedUntil !== tomorrow.getTime()) { onChange({ ...value, pausedUntil: tomorrow.getTime() }); touch.selection(); } }} styles={styles} />
+        <PauseButton label="Until resumed" onPress={() => { if (value.pausedUntil === INDEFINITE_PAUSE) return; onChange({ ...value, pausedUntil: INDEFINITE_PAUSE }); touch.selection(); }} styles={styles} />
+        {value.pausedUntil !== null ? <PauseButton label="Resume now" onPress={() => { onChange({ ...value, pausedUntil: null }); touch.selection(); }} styles={styles} /> : null}
       </View>
     </View>
   );
 }
 
 function ControlSection({ title, body, enabled, onToggle, styles, children }: { title: string; body: string; enabled: boolean; onToggle: (enabled: boolean) => void; styles: ReturnType<typeof createStyles>; children?: React.ReactNode }) {
-  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={`${title} ${enabled ? "on" : "off"}`} /></View>{children}</View>;
+  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={`${title} ${enabled ? "on" : "off"}`} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
 }
 function NumberField({ label, value, onChange, styles }: { label: string; value: number; onChange: (text: string) => void; styles: ReturnType<typeof createStyles> }) {
   return <View style={styles.flex}><Text style={styles.fieldLabel}>{label}</Text><TextInput value={String(value)} onChangeText={onChange} keyboardType="number-pad" maxLength={3} style={styles.numberInput} accessibilityLabel={label} /></View>;

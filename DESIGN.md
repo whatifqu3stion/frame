@@ -184,7 +184,7 @@ components:
 
 The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.
 
-This is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. Motion is explicitly the next phase: this pass adds no motion and defines no new motion system.
+This is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. The approved motion phase is now implemented in source: restrained choice feedback, measured session ordering, a first-selection reveal and a deliberate ending. Timing and haptic strength still need real-device approval.
 
 **Key Characteristics:**
 - Warm tonal surfaces with restrained mineral accents.
@@ -244,7 +244,9 @@ Use the observed radius scale above: restrained media corners, slightly softer c
 
 The shared `ProgrammeGrain` is restricted to the current-session card and the session detail header. It repeats a bundled 128-unit tile with 1×/2×/3× density assets, clips to the card radius and is excluded from touch and accessibility. Per-pixel alpha is capped at 32/255; layer opacity is 0.22 in light mode and 0.16 in dark mode. Text and controls paint above it. The original deterministic generator and provenance ship with the assets. Main backgrounds, controls and video remain untextured.
 
-Existing pressed opacity/scale feedback and reduced-motion-aware Sheet fade are implementation facts, not new motion prescriptions. Existing image transitions, haptics and timing exports are outside this static pass. No new durations, easing, choreography or animation examples are specified here.
+Motion uses `expo/constants/motion.ts`: 160 ms choices, 180 ms local state changes, 220 ms row continuity, 400 ms first selection, and 340 ms final ending. Cubic ease-out, no overshoot. Selected-control labels stay opaque; geometry remains stable. Native navigation and sheet presentation retain OS ownership. Reduced Motion makes custom transitions immediate. Static grain and loading placeholders never loop.
+
+Touch feedback belongs to accepted choices and completed actions, with stronger confirmation reserved for genuine milestones. The device-wide Settings switch controls custom feedback across profiles. Web, inactive or stale contexts, no-op results, and bursts are suppressed. Navigation, automatic playback changes, erasure, typing and native picker gestures remain quiet. See `expo/docs/MOTION_AND_HAPTICS_REVIEW.md` for exact scope and hardware verification gates.
 
 ## Do's and Don'ts
 
@@ -258,7 +260,7 @@ Existing pressed opacity/scale feedback and reduced-motion-aware Sheet fade are 
 - Don't add literal marble veins, wood grain, curtains or gold luxury tropes.
 - Don't replace Libre Caslon Text or Hanken Grotesk, or collapse the six themes into one palette.
 - Don't substitute approximate HTML mockups for native implementation or introduce infinite viewing or autoplay.
-- Don't add or design new motion in this static refinement; motion belongs to the next phase.
+- Don't animate grain, live playback, private profile handoffs, or every page entrance; never delay an action to finish an effect.
 
 
 ### Voice and terminology
@@ -286,7 +288,7 @@ Use the established serif titles, warm surfaces, umber introduction, matte media
 
 The optional Premium preview follows the reveal. It is controlled by `FOUNDATION_CAPABILITIES.demoPaywall` and hidden when real paid access is enabled. Sample USD prices ($39.99/year and $4.99/month) are illustrative, not approved commercial pricing. “Demo · no charge” accompanies the plans. Selection and simulated checkout remain component state; no billing request, purchase restoration, entitlement change, or subscription is created. Leaving the preview never limits app access.
 
-Settings → Demo → Preview welcome & Premium replays this flow without resetting the library or onboarding completion. Source, interest, and save actions remain real and profile-local, which the replay explicitly states. First completion goes to Saved after a first save, Today if sources exist without a new save, and Sources otherwise; replay returns to Settings. Real-device validation and the planned motion phase remain outstanding.
+Settings → Demo → Preview welcome & Premium replays this flow without resetting the library or onboarding completion. Source, interest, and save actions remain real and profile-local, which the replay explicitly states. First completion goes to Saved after a first save, Today if sources exist without a new save, and Sources otherwise; replay returns to Settings. The motion phase is implemented; real-device validation remains outstanding.
 
 
 ### Conversion intent

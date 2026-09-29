@@ -4,7 +4,7 @@ Reviewed September 29, 2026. Source baseline: draft PR #18, commit `4e132d5272f1
 
 **Recommendation:** make choosing, keeping, arranging, and finishing feel considered. Frame should respond with a little weight and precision, then become still. The personality belongs in a few meaningful transitions, not continuous activity.
 
-**Status:** design review and proposed implementation specification only. No application behavior was changed in this pass. This is a source-based review of all 22 route files and 37 component files, including native/web variants, plus the relevant provider handlers and installed SDK. It is not a real-device motion or haptic assessment. Timing, perceived strength, navigation behavior, and performance still need hardware validation. No conversion improvement is claimed.
+**Status:** the review below records the original source baseline and recommendations. The approved implementation is now in source; section 11 records delivered behavior and deliberate adaptations. This is a source-based review of all 22 route files and 37 component files, including native/web variants, plus the relevant provider handlers and installed SDK. It is not a real-device motion or haptic assessment. Timing, perceived strength, navigation behavior, and performance still need hardware validation. No conversion improvement is claimed.
 
 ## 1. The strongest opportunities
 
@@ -269,3 +269,36 @@ Use focused tests for the new behavioral contracts: haptic preference/platform/f
 [3] [React Native 0.81: Animated](https://reactnative.dev/docs/0.81/animated), particularly `loop` and interaction handles. Supports the identified potential rendering risk; this review did not reproduce a performance failure.
 
 [4] [Apple: Playing haptics](https://developer.apple.com/design/human-interface-guidelines/playing-haptics). Official search excerpts support predefined feedback and native control ownership; full page text required JavaScript in the available reader. Detailed recommendations here rely on the installed SDK, accessible Expo/Android documentation, and the reviewed code rather than an unverified reading of the full Apple page.
+
+
+## 11. Implementation — September 29, 2026
+
+The user authorized the full appropriate implementation. The original tables above remain the review record; this section describes what actually shipped to the draft branch.
+
+| Area | Implemented behavior |
+| --- | --- |
+| Shared foundation | Existing React Native Animated only; no dependency added. Tokens: choice 160 ms, state 180 ms, row movement 220 ms, reveal 400 ms, ending 340 ms. Cubic ease-out, finite effects, `isInteraction: false`; opacity/translation use the native driver and color transitions use the JS driver. |
+| Navigation | Fixed tab icons with a resolving selected backing; no page-wide entrance or navigation haptics. Native stack transitions retained. Video-card press scaling removed. |
+| Onboarding | Local step transition with 6 logical units of travel; accessible stage focus after deliberate step changes. Source review resolves locally. First nonempty selection gets one 400 ms / 4-unit reveal in that flow, including reduced-motion and interrupted paths. Returning from Premium does not replay it. No waiting for animations or artificial loading. |
+| First save and demo | One milestone after a real new save. “Your library has begun” appears below the saved card's action, avoiding displacement of that control; saved items remain identifiable on replay. Demo plan choices transition with opaque labels and immediate checked state. Preview completion gets a soft commit cue; no billing or entitlement change. |
+| Today and Sources | Surviving rows move to their new positions after membership/order changes. Save/session/snooze/Undo and following use confirmed feedback. Today’s local final action earns a quiet ending; preexisting empty states do not. Notices and source previews resolve locally. |
+| Saved and sessions | Filter backing and accepted filter selections; reveal for other sessions. Session rows preserve identity during reorder, announce position, and tick only for valid changes. New session Save gets milestone feedback; edits use soft confirmation and unchanged edits stay silent. Save-and-begin uses one soft cue. |
+| Watch | Save icon/state transition and modest save feedback; explicit chapter seek gets a selection cue. Once the live player is unmounted, next-video and final-ending surfaces resolve in 180/340 ms. No effects around the live player; no automatic-completion, retry, external-link, close or rewatch haptics. Explicit session start keeps one soft cue. Approval/request success uses the same completion gate. |
+| Settings, imports and profile controls | Selected surfaces transition without fading labels. Custom allowance and dependent settings reveal locally. Import selection ticks and batch completion confirms once. Confirmed profile edits, approvals and profile switches use restrained cues; failed PIN verification gets rejection feedback. Erasure, revocation and removal remain quiet. |
+| Accessibility and lifecycle | A shared conservative OS Reduced Motion subscription makes all new custom effects immediate. App background/unmount cancels custom animation; no indefinite motion remains in skeletons. Haptic tokens suppress old navigation/profile/foreground generations, hidden/reopened sheet contexts, more-than-10-second completions, no-op results and sub-90-ms bursts. Haptic actuator failures cannot fail product actions. |
+| Device preference | Settings → Touch feedback persists across profiles on that device. Turning it off immediately suppresses pending cues. Web is explicitly unsupported and silent. A complete local erase resets the preference in memory and storage; ordinary profile switching preserves it. |
+
+### Deliberate adaptations
+
+- **Shared sheets keep their native fade**, with no custom slide or delayed exit. Native presentation owns interruption and modal lifetime. Internal editor changes get a local content transition with immediate scroll reset. The compatibility session-picker route suppresses the duplicate Modal animation; full-reset content remains still. The dormant purchase sheet retains its existing native presentation.
+- **No outgoing card copies or collapse-height choreography.** Surviving Today/Discover rows move; virtualized Saved removals use normal list layout. This avoids holding expired/private metadata or imposing fragile height assumptions on large text. No global LayoutAnimation is introduced.
+- **Profile switching keeps the existing opaque cover and keyed remount.** No crossfade or captured old profile image. Playback authorization and automatic restrictions apply immediately.
+- **Native switches, date/time pickers, keyboard and store flows retain system feedback.** No extra vibration is layered over them. Real purchase success remains governed by the native store path; paid access is still disabled.
+- **Loading is still.** Skeleton structure and accessibility remain, with static subdued placeholders instead of many independent pulsing thumbnails. Grain remains static and image loading keeps its existing reduced-motion-aware crossfade.
+- Legal/help, search typing, diagnostics, errors, empty-state recovery, destructive flows and routine route changes receive no decorative motion. Global theme changes are immediate; only the selected choice backing transitions.
+
+### Verification
+
+TypeScript passes. ESLint reports zero errors and only the preexisting unused-disable warning in generated Supabase types. The suite passes **218 tests across 47 files** (209 existing tests plus nine feedback-gate cases), including disabled/non-native/inactive suppression, once-only/no-op behavior, invalidated context, rapid bursts, delayed completion and actuator failure. Existing privacy, playback, import, reset and demo tests remain green. `git diff --check` passes.
+
+These are source and automated checks, not native visual or tactile approval. A native simulator/device is unavailable in this environment, and the existing browser-access restriction was not bypassed. Use the real-device matrix above before release, especially iOS/Android strength, VoiceOver/TalkBack stage focus, row movement with large text, native sheet interruption, rapid repeated actions and reduced-motion changes while an effect is running. No conversion or performance gain is claimed.

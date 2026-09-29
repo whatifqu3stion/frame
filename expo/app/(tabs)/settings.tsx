@@ -1,5 +1,8 @@
+import Pressable from "@/components/motion/ChoicePressable";
+import { useFeedback, useFeedbackPreference } from "@/hooks/useFeedback";
+import { setFeedbackEnabled } from "@/services/feedback";
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Switch, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RotateCcw, Shield, Sun, Trash2, UserCircle2, UsersRound } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,6 +19,9 @@ import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const feedback = useFeedback();
+  const haptics = useFeedbackPreference();
+  const [hapticsBusy, setHapticsBusy] = useState(false);
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
@@ -99,7 +105,7 @@ export default function SettingsScreen() {
             const selected = selectedIds.includes(interest.id);
             const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
             return (
-              <Pressable key={interest.id} onPress={() => toggleInterest(interest.id)} disabled={unavailable} style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: unavailable }} accessibilityHint={unavailable ? "Remove a selected interest before choosing this one." : undefined} testID={`interest-${interest.id}`}>
+              <Pressable key={interest.id} onPress={() => { const done = feedback.capture(); void toggleInterest(interest.id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} disabled={unavailable} style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: unavailable }} accessibilityHint={unavailable ? "Remove a selected interest before choosing this one." : undefined} testID={`interest-${interest.id}`}>
                 <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
               </Pressable>
             );
@@ -109,20 +115,27 @@ export default function SettingsScreen() {
 
       <Section label="Appearance" hint="The video player always uses a dark background.">
         <View style={styles.choiceRow} accessibilityRole="radiogroup">
-          <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { void setTheme("warm"); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
-          <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { void setTheme("ink"); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
+          <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
+          <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
         </View>
         <View style={styles.accentRow} accessibilityRole="radiogroup">
           {accentOptions.map((option) => {
             const selected = prefs.accent === option.id;
             const swatch = createPalette(isDark, option.id).accent;
             return (
-              <Pressable key={option.id} onPress={() => { void setAccent(option.id); }} style={[styles.accentChoice, selected && styles.accentChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${option.label} accent`}>
+              <Pressable key={option.id} onPress={() => { if (prefs.accent === option.id) return; const done = feedback.capture(); void setAccent(option.id).then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} style={[styles.accentChoice, selected && styles.accentChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${option.label} accent`}>
                 <View style={[styles.swatch, { backgroundColor: swatch }]}>{selected ? <Check size={14} color={palette.onAccent} strokeWidth={2.4} /> : null}</View>
                 <Text style={styles.accentText}>{option.label}</Text>
               </Pressable>
             );
           })}
+        </View>
+      </Section>
+
+      <Section label="Touch feedback" hint={Platform.OS === "web" ? "Touch feedback is available in the mobile app on supported phones." : "Subtle feedback for choices and completed actions. Applies to every profile on this device."}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, minHeight: 48 }}>
+          <Text style={type.label}>Haptic feedback</Text>
+          <Switch value={Platform.OS !== "web" && haptics.enabled} disabled={Platform.OS === "web" || !haptics.ready || hapticsBusy} accessibilityLabel="Haptic feedback" onValueChange={(value) => { setHapticsBusy(true); void setFeedbackEnabled(value).catch(() => Alert.alert("Couldn’t save touch feedback", "Try again in a moment.")).finally(() => setHapticsBusy(false)); }} />
         </View>
       </Section>
 

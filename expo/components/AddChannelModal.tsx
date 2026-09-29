@@ -1,3 +1,5 @@
+import MotionView from "@/components/motion/MotionView";
+import { useFeedback } from "@/hooks/useFeedback";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
@@ -16,6 +18,7 @@ type Feedback = { ok: boolean; message: string };
 
 /** Resolves a shared source first, then requires an explicit profile-local follow. */
 export default function AddChannelModal({ visible, onClose }: Props) {
+  const touch = useFeedback();
   const { resolveSourceInput, confirmSource, requirePurchase, saveVideo, activeProfileId } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -60,9 +63,10 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   const follow = async (): Promise<void> => {
     if (!resolution || resolutionProfileId !== activeProfileId || locked.current) return;
     locked.current = true; setBusy(true);
+    const done = touch.capture();
     try {
       const result = await confirmSource(resolution); setFeedback(result);
-      if (result.ok) { setResolution(null); setValue(""); }
+      if (result.ok) { done("commit"); setResolution(null); setValue(""); }
     } catch { setFeedback({ ok: false, message: "Couldn’t follow this source. Try again." }); }
     finally { locked.current = false; setBusy(false); }
   };
@@ -93,8 +97,10 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     const video = resolutionVideoToVideo(resolution);
     if (!video) return;
     locked.current = true; setBusy(true);
+    const done = touch.capture();
     try {
       await saveVideo(video);
+      done("commit");
       setFeedback({ ok: true, message: `Saved ${video.title}.` });
     } catch {
       setFeedback({ ok: false, message: "That video couldn’t be saved. Try again." });
@@ -136,14 +142,14 @@ export default function AddChannelModal({ visible, onClose }: Props) {
           {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
 
           {resolution ? (
-            <View style={styles.preview} testID="resolved-source-preview">
+            <MotionView enter style={styles.preview} testID="resolved-source-preview">
               <Image source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
               <View style={styles.previewCopy}>
                 <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
                 <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Channel"}</Text>
                 {resolution.video ? <Text style={styles.videoTitle} numberOfLines={2}>Video · {resolution.video.title}</Text> : null}
               </View>
-            </View>
+            </MotionView>
           ) : null}
 
           {resolution?.video ? (

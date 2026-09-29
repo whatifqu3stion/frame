@@ -1,8 +1,10 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -13,6 +15,7 @@ import type { FollowedChannel } from "@/types";
 type LoadState = "idle" | "loading" | "loadingMore";
 
 export default function GoogleImportScreen() {
+  const touch = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -67,6 +70,8 @@ export default function GoogleImportScreen() {
 
   const toggle = (sourceId: string): void => {
     if (importing || followedIds.has(sourceId)) return;
+    if (!selectedIds.has(sourceId) && selectedIds.size >= availableSlots) return;
+    touch.selection();
     setFeedback(null);
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -79,11 +84,12 @@ export default function GoogleImportScreen() {
   const importSelected = async (): Promise<void> => {
     if (importLock.current || importing || selectedIds.size === 0) return;
     importLock.current = true;
+    const done = touch.capture();
     const selected = subscriptions.filter((source) => selectedIds.has(source.id));
     try {
       const result = await importGoogleSubscriptions(selected);
       setFeedback({ ok: result.ok, message: result.message });
-      if (result.ok) setSelectedIds(new Set());
+      if (result.ok) { done("milestone"); setSelectedIds(new Set()); }
     } catch { setFeedback({ ok: false, message: "Import couldn’t finish. Check your sources before trying again." }); }
     finally { importLock.current = false; }
   };

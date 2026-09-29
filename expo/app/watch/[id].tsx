@@ -1,4 +1,6 @@
-import * as Haptics from "expo-haptics";
+import MotionView from "@/components/motion/MotionView";
+import { motion } from "@/constants/motion";
+import { useFeedback } from "@/hooks/useFeedback";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -79,6 +81,7 @@ function playbackRemaining(status: ViewingAllowanceStatus): number | null {
 }
 
 export default function WatchScreen() {
+  const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { width, height } = useWindowDimensions();
@@ -254,9 +257,6 @@ export default function WatchScreen() {
     showAllowanceWarning(status.kind === "limited" ? status.warning : undefined);
   }, [showAllowanceWarning]);
 
-  const haptic = useCallback((style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light): void => {
-    void Haptics.impactAsync(style).catch(() => {});
-  }, []);
 
   const setAction = useCallback((action: PendingAction): void => {
     pendingActionRef.current = action;
@@ -499,9 +499,9 @@ export default function WatchScreen() {
     currentTimeRef.current = chapter.startSeconds;
     setCurrentSeconds(chapter.startSeconds);
     playerRef.current?.seekTo(chapter.startSeconds);
-    void Haptics.selectionAsync().catch(() => {});
+    feedback.selection();
     void AccessibilityInfo.announceForAccessibility(`Jumped to ${formatDuration(chapter.startSeconds)}. ${chapter.title}`);
-  }, [playerError, playerReady]);
+  }, [feedback, playerError, playerReady]);
 
   const handleStateChange = useCallback((state: YouTubePlaybackState): void => {
     setPlaybackState(state);
@@ -586,7 +586,6 @@ export default function WatchScreen() {
 
   const retryPlayer = useCallback((): void => {
     if (!beginAction("retry")) return;
-    haptic();
     if (isFullscreenRef.current) leaveFullscreen();
     didEndRef.current = false;
     const retryAt = Math.max(0, Math.floor(currentTimeRef.current));
@@ -595,23 +594,21 @@ export default function WatchScreen() {
     setPlayerError(null);
     setPlaybackState("unstarted");
     setPlayerKey((value) => value + 1);
-  }, [beginAction, haptic, leaveFullscreen]);
+  }, [beginAction, leaveFullscreen]);
 
   const closePlayer = useCallback((): void => {
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
-    haptic();
     leaveFullscreen();
     pauseAndPersist();
     if (router.canGoBack()) router.back();
     else router.replace("/(tabs)");
-  }, [haptic, leaveFullscreen, pauseAndPersist]);
+  }, [ leaveFullscreen, pauseAndPersist]);
 
   const playNext = useCallback(async (): Promise<void> => {
     if (!nextSessionId) { closePlayer(); return; }
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
-    haptic();
     pauseAndPersist();
     try {
       await writeChainRef.current;
@@ -630,7 +627,7 @@ export default function WatchScreen() {
       navigationLockedRef.current = false;
       Alert.alert("Couldn’t continue", "Your next video is still in the session. Open it from Saved to continue.");
     }
-  }, [activeProfileId, closePlayer, haptic, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition]);
+  }, [activeProfileId, closePlayer, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition]);
 
   const rewatch = useCallback(async (): Promise<void> => {
     if (!beginAction("rewatch")) return;
@@ -640,7 +637,6 @@ export default function WatchScreen() {
         const moved = await updateSessionPosition(savedSessionId, id, sessionIndex, sessionIndex);
         if (!moved) throw new Error("Session changed");
       }
-      haptic(Haptics.ImpactFeedbackStyle.Medium);
       didEndRef.current = false;
       currentTimeRef.current = 0;
       setPlaybackState("playing");
@@ -648,7 +644,7 @@ export default function WatchScreen() {
       playerRef.current?.play();
     } catch { Alert.alert("Couldn’t restart", "Your place in the session is saved."); }
     finally { setAction(null); }
-  }, [beginAction, haptic, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
+  }, [beginAction, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
 
   const goToToday = useCallback((): void => {
     pauseAndPersist();
@@ -670,9 +666,8 @@ export default function WatchScreen() {
   }, [activeProfileId, authorizeProtectedAction]);
 
   const openInYouTube = useCallback((): void => {
-    haptic();
     void openExternal(`https://www.youtube.com/watch?v=${id}`);
-  }, [haptic, id, openExternal]);
+  }, [ id, openExternal]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
@@ -691,41 +686,45 @@ export default function WatchScreen() {
 
   const toggleSave = useCallback(async (): Promise<void> => {
     if (!video || !beginAction("save")) return;
+    const done = feedback.capture();
     try {
       if (!isSaved) {
         if (!requirePurchase("save")) return;
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
         await saveVideo(normalizedVideo);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        done("commit");
       } else {
         await unsaveVideo(video.id);
-        haptic();
       }
     } catch {
       void AccessibilityInfo.announceForAccessibility("Couldn’t update saved videos. Please try again.");
     } finally {
       setAction(null);
     }
-  }, [beginAction, haptic, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
+  }, [beginAction, feedback, isSaved, requirePurchase, saveVideo, setAction, unsaveVideo, video]);
 
   const requestAccess = useCallback(async (): Promise<void> => {
     if (!accessVideo) return;
+    const done = feedback.capture();
     const result = await requestManagedContentAccess(accessVideo);
+    if (result.ok) done("commit");
     Alert.alert(result.ok ? "Request saved" : "Couldn’t request access", result.message);
-  }, [accessVideo, requestManagedContentAccess]);
+  }, [accessVideo, feedback, requestManagedContentAccess]);
 
   const ownerApproveAccess = useCallback(async (): Promise<void> => {
     if (!accessVideo) return;
+    const done = feedback.capture();
     const result = await approveManagedContent(accessVideo);
     if (!result.ok) {
       Alert.alert("Approval not completed", result.message);
       return;
     }
+    done("commit");
     const access = await getManagedContentAccess(accessVideo);
     setContentAccessStatus(access);
     Alert.alert("Approved", result.message);
-  }, [accessVideo, approveManagedContent, getManagedContentAccess]);
+  }, [accessVideo, approveManagedContent, feedback, getManagedContentAccess]);
 
   if (!video || invalidSavedSession || (savedSessionId && sessionIndex < 0)) {
     return (
@@ -840,7 +839,7 @@ export default function WatchScreen() {
       ) : null}
 
       {showEnded ? (
-        <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+        <MotionView enter duration={nextSessionId ? motion.state : motion.ending} style={styles.stateSurface} accessibilityLiveRegion="polite">
           <Text style={styles.endEyebrow}>
             {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
           </Text>
@@ -857,7 +856,7 @@ export default function WatchScreen() {
             </Pressable>
           </View>
           {nextSessionId ? <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for now</Text></Pressable> : null}
-        </View>
+        </MotionView>
       ) : null}
     </View>
   );
@@ -884,7 +883,7 @@ export default function WatchScreen() {
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
-            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} />}
+            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <MotionView changeKey={isSaved}><Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} /></MotionView>}
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>
@@ -959,7 +958,7 @@ export default function WatchScreen() {
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
-            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} />}
+            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <MotionView changeKey={isSaved}><Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} /></MotionView>}
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>

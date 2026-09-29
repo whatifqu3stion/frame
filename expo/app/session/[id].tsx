@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Copy, Pencil, Play, Trash2 } from "lucide-react-native";
@@ -19,6 +19,7 @@ import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function SavedSessionScreen() {
+  const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -44,10 +45,11 @@ export default function SavedSessionScreen() {
     if (!session || !requirePurchase("sessions")) return;
     const videoId = session.orderedVideoIds[index];
     if (!videoId) return;
+    const done = feedback.capture();
     try {
       const moved = await updateSessionPosition(session.id, videoId, index, index);
       if (!moved) throw new Error("Session changed");
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      done("commit");
       const video = videoMap.get(videoId);
       router.push({
         pathname: FRAME_PLAYBACK_ROUTE,
@@ -56,15 +58,16 @@ export default function SavedSessionScreen() {
     } catch {
       Alert.alert("Couldn’t start session", "Your place was not saved. Try again.");
     }
-  }, [activeProfileId, requirePurchase, session, updateSessionPosition, videoMap]);
+  }, [activeProfileId, feedback, requirePurchase, session, updateSessionPosition, videoMap]);
 
   const duplicate = useCallback(async (): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
+    const done = feedback.capture();
     const copy = await duplicateSession(session.id);
     if (!copy) return;
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    done("commit");
     router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
-  }, [duplicateSession, requirePurchase, session]);
+  }, [duplicateSession, feedback, requirePurchase, session]);
 
   const openEditor = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;

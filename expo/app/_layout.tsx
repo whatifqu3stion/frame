@@ -1,13 +1,14 @@
+import { feedbackGate, loadFeedbackPreference } from "@/services/feedback";
 import { HankenGrotesk_400Regular, HankenGrotesk_500Medium, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
 import { LibreCaslonText_400Regular, LibreCaslonText_700Bold } from "@expo-google-fonts/libre-caslon-text";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, usePathname } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Text, View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
 import OwnerPinModal from "@/components/OwnerPinModal";
@@ -74,6 +75,13 @@ function AppContent() {
 }
 
 function ThemedApp() {
+  const pathname = usePathname();
+  React.useLayoutEffect(() => { feedbackGate.invalidate(); }, [pathname]);
+  React.useEffect(() => {
+    void loadFeedbackPreference();
+    const listener = AppState.addEventListener("change", () => feedbackGate.invalidate());
+    return () => listener.remove();
+  }, []);
   const segments = useSegments();
   const { isDark, palette } = useFrameTheme();
   const { profileSwitching, activeProfileId } = useApp();

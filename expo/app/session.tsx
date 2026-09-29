@@ -1,11 +1,13 @@
+import PositionedRow from "@/components/motion/PositionedRow";
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery } from "@tanstack/react-query";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
-import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -18,6 +20,7 @@ import { sessionRuntime } from "@/domain/sessionFlow";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
+  const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -25,6 +28,8 @@ export default function SessionBuilder() {
   const { activeProfileId, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
+  const selectedRef = useRef(selected); selectedRef.current = selected;
+  const persistLock = useRef(false);
   const [search, setSearch] = useState("");
   const [name, setName] = useState<string>("");
   const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
@@ -64,28 +69,25 @@ export default function SessionBuilder() {
   const durationSummary = `${runtime.seconds > 0 ? `${runtime.unknown ? "At least " : ""}${formatDuration(runtime.seconds)}` : "Duration unavailable"}${runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}`;
   const finishTime = runtime.unknown === 0 && runtime.seconds > 0 ? new Date(Date.now() + runtime.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
 
-  const move = useCallback((index: number, direction: -1 | 1): void => {
-    setSelected((previous) => {
-      const next = [...previous];
-      if (index + direction < 0 || index + direction >= next.length) return previous;
-      [next[index], next[index + direction]] = [next[index + direction], next[index]];
-      return next;
-    });
-    void Haptics.selectionAsync().catch(() => {});
-  }, []);
+  const move = useCallback((videoId: string, direction: -1 | 1): void => {
+    const next = [...selectedRef.current];
+    const index = next.indexOf(videoId);
+    if (persistLock.current || index < 0 || index >= next.length || index + direction < 0 || index + direction >= next.length) return;
+    [next[index], next[index + direction]] = [next[index + direction], next[index]];
+    selectedRef.current = next; setSelected(next); feedback.selection();
+    AccessibilityInfo.announceForAccessibility(`Video moved to position ${index + direction + 1}.`);
+  }, [feedback]);
 
   const toggle = useCallback((videoId: string): void => {
-    if (!requirePurchase("sessions")) return;
-    void Haptics.selectionAsync().catch(() => {});
-    setSelected((previous) => {
-      if (previous.includes(videoId)) return previous.filter((candidate) => candidate !== videoId);
-      if (previous.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return previous;
-      return [...previous, videoId];
-    });
-  }, [requirePurchase]);
+    if (persistLock.current || !requirePurchase("sessions")) return;
+    const previous = selectedRef.current;
+    if (!previous.includes(videoId) && previous.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return;
+    const next = previous.includes(videoId) ? previous.filter((id) => id !== videoId) : [...previous, videoId];
+    selectedRef.current = next; setSelected(next); feedback.selection();
+  }, [feedback, requirePurchase]);
 
   const persistSession = useCallback(async (): Promise<string | null> => {
-    if (!requirePurchase("sessions")) return null;
+    if (persistLock.current || !requirePurchase("sessions")) return null;
     if (!name.trim()) {
       Alert.alert("Name this session", "Choose a name you’ll recognize later.");
       return null;
@@ -95,6 +97,7 @@ export default function SessionBuilder() {
       return null;
     }
 
+    persistLock.current = true;
     setIsSaving(true);
     try {
       if (existingSession) {
@@ -110,26 +113,29 @@ export default function SessionBuilder() {
       Alert.alert("Couldn’t save session", "Your draft is still here. Try again in a moment.");
       return null;
     } finally {
+      persistLock.current = false;
       setIsSaving(false);
     }
   }, [clearSessionDraft, createSession, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos]);
 
   const save = useCallback(async (): Promise<void> => {
+    const done = feedback.capture();
     const sessionId = await persistSession();
     if (!sessionId) return;
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    done(existingSession ? "commit" : "milestone", !existingSession || existingSession.name !== name.trim() || existingSession.orderedVideoIds.join(",") !== selected.join(","));
     router.replace({ pathname: "/session/[id]", params: { id: sessionId } });
-  }, [persistSession]);
+  }, [existingSession, feedback, name, persistSession, selected]);
 
   const saveAndBegin = useCallback(async (): Promise<void> => {
+    const done = feedback.capture();
     const sessionId = await persistSession();
     if (!sessionId) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    done("commit");
     router.replace({
       pathname: FRAME_PLAYBACK_ROUTE,
       params: { id: selected[0], savedSessionId: sessionId, sessionProfileId: activeProfileId },
     });
-  }, [activeProfileId, persistSession, selected]);
+  }, [activeProfileId, feedback, persistSession, selected]);
 
   if (hydratedProfile !== activeProfileId || (id && !existingSession)) {
     return <View style={styles.screen}><EmptyState title={id && !existingSession ? "Session unavailable" : "Opening your draft"} body={id && !existingSession ? "It may have been removed from this profile." : "Loading your saved draft."} /></View>;
@@ -156,13 +162,13 @@ export default function SessionBuilder() {
           <Text style={styles.trayLabel}>Video order · {selected.length}/{PRODUCT_LIMITS.sessionDraftMaxItems}</Text>
           {selected.map((videoId, index) => {
             const video = pool.find((candidate) => candidate.id === videoId);
-            return <View key={videoId} style={styles.trayRow}>
+            return <PositionedRow transitionKey={selected.join(",")} key={videoId} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
               <Text style={styles.trayTitle} numberOfLines={3}>{video?.title ?? "Video details unavailable"}</Text>
-              <Pressable onPress={() => move(index, -1)} disabled={index === 0 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
-              <Pressable onPress={() => move(index, 1)} disabled={index === selected.length - 1 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => move(videoId, -1)} disabled={index === 0 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
-            </View>;
+            </PositionedRow>;
           })}
           <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Ends around ${finishTime} without breaks` : " · Finish time unavailable"}</Text>
         </View>

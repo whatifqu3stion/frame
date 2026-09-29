@@ -7,15 +7,15 @@ import { radii, spacing, type FramePalette, type FrameType } from "@/constants/t
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { VideoQueue } from "@/types";
 
-type Props = { visible: boolean; title: string; videoId: string; busy: boolean; sessions: readonly VideoQueue[]; onClose: () => void; onPick: (sessionId: string) => void; onCreate: (name: string) => void };
-export default function TodaySessionModal({ visible, title, videoId, busy, sessions, onClose, onPick, onCreate }: Props) {
+type Props = { visible: boolean; title: string; videoId: string; busy: boolean; nestedRoute?: boolean; sessions: readonly VideoQueue[]; onClose: () => void; onPick: (sessionId: string) => void; onCreate: (name: string) => void };
+export default function TodaySessionModal({ visible, title, videoId, busy, sessions, onClose, onPick, onCreate, nestedRoute = false }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [name, setName] = useState("");
   useEffect(() => { if (!visible) setName(""); }, [visible]);
   const defaultName = `Session ${sessions.length + 1}`;
   return (
-    <Sheet visible={visible} onClose={() => { if (!busy) onClose(); }} contentStyle={styles.content}>
+    <Sheet nestedRoute={nestedRoute} visible={visible} onClose={() => { if (!busy) onClose(); }} contentStyle={styles.content}>
       <View style={styles.header}>
         <View style={styles.flex}><Text style={type.heading} accessibilityRole="header">Add to session</Text><Text style={styles.meta}>{title}</Text></View>
         <Pressable disabled={busy} onPress={onClose} style={styles.close} accessibilityRole="button" accessibilityLabel="Close session picker" accessibilityState={{ disabled: busy }}><X size={20} color={palette.ink} /></Pressable>

@@ -1,8 +1,9 @@
+import Pressable from "@/components/motion/ChoicePressable";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { Check, Plus, Play } from "lucide-react-native";
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { formatDuration } from "@/services/youtube";

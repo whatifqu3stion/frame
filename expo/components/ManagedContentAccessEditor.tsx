@@ -1,6 +1,8 @@
+import MotionView from "@/components/motion/MotionView";
+import Pressable from "@/components/motion/ChoicePressable";
 import { Check, Info, ShieldCheck, Trash2, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import MediaImage from "@/components/MediaImage";
 import { isMetadataCurrent } from "@/domain/metadataRetention";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -37,7 +39,7 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
           <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Approve ${request.title}`}><Check size={16} color={palette.success} /></Pressable>
           <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Deny ${request.title}`}><X size={16} color={palette.danger} /></Pressable>
         </View>
-          {expanded === request.targetId ? <View style={{ gap: spacing.sm, padding: spacing.md }}><Text style={type.heading}>{request.title}</Text>{isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}</View> : null}
+          {expanded === request.targetId ? <MotionView enter style={{ gap: spacing.sm, padding: spacing.md }}><Text style={type.heading}>{request.title}</Text>{isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}</MotionView> : null}
         </View>
       ))}
 

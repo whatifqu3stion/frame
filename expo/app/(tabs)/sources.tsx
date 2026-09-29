@@ -1,9 +1,13 @@
+import MotionView from "@/components/motion/MotionView";
+import PositionedRow from "@/components/motion/PositionedRow";
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { ArrowRight, Import, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import InterestChoices from "@/components/InterestChoices";
 import { resolutionVideoToVideo } from "@/services/youtube";
@@ -25,6 +29,7 @@ import type { WeeklyPickSourceSuggestion } from "@/types";
 type SourcesSection = "followed" | "discover";
 
 export default function SourcesScreen() {
+  const touch = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -96,6 +101,7 @@ export default function SourcesScreen() {
     if (followBusyId || followedIds.has(suggestion.providerSourceId)) return;
     const requestProfileId = activeProfileId;
     const sourceId = suggestion.providerSourceId;
+    const done = touch.capture();
     setFollowBusyId(sourceId);
     setFollowFeedback((current) => {
       const next = { ...current };
@@ -105,6 +111,7 @@ export default function SourcesScreen() {
     try {
       const result = await confirmSource(weeklyPickToSourceResolution(suggestion));
       if (activeProfileRef.current !== requestProfileId) return;
+      done("commit", result.ok);
       setFollowFeedback((current) => ({ ...current, [sourceId]: result }));
     } catch {
       if (activeProfileRef.current !== requestProfileId) return;
@@ -159,6 +166,7 @@ export default function SourcesScreen() {
             })}
           </View> : null}
 
+          <MotionView changeKey={section}>
           {section === "followed" ? (
             <View style={styles.section}>
               <Pressable onPress={openAddSource} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-add-source">
@@ -243,8 +251,7 @@ export default function SourcesScreen() {
                   {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing previously loaded picks.</Text> : null}
                   {discoverQuery.data.items.length === 0 ? <EmptyState title="You've seen these picks" body="Explore more from this week’s selection below." /> : null}
                   {discoverQuery.data.items.map((suggestion) => (
-                    <WeeklyPickCard
-                      key={`${suggestion.provider}:${suggestion.providerSourceId}`}
+                    <PositionedRow transitionKey={discoverQuery.data.items.map((item) => item.providerSourceId).join(",")} key={`${suggestion.provider}:${suggestion.providerSourceId}`}><WeeklyPickCard
                       suggestion={suggestion}
                       interestName={interestNames.get(suggestion.interestId) ?? "Your interests"}
                       followed={followedIds.has(suggestion.providerSourceId)}
@@ -258,7 +265,7 @@ export default function SourcesScreen() {
                       }}
                       onFollow={() => { void followWeeklyPick(suggestion); }}
                       onDismiss={() => { void changeEdition("dismiss", suggestion.providerSourceId); }}
-                    />
+                    /></PositionedRow>
                   ))}
                   {discoverQuery.data.canShowMore ? (
                     <Pressable onPress={() => { void changeEdition("more"); }} disabled={editionBusy} style={styles.settingsButton} accessibilityRole="button" accessibilityLabel="More sources from this week" testID="weekly-picks-more">
@@ -277,6 +284,7 @@ export default function SourcesScreen() {
               <Text style={styles.discoverNote}>Up to {WEEKLY_DISCOVERY_DISPLAY_MAX} picks at a time. Next selection: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
             </View>
           )}
+          </MotionView>
         </View>
       </ScrollView>
       <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />

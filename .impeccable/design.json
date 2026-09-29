@@ -162,7 +162,7 @@
         "elevation": 2
       },
       "verification": "Current code inspected. Runtime verification unavailable; final visual approval pending.",
-      "motionScope": "Static pass only. No new motion designed; existing behavior retained for the next motion phase.",
+      "motionScope": "Approved motion phase implemented with React Native Animated: quiet selections, measured ordering, first-selection reveal and deliberate ending; native presentation retained. Real-device tuning outstanding.",
       "previewPolicy": "Use real native components. No HTML/CSS shadow-DOM replicas or synthesized tonal ramps.",
       "programmeGrain": {
         "asset": "expo/assets/textures/programme-grain.png",
@@ -238,7 +238,7 @@
   ],
   "narrative": {
     "northStar": "A curated museum-inspired viewing space",
-    "overview": "The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.\n\nThis is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. Motion is explicitly the next phase: this pass adds no motion and defines no new motion system.",
+    "overview": "The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.\n\nThis is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. The approved motion phase is implemented in source. New custom transitions honor Reduced Motion; final timing and haptic strength need real-device approval.",
     "keyCharacteristics": [
       "Warm tonal surfaces with restrained mineral accents.",
       "Serif editorial hierarchy paired with precise sans-serif controls.",
@@ -256,7 +256,7 @@
       "Don't add literal marble veins, wood grain, curtains or gold luxury tropes.",
       "Don't replace Libre Caslon Text or Hanken Grotesk, or collapse the six themes into one palette.",
       "Don't substitute approximate HTML mockups for native implementation or introduce infinite viewing or autoplay.",
-      "Don't add or design new motion in this static refinement; motion belongs to the next phase."
+      "Don't animate grain, live playback or private profile handoffs, or delay actions for effects."
     ]
   }
 }

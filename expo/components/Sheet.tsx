@@ -1,5 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { AccessibilityInfo, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import MotionView from "@/components/motion/MotionView";
+import { useEffect, useRef, type ReactNode } from "react";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { radii, spacing, softShadow } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -10,25 +12,23 @@ type Props = {
   children: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   contentKey?: string;
+  nestedRoute?: boolean;
+  animateContent?: boolean;
 };
 
 /** A bounded, scrollable sheet that stays reachable with the keyboard and larger text. */
-export default function Sheet({ visible, onClose, children, contentStyle, contentKey }: Props) {
+export default function Sheet({ visible, onClose, children, contentStyle, contentKey, nestedRoute = false, animateContent = true }: Props) {
   const insets = useSafeAreaInsets();
   const { palette } = useFrameTheme();
-  const [reduceMotion, setReduceMotion] = useState(true);
-  useEffect(() => {
-    let mounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => { if (mounted) setReduceMotion(value); }).catch(() => {});
-    const listener = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
-    return () => { mounted = false; listener.remove(); };
-  }, []);
+  const reduceMotion = useReducedMotion();
+  const scroll = useRef<ScrollView>(null);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [contentKey, visible]);
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion ? "none" : "fade"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion || nestedRoute ? "none" : "fade"} onRequestClose={onClose}>
       <KeyboardAvoidingView style={[styles.screen, { backgroundColor: palette.overlay }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          key={contentKey}
+          ref={scroll}
           style={styles.screen}
           contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, spacing.md) }]}
           keyboardShouldPersistTaps="handled"
@@ -36,9 +36,9 @@ export default function Sheet({ visible, onClose, children, contentStyle, conten
           showsVerticalScrollIndicator
           bounces={false}
         >
-          <View style={[styles.card, { backgroundColor: palette.surfaceHigh }, contentStyle]} accessibilityViewIsModal>
+          <MotionView changeKey={contentKey} active={visible && animateContent} style={[styles.card, { backgroundColor: palette.surfaceHigh }, contentStyle]} accessibilityViewIsModal>
             {children}
-          </View>
+          </MotionView>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>

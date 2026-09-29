@@ -1,6 +1,9 @@
+import { motion } from "@/constants/motion";
+import MotionView from "@/components/motion/MotionView";
+import PositionedRow from "@/components/motion/PositionedRow";
+import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { ArrowRight, CircleCheck, CloudOff, RotateCcw, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -25,6 +28,7 @@ import { todayService } from "@/services/todayServiceInstance";
 import { listTodaySourceRules } from "@/db/database";
 
 export default function TodayScreen() {
+  const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
@@ -32,6 +36,7 @@ export default function TodayScreen() {
   const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching } = useApp();
   const [clock, setClock] = useState<number>(Date.now());
   const actionLock = useRef(false);
+  const handledHere = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [snoozeItem, setSnoozeItem] = useState<TodaySnapshotItem | null>(null);
@@ -107,7 +112,7 @@ export default function TodayScreen() {
   const handle = useCallback(async (item: TodaySnapshotItem, disposition: TodayDisposition, snoozedUntil: number | null = null): Promise<boolean> => {
     if (profileSwitching || activeProfileRef.current !== activeProfileId || item.profileId !== activeProfileId) return false;
     const changed = await todayRepository.setDisposition(activeProfileId, item.periodKey, item.id, disposition, Date.now(), snoozedUntil);
-    if (changed) await reloadLocal();
+    if (changed) { handledHere.current = true; await reloadLocal(); }
     return changed;
   }, [activeProfileId, reloadLocal, profileSwitching]);
 
@@ -134,15 +139,17 @@ export default function TodayScreen() {
   const save = useCallback(async (item: TodaySnapshotItem): Promise<void> => {
     if (actionLock.current || !requirePurchase("save")) return;
     actionLock.current = true;
+    const done = feedback.capture();
     setNotice(null);
     setBusyId(item.id);
     try {
-      await performTodayAction(async () => { await saveVideo(item); return true; }, () => handle(item, "saved"));
+      const changed = await performTodayAction(async () => { await saveVideo(item); return true; }, () => handle(item, "saved"));
+      if (!changed) return;
       setNotice("Video saved");
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      done("commit");
     } catch { Alert.alert("Couldn’t save", "Check Saved before trying again. If the video is missing, try saving it again."); }
     finally { actionLock.current = false; setBusyId(null); }
-  }, [handle, requirePurchase, saveVideo]);
+  }, [feedback, handle, requirePurchase, saveVideo]);
 
   const addToSession = useCallback(async (sessionId: string): Promise<void> => {
     const item = sessionItem;
@@ -150,20 +157,24 @@ export default function TodayScreen() {
     const session = sessions.find((candidate) => candidate.id === sessionId);
     if (!session || session.orderedVideoIds.includes(item.id) || session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return;
     actionLock.current = true;
+    const done = feedback.capture();
     setNotice(null);
     setBusyId(item.id);
     try {
-      await performTodayAction(async () => { await updateSessionVideos(session.id, [...session.orderedVideoIds, item.id]); return true; }, () => handle(item, "session"));
+      const changed = await performTodayAction(async () => { await updateSessionVideos(session.id, [...session.orderedVideoIds, item.id]); return true; }, () => handle(item, "session"));
+      if (!changed) return;
       setSessionItem(null);
       setNotice("Added to session");
+      done("commit");
     } catch { Alert.alert("Couldn’t add to session", "Check your sessions in Saved before trying again."); }
     finally { actionLock.current = false; setBusyId(null); }
-  }, [handle, requirePurchase, sessionItem, sessions, updateSessionVideos]);
+  }, [feedback, handle, requirePurchase, sessionItem, sessions, updateSessionVideos]);
 
   const createTodaySession = useCallback(async (name: string): Promise<void> => {
     const item = sessionItem;
     if (!item || actionLock.current || !requirePurchase("sessions")) return;
     actionLock.current = true;
+    const done = feedback.capture();
     setNotice(null);
     setBusyId(item.id);
     try {
@@ -171,9 +182,10 @@ export default function TodayScreen() {
       if (!handled) return;
       setSessionItem(null);
       setNotice("Added to session");
+      done("commit");
     } catch { Alert.alert("Couldn’t create session", "Check your sessions in Saved before trying again."); }
     finally { actionLock.current = false; setBusyId(null); }
-  }, [createSession, handle, requirePurchase, sessionItem]);
+  }, [createSession, feedback, handle, requirePurchase, sessionItem]);
 
   const showMore = useCallback((item: TodaySnapshotItem): void => {
     if (actionLock.current) return;
@@ -187,27 +199,30 @@ export default function TodayScreen() {
   const snooze = useCallback(async (until: number): Promise<void> => {
     if (!snoozeItem || actionLock.current || until <= Date.now()) return;
     const item = snoozeItem;
+    const done = feedback.capture();
     actionLock.current = true;
     setBusyId(item.id);
     try {
       if (await handle(item, "snoozed", until)) {
+        done("commit");
         setSnoozeItem(null);
         setNotice(`Snoozed until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
       }
     } catch { Alert.alert("Couldn’t snooze", "Try again when you’re ready."); }
     finally { actionLock.current = false; setBusyId(null); }
-  }, [handle, snoozeItem]);
+  }, [feedback, handle, snoozeItem]);
 
   const undoDismiss = useCallback(async (): Promise<void> => {
     if (!undo || actionLock.current) return;
+    const done = feedback.capture();
     actionLock.current = true;
     setBusyId(undo.item.id);
     try {
       const restored = await todayRepository.setDisposition(activeProfileId, undo.item.periodKey, undo.item.id, undo.previous, Date.now(), undo.snoozedUntil, "dismissed");
-      if (restored) { setUndo(null); await reloadLocal(); AccessibilityInfo.announceForAccessibility("Video restored to Today."); }
+      if (restored) { done("commit"); setUndo(null); await reloadLocal(); AccessibilityInfo.announceForAccessibility("Video restored to Today."); }
     } catch { Alert.alert("Couldn’t undo", "Try again when you’re ready."); }
     finally { actionLock.current = false; setBusyId(null); }
-  }, [activeProfileId, reloadLocal, undo]);
+  }, [activeProfileId, feedback, reloadLocal, undo]);
 
   const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · showing saved selection" : snapshot?.freshness === "stale" ? "Showing saved selection · refresh delayed" : isRefreshing ? "Refreshing…" : null;
   const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
@@ -219,10 +234,10 @@ export default function TodayScreen() {
     : <StateBlock title="No selected videos yet" body="Ask the Owner to approve a video in Settings → Profiles & boundaries." styles={styles} success />;
   else if (activeProfile?.role === "managed" && managedOverview?.policy.mode === "approvedSources" && sourceIds.length === 0) content = <StateBlock title="No approved sources yet" body="Ask the Owner to add or approve a source in Settings → Profiles & boundaries." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
   else if (sourceIds.length === 0) content = <StateBlock title="Start with a source" body="Follow a source to see its videos here." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
-  else if (visible.length > 0) content = visible.map((item) => <TodayVideoCard key={item.id} item={item} busy={busyId === item.id} disabled={Boolean(busyId)} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} />);
+  else if (visible.length > 0) content = visible.map((item) => <PositionedRow transitionKey={visible.map((video) => video.id).join(",")} key={item.id}><TodayVideoCard item={item} busy={busyId === item.id} disabled={Boolean(busyId)} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} /></PositionedRow>);
   else if (hasOnlySnoozed) content = <StateBlock title="Snoozed for later" body={`Your next snoozed video returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}.`} styles={styles} />;
   else if (hasExpiredPending) content = <StateBlock title="Details need refreshing" body="Some video details need updating. Pull to refresh. Your choices are saved." styles={styles} />;
-  else if (snapshot && snapshot.items.length > 0) content = <StateBlock title="You’re caught up" body="You’ve reached the end of today’s selection." styles={styles} success />;
+  else if (snapshot && snapshot.items.length > 0) content = <MotionView enter={handledHere.current} duration={motion.ending} onPresented={() => { handledHere.current = false; }}><StateBlock title="You’re caught up" body="You’ve reached the end of today’s selection." styles={styles} success /></MotionView>;
   else if (snapshot) content = <StateBlock title="No new videos today" body="There are no videos from your sources that match your settings today. You can open a source directly below." styles={styles} success />;
   else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="Connect to the internet, then try again." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
   else if (todayQuery.data?.state === "no_cache") content = <StateBlock title="Your videos aren’t ready yet" body="Frame is still preparing videos from your sources. Try again later, or open a source directly below." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
@@ -239,11 +254,11 @@ export default function TodayScreen() {
           {sourceIds.length > 0 ? <Pressable onPress={() => router.push("/(tabs)/sources")} style={styles.secondaryLink} accessibilityRole="button"><Text style={styles.secondaryText}>Open a source directly</Text><ArrowRight size={16} color={palette.accent} /></Pressable> : null}
         </View>
       </ScrollView>
-      {undo || notice ? <View style={[styles.undo, { bottom: insets.bottom + 84 }]} accessibilityLiveRegion="polite">
+      {undo || notice ? <MotionView enter style={[styles.undo, { bottom: insets.bottom + 84 }]} accessibilityLiveRegion="polite">
         <Text style={styles.undoText}>{notice ?? "Dismissed from Today"}</Text>
         {undo ? <Pressable disabled={Boolean(busyId)} onPress={() => { void undoDismiss(); }} style={styles.undoButton} accessibilityRole="button" accessibilityLabel="Undo previous dismissal"><RotateCcw size={15} color={palette.onDark} /><Text style={styles.undoButtonText}>Undo</Text></Pressable> : notice === "Video saved" || notice === "Added to session" ? <Pressable onPress={() => router.push("/(tabs)/saved")} style={styles.undoButton} accessibilityRole="button"><Text style={styles.undoButtonText}>View Saved</Text></Pressable> : null}
         <Pressable onPress={() => { setUndo(null); setNotice(null); }} style={styles.undoButton} accessibilityRole="button" accessibilityLabel="Dismiss message"><X size={18} color={palette.onDark} /></Pressable>
-      </View> : null}
+      </MotionView> : null}
       <SnoozeModal busy={Boolean(busyId)} visible={Boolean(snoozeItem)} title={snoozeItem?.title ?? ""} onClose={() => setSnoozeItem(null)} onSnooze={(until) => { void snooze(until); }} />
       <TodaySessionModal visible={Boolean(sessionItem)} title={sessionItem?.title ?? ""} videoId={sessionItem?.id ?? ""} busy={Boolean(busyId)} sessions={sessions} onClose={() => setSessionItem(null)} onPick={(id) => { void addToSession(id); }} onCreate={(name) => { void createTodaySession(name); }} />
     </View>

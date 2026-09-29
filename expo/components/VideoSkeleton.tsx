@@ -1,8 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo } from "react";
 import {
-  AccessibilityInfo,
-  Animated,
-  Easing,
   StyleSheet,
   View,
   type StyleProp,
@@ -20,53 +17,6 @@ type VideoFeedSkeletonProps = {
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 };
-
-function usePulseAnimation(): Animated.Value {
-  const opacity = useRef<Animated.Value>(new Animated.Value(0.52)).current;
-  const animation = useRef<Animated.CompositeAnimation | null>(null);
-  const [isReduceMotionEnabled, setIsReduceMotionEnabled] = useState<boolean>(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled: boolean) => {
-      if (isMounted) setIsReduceMotionEnabled(enabled);
-    }).catch(() => {});
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setIsReduceMotionEnabled);
-    return () => {
-      isMounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    animation.current?.stop();
-    if (isReduceMotionEnabled) {
-      opacity.setValue(0.72);
-      return;
-    }
-
-    animation.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.92,
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.52,
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    animation.current.start();
-    return () => animation.current?.stop();
-  }, [isReduceMotionEnabled, opacity]);
-
-  return opacity;
-}
 
 function VideoSkeletonCard({ variant, palette }: { variant: SkeletonVariant; palette: FramePalette }) {
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -104,7 +54,6 @@ export const VideoFeedSkeleton = memo(function VideoFeedSkeleton({
   accessibilityLabel = "Loading videos",
 }: VideoFeedSkeletonProps) {
   const { palette } = useFrameTheme();
-  const opacity = usePulseAnimation();
   const items = useMemo<number[]>(() => Array.from({ length: count }, (_, index) => index), [count]);
 
   return (
@@ -116,22 +65,21 @@ export const VideoFeedSkeleton = memo(function VideoFeedSkeleton({
       accessibilityState={{ busy: true }}
       pointerEvents="none"
     >
-      <Animated.View style={{ opacity }}>
+      <View style={{ opacity: 0.72 }}>
         {items.map((item) => <VideoSkeletonCard key={item} variant={variant} palette={palette} />)}
-      </Animated.View>
+      </View>
     </View>
   );
 });
 
-/** Animated placeholder displayed until an individual thumbnail finishes loading. */
+/** Still placeholder displayed until an individual thumbnail finishes loading. */
 export const ThumbnailSkeleton = memo(function ThumbnailSkeleton() {
   const { palette } = useFrameTheme();
-  const opacity = usePulseAnimation();
 
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.surfaceDim, opacity }]}
+      style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.surfaceDim, opacity: 0.72 }]}
     />
   );
 });

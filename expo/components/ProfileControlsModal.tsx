@@ -1,3 +1,4 @@
+import { useFeedback } from "@/hooks/useFeedback";
 import { ArrowLeft, Check, ChevronRight, Clock3, LockKeyhole, Plus, UserRound, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -31,6 +32,7 @@ type Editor =
 
 /** Owner-authorized household profile, allowance, and PIN controls. */
 export default function ProfileControlsModal({ visible, onClose }: Props) {
+  const touch = useFeedback(visible);
   const {
     profiles, activeProfileId, profileSwitching, isOwnerAuthorized, ownerPinAvailability, hasOwnerPin,
     createStandardProfile, createManagedProfile, renameLocalProfile, reorderLocalProfile, deleteLocalProfile,
@@ -127,11 +129,13 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   };
 
   const changeContentMode = async (profile: Profile, mode: ManagedContentMode): Promise<void> => {
-    if (busy) return;
+    if (busy || contentOverview?.policy.mode === mode) return;
+    const done = touch.capture();
     setBusy(true);
     try {
     const result = await setManagedContentMode(profile.id, mode);
     setFeedback(result);
+    done("commit", result.ok);
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
     } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
     finally { setBusy(false); }
@@ -139,10 +143,12 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
 
   const reviewRequest = async (profile: Profile, request: ManagedApprovalRequest, decision: "approve" | "deny"): Promise<void> => {
     if (busy) return;
+    const done = touch.capture();
     setBusy(true);
     try {
     const result = await reviewManagedApprovalRequest(profile.id, request, decision);
     setFeedback(result);
+    done("commit", result.ok && decision === "approve");
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
     } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
     finally { setBusy(false); }
@@ -164,6 +170,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     if (editor.kind === "content") return;
     if (editor.kind === "controls" && (!playbackTimesValid || validateManagedPlaybackControls(playbackControls))) return;
     if (editor.kind === "pin" && value !== confirmation) return setFeedback({ ok: false, message: "Those PINs don’t match." });
+    const done = touch.capture();
     setBusy(true);
     try {
     const result = editor.kind === "createStandard" ? await createStandardProfile(value)
@@ -175,6 +182,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
               : await saveOwnerPin(value, currentPin);
     setFeedback(result);
     if (result.ok) {
+      if (editor.kind !== "removePin") done("commit");
       const createdManagedWithoutPin = editor.kind === "createManaged" && !hasOwnerPin;
       setEditor(null); setValue(""); setConfirmation(""); setCurrentPin("");
       await refreshAllowances();
@@ -198,10 +206,12 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
 
   const cancelPending = async (): Promise<void> => {
     if (busy) return;
+    const done = touch.capture();
     setBusy(true);
     try {
       const result = await cancelPendingOwnerAllowance();
       setFeedback(result);
+      done("commit", result.ok);
       if (result.ok) await refreshAllowances();
     } catch { setFeedback({ ok: false, message: "The pending change couldn’t be updated. Try again." }); }
     finally { setBusy(false); }
@@ -222,8 +232,9 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
 
   const reorder = async (profileId: string, direction: "up" | "down"): Promise<void> => {
     if (busy) return;
+    const done = touch.capture();
     setBusy(true);
-    try { setFeedback(await reorderLocalProfile(profileId, direction)); }
+    try { const result = await reorderLocalProfile(profileId, direction); setFeedback(result); done("selection", result.ok); }
     catch { setFeedback({ ok: false, message: "The order couldn’t be saved. Try again." }); }
     finally { setBusy(false); }
   };

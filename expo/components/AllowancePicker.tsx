@@ -1,5 +1,8 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import MotionView from "@/components/motion/MotionView";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {  StyleSheet, Text, TextInput, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { ViewingAllowance } from "@/models/viewingAllowance";
@@ -13,6 +16,7 @@ const PRESETS = [15, 30, 45, 60] as const;
 
 /** Compact profile viewing-allowance selector with validated whole-minute choices. */
 export default function AllowancePicker({ value, onChange }: Props) {
+  const touch = useFeedback();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const isPreset = value.mode === "dailyLimit" && PRESETS.includes(value.minutes as 15 | 30 | 45 | 60);
@@ -34,12 +38,12 @@ export default function AllowancePicker({ value, onChange }: Props) {
       <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Daily viewing allowance">
         {PRESETS.map((minutes) => {
           const selected = !customMode && value.mode === "dailyLimit" && value.minutes === minutes;
-          return <Pressable key={minutes} onPress={() => { setCustomMode(false); onChange({ mode: "dailyLimit", minutes }); }} style={[styles.option, selected && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: selected }}><Text style={[styles.optionText, selected && styles.selectedText]}>{minutes} min</Text></Pressable>;
+          return <Pressable key={minutes} onPress={() => { if (selected) return; setCustomMode(false); onChange({ mode: "dailyLimit", minutes }); touch.selection(); }} style={[styles.option, selected && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: selected }}><Text style={[styles.optionText, selected && styles.selectedText]}>{minutes} min</Text></Pressable>;
         })}
-        <Pressable onPress={() => chooseCustom(custom || "1")} style={[styles.option, value.mode === "dailyLimit" && customMode && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: customMode && value.mode === "dailyLimit" }}><Text style={[styles.optionText, value.mode === "dailyLimit" && customMode && styles.selectedText]}>Custom</Text></Pressable>
-        <Pressable onPress={() => { setCustomMode(false); onChange({ mode: "unlimited" }); }} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
+        <Pressable onPress={() => { if (customMode && value.mode === "dailyLimit") return; chooseCustom(custom || "1"); touch.selection(); }} style={[styles.option, value.mode === "dailyLimit" && customMode && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: customMode && value.mode === "dailyLimit" }}><Text style={[styles.optionText, value.mode === "dailyLimit" && customMode && styles.selectedText]}>Custom</Text></Pressable>
+        <Pressable onPress={() => { if (value.mode === "unlimited") return; setCustomMode(false); onChange({ mode: "unlimited" }); touch.selection(); }} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
       </View>
-      {value.mode === "dailyLimit" && customMode ? <View><Text style={styles.note}>Custom minutes (1–1440)</Text><TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</View> : null}
+      {value.mode === "dailyLimit" && customMode ? <MotionView enter><Text style={styles.note}>Custom minutes (1–1440)</Text><TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</MotionView> : null}
       <Text style={styles.note}>This allowance limits playback only inside Frame. It does not limit viewing in browsers or other apps.</Text>
     </View>
   );

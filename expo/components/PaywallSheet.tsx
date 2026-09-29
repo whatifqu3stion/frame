@@ -1,3 +1,5 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BlurView } from "expo-blur";
 import { router } from "expo-router";
@@ -7,7 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  Pressable,
+
   ScrollView,
   StyleSheet,
   Text,
@@ -56,6 +58,7 @@ export default function PaywallSheet() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const touch = useFeedback(paywallOpen);
   const [selectedIdentifier, setSelectedIdentifier] = useState<string>("$rc_annual");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackIsSuccess, setFeedbackIsSuccess] = useState<boolean>(false);
@@ -209,7 +212,7 @@ export default function PaywallSheet() {
                   return (
                     <Pressable
                       key={aPackage.identifier}
-                      onPress={() => setSelectedIdentifier(aPackage.identifier)}
+                      onPress={() => { if (selectedIdentifier === aPackage.identifier) return; setSelectedIdentifier(aPackage.identifier); touch.selection(); }}
                       disabled={isBusy}
                       style={[styles.planCard, isSelected && styles.planCardSelected]}
                       accessibilityRole="radio"

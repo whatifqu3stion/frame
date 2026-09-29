@@ -44,7 +44,7 @@ export default function FullResetModal({ visible, onClose, forgottenPinRecovery 
     ]);
   };
 
-  return <Sheet visible={visible} onClose={close} contentKey={step}>
+  return <Sheet visible={visible} onClose={close} contentKey={step} animateContent={false}>
       <View style={styles.header}><View style={styles.icon}><AlertTriangle size={20} color={palette.danger} /></View><Pressable onPress={close} disabled={busy} style={styles.close} accessibilityRole="button" accessibilityLabel="Close reset"><X size={18} color={palette.inkMuted} /></Pressable></View>
       <Text style={styles.title}>Erase all Frame data and start over</Text>
       {step === "review" ? <>

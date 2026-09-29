@@ -1,9 +1,11 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "@/components/MediaImage";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
@@ -17,6 +19,7 @@ import { refreshStoredLibraryMetadata } from "@/db/database";
 import type { Video } from "@/types";
 
 export default function ChannelScreen() {
+  const touch = useFeedback();
   const followLock = useRef(false);
   const [followBusy, setFollowBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -50,14 +53,15 @@ export default function ChannelScreen() {
 
   const toggleFollow = useCallback(async (): Promise<void> => {
     if (!channel || followLock.current) return;
+    const done = touch.capture();
     followLock.current = true; setFollowBusy(true); setFeedback(null);
     try {
       if (following) { await unfollowChannel(channel.id); setFeedback("Source unfollowed. You can follow it again here."); }
-      else if (requirePurchase("creators")) { await followChannel({ ...channel, followedAt: Date.now(), source: "manual" }); setFeedback("Source followed"); }
+      else if (requirePurchase("creators")) { await followChannel({ ...channel, followedAt: Date.now(), source: "manual" }); setFeedback("Source followed"); done("commit"); }
     } catch {
       Alert.alert("Source unchanged", "Owner authorization was cancelled or the source could not be updated.");
     } finally { followLock.current = false; setFollowBusy(false); }
-  }, [channel, followChannel, following, requirePurchase, unfollowChannel]);
+  }, [channel, followChannel, following, requirePurchase, touch, unfollowChannel]);
 
   const retryUploads = useCallback((): void => {
     void videosQuery.refetch();

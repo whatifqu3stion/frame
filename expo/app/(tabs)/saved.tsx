@@ -1,7 +1,10 @@
+import { useFeedback } from "@/hooks/useFeedback";
+import MotionView from "@/components/motion/MotionView";
+import Pressable from "@/components/motion/ChoicePressable";
 import { router } from "expo-router";
 import { ArrowRight, Play, Plus, Search, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import SessionProgramme from "@/components/SessionProgramme";
@@ -23,6 +26,7 @@ const FILTERS: readonly { id: SavedViewingFilter; label: string }[] = [
 ];
 
 export default function SavedScreen() {
+  const touch = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -93,11 +97,11 @@ export default function SavedScreen() {
           <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createAnother, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.active} /><Text style={[type.label, { color: palette.active }]}>Create another session</Text></Pressable>
         ) : null}
         {sessions.length > 1 ? <Pressable onPress={() => setShowOtherSessions((value) => !value)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ expanded: showOtherSessions }}><Text style={type.label}>{showOtherSessions ? "Hide other sessions" : `Other sessions · ${sessions.length - 1}`}</Text></Pressable> : null}
-        {showOtherSessions ? sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
+        {showOtherSessions ? <MotionView enter>{sessions.filter((item) => item.id !== currentSession?.id).map((item) => (
           <Pressable key={item.id} onPress={() => router.push({ pathname: "/session/[id]", params: { id: item.id } })} style={({ pressed }) => [styles.sessionCard, { marginTop: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open session ${item.name}`}>
             <View style={styles.sessionIcon}><Play size={17} color={palette.active} /></View><View style={styles.flex}><Text style={styles.sessionName}>{item.name}</Text><Text style={styles.sessionMeta}>{item.orderedVideoIds.length} videos · {sessionPosition(item) >= item.orderedVideoIds.length ? "Complete" : `Next ${sessionPosition(item) + 1}`}</Text></View><ArrowRight size={17} color={palette.inkMuted} />
           </Pressable>
-        )) : null}
+        ))}</MotionView> : null}
 
         <SectionTitle label="Continue watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
         {libraryLoading ? <VideoFeedSkeleton count={2} accessibilityLabel="Loading continue watching" /> : continueWatching.length === 0 ? (
@@ -135,7 +139,7 @@ export default function SavedScreen() {
             return (
               <Pressable
                 key={filter.id}
-                onPress={() => setCriteria({ profileId: activeProfileId, query: searchQuery, filter: filter.id })}
+                onPress={() => { if (viewingFilter === filter.id) return; setCriteria({ profileId: activeProfileId, query: searchQuery, filter: filter.id }); touch.selection(); }}
                 style={[styles.filterChip, isSelected && styles.filterChipSelected]}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: isSelected }}

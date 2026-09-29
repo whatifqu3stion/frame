@@ -1,4 +1,5 @@
-import { StyleSheet, View } from "react-native";
+import TabIconSurface from "@/components/motion/TabIconSurface";
+import { StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,10 +32,10 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><CalendarDays size={22} color={color} strokeWidth={2} /></View> }} />
-      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Users size={22} color={color} strokeWidth={2} /></View> }} />
-      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Bookmark size={22} color={color} strokeWidth={2} /></View> }} />
-      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Settings size={22} color={color} strokeWidth={2} /></View> }} />
+      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><CalendarDays size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Users size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Bookmark size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Settings size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="library" options={{ href: null }} />
     </Tabs>

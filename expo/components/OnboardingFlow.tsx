@@ -1,8 +1,11 @@
+import MotionView from "@/components/motion/MotionView";
+import { useFeedback } from "@/hooks/useFeedback";
+import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Check, Link2 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Alert, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import OnboardingReveal from "@/components/OnboardingReveal";
 import { weeklyDiscoveryPeriodKey, weeklyPickToSourceResolution } from "@/services/discovery";
@@ -27,6 +30,8 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { interests, replaceInterests, followedChannels, savedVideos, finishOnboarding } = useApp();
+  const feedback = useFeedback();
+  const revealed = useRef(false);
   const [step, setStep] = useState(0);
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [demoCompleted, setDemoCompleted] = useState(false);
@@ -35,7 +40,16 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
   const locked = useRef(false);
   const sourceLock = useRef(false);
   const scroll = useRef<ScrollView>(null);
+  const stageLabel = useRef<Text>(null);
+  const lastStage = useRef<string | null>(null);
   const current = premiumOpen ? "premium-preview" : steps[step];
+  useEffect(() => {
+    const changed = lastStage.current !== null && lastStage.current !== current;
+    lastStage.current = current;
+    if (!changed || Platform.OS === "web") return;
+    const frame = requestAnimationFrame(() => { const node = findNodeHandle(stageLabel.current); if (node) AccessibilityInfo.setAccessibilityFocus(node); });
+    return () => cancelAnimationFrame(frame);
+  }, [current]);
   const last = step === steps.length - 1;
   const savedCount = savedDuringSetup.filter((id) => savedVideos.some((video) => video.id === id)).length;
   const promotePremium = showDemo && current === "your-frame" && savedCount > 0;
@@ -70,7 +84,8 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
     if (locked.current) return;
     locked.current = true; setBusy(true);
     const ids = toggleInterestId(interests.map((item) => item.id), id, new Set(INTEREST_LIBRARY.map((item) => item.id)), ONBOARDING_INTEREST_MAX);
-    try { await replaceInterests(INTEREST_LIBRARY.filter((item) => ids.includes(item.id))); }
+    const done = feedback.capture();
+    try { await replaceInterests(INTEREST_LIBRARY.filter((item) => ids.includes(item.id))); done("selection", ids.join(",") !== interests.map((item) => item.id).join(",")); }
     catch { Alert.alert("Couldn’t save interests", "Check your selection and try again."); }
     finally { locked.current = false; setBusy(false); }
   };
@@ -82,8 +97,9 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
     <View style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel="Setup progress" accessibilityValue={{ min: 1, max: steps.length, now: step + 1, text: `Step ${step + 1} of ${steps.length}` }}>
       {steps.map((name, i) => <View key={name} style={[styles.progressPart, i <= step && styles.progressComplete]} />)}
     </View>
-    <Text style={styles.stageLabel}>{premiumOpen ? "Frame Premium · demo" : `${step + 1} of ${steps.length} · ${["A better way to watch", "Your interests", "Your sources", "Your first selection"][step]}`}</Text>
+    <Text ref={stageLabel} accessible accessibilityRole="header" style={styles.stageLabel}>{premiumOpen ? "Frame Premium · demo" : `${step + 1} of ${steps.length} · ${["A better way to watch", "Your interests", "Your sources", "Your first selection"][step]}`}</Text>
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <MotionView changeKey={current} active={current !== "your-frame"} distance={6}>
       {replay ? <Text style={styles.replayNote}>Welcome preview · source and interest changes are saved to this profile.</Text> : null}
       {current === "welcome" ? <>
         <Text style={styles.title} accessibilityRole="header">Worth watching.{"\n"}At your pace.</Text>
@@ -108,15 +124,16 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
             const ids = interests.map((interest) => interest.id);
             const selected = ids.includes(item.id);
             const atLimit = isInterestOptionDisabled(ids, item.id, ONBOARDING_INTEREST_MAX);
-            return <Pressable key={item.id} onPress={() => { void selectInterest(item.id); }} disabled={busy || atLimit} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: busy || atLimit }} accessibilityHint={atLimit ? "Remove an interest before choosing another." : undefined} style={[styles.chip, atLimit && styles.chipUnavailable, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && { color: palette.active }]}>{item.name}</Text>{selected ? <Check size={16} color={palette.active} /> : null}</Pressable>;
+            return <Pressable key={item.id} onPress={() => { void selectInterest(item.id); }} disabled={busy || atLimit} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: busy || atLimit }} accessibilityHint={atLimit ? "Remove an interest before choosing another." : undefined} style={[styles.chip, atLimit && styles.chipUnavailable, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && { color: palette.active }]}>{item.name}</Text><View style={{ width: 16, height: 16 }}>{selected ? <Check size={16} color={palette.active} /> : null}</View></Pressable>;
           })}
         </View>
       </> : null}
       {current === "your-frame" ? <>
-        <OnboardingReveal savedHere={savedDuringSetup} onSaved={(id) => setSavedDuringSetup((ids) => [...new Set([...ids, id])])} onChooseSource={() => goTo(2)} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} />
+        <OnboardingReveal animateReveal={!revealed.current} onRevealed={() => { revealed.current = true; }} savedHere={savedDuringSetup} onSaved={(id) => setSavedDuringSetup((ids) => [...new Set([...ids, id])])} onChooseSource={() => goTo(2)} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} />
         {showDemo ? <View style={styles.followed}><Text style={type.heading}>{savedCount > 0 ? "Make this your way to watch." : "A library that grows with your interests."}</Text><Text style={type.bodySoft}>Keep your finds, return where you left off, and bring a few favorites together in a session.</Text>{!promotePremium ? <Pressable disabled={busy} onPress={openPremiumPreview} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Explore Premium · demo</Text></Pressable> : <Text style={type.caption}>Sample plans follow. No payment or subscription.</Text>}</View> : null}
       </> : null}
       {current === "premium-preview" ? <DemoPaywall savedCount={savedCount} sourceCount={followedChannels.length} onCompletionChange={setDemoCompleted} /> : null}
+      </MotionView>
     </ScrollView>
     <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
       {step > 0 ? <Pressable disabled={busy} onPress={() => { if (premiumOpen) { setPremiumOpen(false); scroll.current?.scrollTo({ y: 0, animated: false }); } else goTo(step - 1); }} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Back</Text></Pressable> : null}
@@ -131,6 +148,7 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
 function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: boolean): void; scrollToSource(): void }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const touch = useFeedback();
   const { resolveSourceInput, confirmSource, followedChannels, interests, activeProfileId, activeProfile } = useApp();
   const picks = useQuery({
     queryKey: ["weekly-picks", activeProfileId, weeklyDiscoveryPeriodKey(), interests.map((item) => item.id).join(","), followedChannels.map((item) => item.id).sort().join(",")],
@@ -148,12 +166,13 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
   const submit = async () => {
     if (lock.current || (!resolution && !link.trim())) return;
     lock.current = true; setBusy(true); onBusyChange(true); setFeedback(null);
+    const done = touch.capture();
     try {
       if (resolution) {
         const result = await confirmSource(resolution);
         if (!mounted.current) return;
         setFeedback(result.ok ? { ok: true, message: `${resolution.source.displayName} is now in your sources.` } : result);
-        if (result.ok) { setResolution(null); setLink(""); Keyboard.dismiss(); }
+        if (result.ok) { done("commit"); setResolution(null); setLink(""); Keyboard.dismiss(); }
       } else {
         const result = await resolveSourceInput(link.trim());
         if (!mounted.current) return;
@@ -163,7 +182,7 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     } catch { if (mounted.current) setFeedback({ ok: false, message: "Couldn’t add this source. Check your connection and try again." }); }
     finally { lock.current = false; if (mounted.current) { setBusy(false); onBusyChange(false); } }
   };
-  return <>
+  return <MotionView changeKey={resolution?.source.providerSourceId ?? "source-input"}>
     <Text style={styles.title} accessibilityRole="header">{resolution ? "A source for\nyour Frame." : "Begin with\na favorite."}</Text>
     <Text style={styles.body}>{resolution ? "Follow this source to include its videos in Today. You can change your sources later." : "Your sources shape your daily selection. Start with one you enjoy; you can add more whenever you like."}</Text>
     {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.suggestions}>
@@ -186,7 +205,7 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     {feedback ? <Text style={[styles.note, { color: feedback.ok ? palette.success : palette.danger }]} accessibilityLiveRegion="polite">{feedback.message}</Text> : null}
 
     {followedChannels.length > 0 ? <View style={styles.followed}><Text style={type.label}>Your sources · {followedChannels.length}</Text>{followedChannels.slice(0, 3).map((source) => <View style={styles.followedRow} key={source.id}><Check size={17} color={palette.success} /><Text style={styles.followedName}>{source.title}</Text></View>)}{followedChannels.length > 3 ? <Text style={type.bodySoft}>And {followedChannels.length - 3} more in Sources.</Text> : null}</View> : <Text style={styles.note}>You can add more sources later. Each one shapes what appears in Today.</Text>}
-  </>;
+  </MotionView>;
 }
 
 function createStyles(p: FramePalette, t: FrameType) {

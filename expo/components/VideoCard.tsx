@@ -1,4 +1,3 @@
-import * as Haptics from "expo-haptics";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
@@ -35,7 +34,6 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const onPress = useCallback((): void => {
     if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
   }, [requirePurchase, video]);
@@ -113,7 +111,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     durationText: { color: "#F7F1E7", fontFamily: "HankenGrotesk_600SemiBold", fontSize: 12, letterSpacing: 0.3 },
     progressTrack: { position: "absolute", left: 8, right: 8, bottom: 6, height: 3, borderRadius: radii.pill, backgroundColor: "rgba(247,241,231,0.3)", overflow: "hidden" },
     progressFill: { height: "100%", borderRadius: radii.pill, backgroundColor: palette.active },
-    pressed: { opacity: 0.76, transform: [{ scale: 0.987 }] },
+    pressed: { opacity: 0.88 },
   });
 }
 

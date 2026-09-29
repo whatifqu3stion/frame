@@ -91,3 +91,12 @@ TypeScript and lint verification plus the existing 209-test suite cover this pas
 ## Frame-led brand copy
 
 Replaced the welcome promise with “Worth watching. At your pace.” Removed YouTube naming from Frame-authored onboarding, source setup, import descriptions, About copy, controls, errors, and fallback metadata. Source examples now use @creator; external playback is “Open original video.” Demo paywall already contained no provider branding. No provider logos were found in authored assets or these UI components. Integrations and official player behavior remain intact; provider-controlled branding, creator metadata, and Terms/Privacy references remain. Validation: typecheck, lint, and existing test suite; native visual review remains unavailable.
+
+
+## Motion and touch feedback — September 29, 2026
+
+Implemented the approved app-wide motion review with a restrained shared vocabulary: tab and choice backings, onboarding/source-review transitions, one first-selection reveal, first-save confirmation beside the action, measured session/list continuity and a quiet post-playback ending. Centralized semantic haptics with a persisted device-wide preference, native platform mappings, once-only completion tokens and foreground/navigation/profile guards. Removed routine navigation pulses, video-card scale and looping thumbnail skeletons. Grain, the live player and the opaque profile-switch boundary stay still.
+
+Native sheet/stack presentation remains responsible for its own lifetime. Reduced Motion makes new custom effects immediate. Full reset and destructive flows stay quiet; demo billing remains a clearly labeled preview (`paidAccess: false`, `demoPaywall: true`). See `MOTION_AND_HAPTICS_REVIEW.md` section 11 for implemented scope, adaptations and real-device gates.
+
+Validation: TypeScript passes; lint has zero errors and one preexisting generated-file warning; 218 tests pass across 47 files. Native timing, tactile strength and accessibility focus still require real-device verification. PR #18 remains a draft and unmerged.

@@ -1,3 +1,4 @@
+import { feedbackGate, resetFeedbackPreference } from "@/services/feedback";
 import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
@@ -413,6 +414,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setOwnerPinPromptError("Too many attempts. Wait a moment, then try again.");
       return;
     }
+    const confirmAttempt = feedbackGate.capture();
     let isCorrect: boolean;
     pinVerificationRef.current = true;
     try {
@@ -432,6 +434,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     pinVerificationRef.current = false;
     if (generation !== pinPromptGenerationRef.current || !authorizationResolverRef.current) return;
     const result = authorizationSessionRef.current.attempt(isCorrect, now);
+    if (!isCorrect) confirmAttempt("reject");
     if (result.status === "authorized") {
       setIsOwnerAuthorized(true);
       setOwnerPinPromptOpen(false);
@@ -482,6 +485,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
     if (switchingRef.current || fromProfileId !== activeProfileIdRef.current) return { ok: false, message: "Profile changed. Try again." };
     switchingRef.current = true;
+    feedbackGate.invalidate();
+    const confirmSwitch = feedbackGate.capture();
     setProfileSwitching(true);
     const previousProfileId = activeProfileIdRef.current;
     try {
@@ -506,6 +511,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         void clearProfileGoogleCredential(SecureStore, profileId).catch(() => {});
       }
       relockOwnerAccess();
+      confirmSwitch("commit");
       return { ok: true, message: `Switched to ${target.name}.` };
     } catch (error) {
       console.warn("[profiles] switch failed", error instanceof Error ? error.message : "unknown error");
@@ -975,13 +981,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [persistInterests]);
 
   const toggleInterest = useCallback(
-    (id: string): void => {
+    async (id: string): Promise<boolean> => {
+      if (switchingRef.current || activeProfileId !== activeProfileIdRef.current) return false;
       const validIds = new Set<InterestId>(INTEREST_LIBRARY.map((item) => item.id));
       const nextIds = toggleInterestId(interestsRef.current.map((item) => item.id), id, validIds, ONBOARDING_INTEREST_MAX);
       const next = nextIds.map((interestId) => INTEREST_LIBRARY.find((item) => item.id === interestId)).filter((item): item is InterestTopic => Boolean(item));
-      void persistInterests(next);
+      if (nextIds.join(",") === interestsRef.current.map((item) => item.id).join(",")) return false;
+      await persistInterests(next);
+      return true;
     },
-    [persistInterests],
+    [activeProfileId, persistInterests],
   );
 
   // Library queries
@@ -1345,7 +1354,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         ]);
       },
       resetDatabase: resetAllFrameDatabaseData,
-      clearKeyValueStorage: async () => { await AsyncStorage.clear(); },
+      clearKeyValueStorage: async () => { await AsyncStorage.clear(); resetFeedbackPreference(); },
       restoreOwnerSelection: async () => { await writeActiveProfileId(AsyncStorage, DEFAULT_OWNER_PROFILE_ID); },
     });
     const cleanOwner: Profile = { id: DEFAULT_OWNER_PROFILE_ID, name: "Owner", role: "owner", sortOrder: 0, createdAt: 0, updatedAt: 0 };
