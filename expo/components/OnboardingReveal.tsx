@@ -43,9 +43,11 @@ export default function OnboardingReveal({ onChooseSource, onBusyChange, savedHe
       const changed = await performTodayAction(async () => { await saveVideo(item); return true; }, () => todayRepository.setDisposition(activeProfileId, item.periodKey, item.id, "saved", Date.now()));
       if (!changed) throw new Error("Save did not complete");
       onSaved(item.id);
-      setFeedback("Saved for later. You’ll find it in Saved whenever you want to return.");
-      const result = await todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
-      client.setQueryData(key, result);
+      setFeedback(null);
+      try {
+        const result = await todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
+        client.setQueryData(key, result);
+      } catch { setFeedback("Your video is saved. The selection couldn’t refresh; reopen Today to try again."); }
     } catch { setFeedback("Couldn’t finish saving. Check Saved before trying again."); }
     finally { lock.current = false; setBusyId(null); onBusyChange(false); }
   };
@@ -58,7 +60,8 @@ export default function OnboardingReveal({ onChooseSource, onBusyChange, savedHe
       : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>Your sources are ready. There are no new videos in today’s selection. You can browse your sources directly in Frame.</Text><Pressable onPress={onChooseSource} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Review your sources</Text></Pressable></>
       : <>
-        <Text style={type.bodySoft}>A small selection from the sources you chose. Save one for later—your first piece of a library worth returning to.</Text>
+        <Text style={type.bodySoft}>The sources you chose, brought together in one manageable selection. Save a video you’d like to return to and start making this space yours.</Text>
+        {savedHere.length > 0 ? <View style={styles.firstSave} accessibilityLiveRegion="polite"><Text style={styles.firstSaveTitle}>Your library has begun.</Text><Text style={styles.firstSaveBody}>{savedHere.length} {savedHere.length === 1 ? "video is" : "videos are"} saved for another day. Ready whenever you are. Find {savedHere.length === 1 ? "it" : "them"} in Saved.</Text></View> : null}
         <Text style={styles.summary}>{items.length} {items.length === 1 ? "video" : "videos"} · {new Set(items.map((item) => item.sourceId)).size} {new Set(items.map((item) => item.sourceId)).size === 1 ? "source" : "sources"}</Text>
         {today.data?.snapshot?.freshness !== "fresh" ? <Text style={type.caption}>Showing a previously loaded selection.</Text> : null}
         {feedback ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{feedback}</Text> : null}
@@ -70,15 +73,16 @@ export default function OnboardingReveal({ onChooseSource, onBusyChange, savedHe
             {savedHere.includes(item.id) ? <Check size={18} color={palette.success} /> : <Bookmark size={18} color={palette.active} />}<Text style={styles.saveLabel}>{busyId === item.id ? "Saving…" : savedHere.includes(item.id) ? "Saved for later" : "Save for later"}</Text>
           </Pressable>
         </View>)}
-        <View style={styles.ending}><Text style={type.heading}>And that’s today.</Text><Text style={type.bodySoft}>A selection with an end. You decide what deserves your time.</Text></View>
+        <View style={styles.ending}><Text style={type.heading}>Good videos. A clear ending.</Text><Text style={type.bodySoft}>That’s your selection for today. In a session, the next video waits for you to press play.</Text></View>
       </>}
   </View>;
 }
 function createStyles(p: FramePalette, t: FrameType) {
   return StyleSheet.create({
+    firstSave: { padding: spacing.lg, borderRadius: radii.card, backgroundColor: p.programme, gap: spacing.sm }, firstSaveTitle: { ...t.heading, color: p.onProgramme }, firstSaveBody: { ...t.bodySoft, color: p.onProgrammeSoft },
     root: { gap: spacing.lg }, title: { ...t.title, fontSize: 36, lineHeight: 44 }, loading: { gap: spacing.md, paddingVertical: spacing.xl },
     action: { minHeight: 48, justifyContent: "center" }, actionText: { ...t.label, color: p.active }, summary: { ...t.label },
     video: { gap: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, image: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media },
-    save: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 48, paddingVertical: spacing.sm }, saveLabel: { ...t.label, color: p.active, flexShrink: 1 }, ending: { gap: spacing.sm, paddingVertical: spacing.md },
+    save: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 48, padding: spacing.md, borderRadius: radii.control, backgroundColor: p.activeSoft }, saveLabel: { ...t.label, color: p.active, flexShrink: 1 }, ending: { gap: spacing.sm, paddingVertical: spacing.md },
   });
 }

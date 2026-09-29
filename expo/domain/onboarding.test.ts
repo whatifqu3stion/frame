@@ -14,6 +14,8 @@ describe("onboarding first value and demo checkout", () => {
     expect(onboardingDestination(0, false)).toBe("/(tabs)/sources");
     expect(onboardingDestination(0, true)).toBe("/(tabs)/settings");
     expect(onboardingDestination(2, true)).toBe("/(tabs)/settings");
+    expect(onboardingDestination(2, false, 1)).toBe("/(tabs)/saved");
+    expect(onboardingDestination(2, true, 1)).toBe("/(tabs)/settings");
   });
   test("keeps a just-saved card visible without bringing back previously handled videos", () => {
     const result = onboardingSelection([item("pending"), item("saved-now", { disposition: "saved", position: 1 }), item("saved-before", { disposition: "saved" }), item("dismissed", { disposition: "dismissed" })], "owner", new Set(["source"]), new Map(), now, new Set(["saved-now"]));

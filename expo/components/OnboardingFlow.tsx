@@ -11,7 +11,7 @@ import DemoPaywall from "@/components/DemoPaywall";
 import MediaImage from "@/components/MediaImage";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_STEPS } from "@/constants/navigation";
-import { FOUNDATION_CAPABILITIES, ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
+import { FOUNDATION_CAPABILITIES, ONBOARDING_INTEREST_MAX, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { isInterestOptionDisabled, toggleInterestId } from "@/domain/interests";
@@ -26,9 +26,10 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { interests, replaceInterests, followedChannels, finishOnboarding } = useApp();
+  const { interests, replaceInterests, followedChannels, savedVideos, finishOnboarding } = useApp();
   const [step, setStep] = useState(0);
   const [premiumOpen, setPremiumOpen] = useState(false);
+  const [demoCompleted, setDemoCompleted] = useState(false);
   const [savedDuringSetup, setSavedDuringSetup] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
@@ -36,14 +37,20 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
   const scroll = useRef<ScrollView>(null);
   const current = premiumOpen ? "premium-preview" : steps[step];
   const last = step === steps.length - 1;
-  const destination = onboardingDestination(followedChannels.length, replay);
-  const finishLabel = replay ? "Back to Settings" : followedChannels.length ? "Open Today" : "Explore Sources";
+  const savedCount = savedDuringSetup.filter((id) => savedVideos.some((video) => video.id === id)).length;
+  const promotePremium = showDemo && current === "your-frame" && savedCount > 0;
+  const destination = onboardingDestination(followedChannels.length, replay, savedCount);
+  const finishLabel = replay ? "Back to Settings" : savedCount > 0 ? "Open my Saved" : followedChannels.length ? "Open Today" : "Explore Sources";
   const finish = async () => {
     if (locked.current || sourceLock.current) return;
     locked.current = true; setBusy(true); Keyboard.dismiss();
     try { if (!replay) await finishOnboarding(); router.replace(destination); }
     catch { Alert.alert("Couldn’t finish setup", "Your choices are still here. Try again."); }
     finally { locked.current = false; setBusy(false); }
+  };
+  const openPremiumPreview = () => {
+    if (locked.current || sourceLock.current) return;
+    setDemoCompleted(false); setPremiumOpen(true); scroll.current?.scrollTo({ y: 0, animated: false });
   };
   const goTo = (index: number) => {
     if (locked.current || sourceLock.current) return;
@@ -75,21 +82,26 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
     <View style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel="Setup progress" accessibilityValue={{ min: 1, max: steps.length, now: step + 1, text: `Step ${step + 1} of ${steps.length}` }}>
       {steps.map((name, i) => <View key={name} style={[styles.progressPart, i <= step && styles.progressComplete]} />)}
     </View>
+    <Text style={styles.stageLabel}>{premiumOpen ? "Frame Premium · demo" : `${step + 1} of ${steps.length} · ${["A better way to watch", "Your interests", "Your sources", "Your first selection"][step]}`}</Text>
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       {replay ? <Text style={styles.replayNote}>Welcome preview · source and interest changes are saved to this profile.</Text> : null}
       {current === "welcome" ? <>
-        <Text style={styles.title} accessibilityRole="header">Watch with{"\n"}intention.</Text>
-        <Text style={styles.body}>Your YouTube sources, brought into a quieter space. A small selection each day, with a clear place to stop.</Text>
+        <Text style={styles.title} accessibilityRole="header">Your YouTube.{"\n"}At your pace.</Text>
+        <Text style={styles.body}>Keep the YouTube creators you love. Bring their videos into a calmer space, where you choose what plays and when you’re done.</Text>
         <View style={styles.introduction}>
-          <Text style={styles.introTitle}>Start with what you enjoy.</Text>
-          <Text style={styles.introBody}>Follow a source you already love. Save a video for later, or bring a few together in a session.</Text>
+          <Text style={styles.introTitle}>A daily selection. A natural ending.</Text>
+          <Text style={styles.introBody}>Today brings you up to {TODAY_MAX_ITEMS} videos from your sources. Save what catches your eye, or plan a short session for later.</Text>
         </View>
-        <Text style={styles.note}>No account needed. Your library stays on this device.</Text>
+        <View style={styles.benefits}>
+          <View style={styles.benefit}><Text style={type.label}>Your choices lead</Text><Text style={type.bodySoft}>Follow familiar creators and discover a few new ones through your interests.</Text></View>
+          <View style={styles.benefit}><Text style={type.label}>You choose what plays next</Text><Text style={type.bodySoft}>Sessions pause between videos and end after the last one.</Text></View>
+        </View>
+        <Text style={styles.note}>No account needed. Choose your interests and a source to see your own selection.</Text>
       </> : null}
       {current === "source" ? <SourceStep scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
       {current === "interests" ? <>
         <Text style={styles.title} accessibilityRole="header">What draws{"\n"}you in?</Text>
-        <Text style={styles.body}>Choose up to {ONBOARDING_INTEREST_MAX} interests for weekly source suggestions. You can change these in Settings.</Text>
+        <Text style={styles.body}>What would you like more of? Choose up to {ONBOARDING_INTEREST_MAX} interests, and we’ll show you a few sources to explore next.</Text>
         <Text style={styles.note} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected · optional</Text>
         <View style={styles.chips}>
           {INTEREST_LIBRARY.map((item) => {
@@ -102,15 +114,16 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
       </> : null}
       {current === "your-frame" ? <>
         <OnboardingReveal savedHere={savedDuringSetup} onSaved={(id) => setSavedDuringSetup((ids) => [...new Set([...ids, id])])} onChooseSource={() => goTo(2)} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} />
-        {showDemo ? <View style={styles.followed}><Text style={type.heading}>Keep making it yours.</Text><Text style={type.bodySoft}>Explore how Frame Premium could bring your library together.</Text><Pressable disabled={busy} onPress={() => { setPremiumOpen(true); scroll.current?.scrollTo({ y: 0, animated: false }); }} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Preview Premium · no charge</Text></Pressable></View> : null}
+        {showDemo ? <View style={styles.followed}><Text style={type.heading}>{savedCount > 0 ? "Make this your way to watch." : "A library that grows with your interests."}</Text><Text style={type.bodySoft}>Keep your finds, return where you left off, and bring a few favorites together in a session.</Text>{!promotePremium ? <Pressable disabled={busy} onPress={openPremiumPreview} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Explore Premium · demo</Text></Pressable> : <Text style={type.caption}>Sample plans follow. No payment or subscription.</Text>}</View> : null}
       </> : null}
-      {current === "premium-preview" ? <DemoPaywall /> : null}
+      {current === "premium-preview" ? <DemoPaywall savedCount={savedCount} sourceCount={followedChannels.length} onCompletionChange={setDemoCompleted} /> : null}
     </ScrollView>
     <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
       {step > 0 ? <Pressable disabled={busy} onPress={() => { if (premiumOpen) { setPremiumOpen(false); scroll.current?.scrollTo({ y: 0, animated: false }); } else goTo(step - 1); }} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Back</Text></Pressable> : null}
-      <Pressable disabled={busy} onPress={() => { if (last) void finish(); else goTo(step + 1); }} style={[styles.primary, busy && styles.disabled]} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} testID="onboarding-next">
-        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryText}>{last ? finishLabel : current === "welcome" ? "Make it yours" : current === "source" && followedChannels.length === 0 ? "Add a source later" : current === "source" ? "See my Frame" : current === "interests" && interests.length === 0 ? "Choose interests later" : "Continue"}</Text>}
-      </Pressable>
+      {!premiumOpen || demoCompleted ? <Pressable disabled={busy} onPress={() => { if (promotePremium) openPremiumPreview(); else if (last) void finish(); else goTo(step + 1); }} style={[styles.primary, busy && styles.disabled]} accessibilityRole="button" accessibilityState={{ busy, disabled: busy }} testID="onboarding-next">
+        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryText}>{promotePremium ? "See Premium plans · demo" : last ? finishLabel : current === "welcome" ? "Build my Frame" : current === "source" && followedChannels.length === 0 ? "Add a source later" : current === "source" ? "Reveal my selection" : interests.length === 0 ? "Choose interests later" : "Find my sources"}</Text>}
+      </Pressable> : null}
+      {promotePremium || (premiumOpen && !demoCompleted) ? <Pressable disabled={busy} onPress={() => { void finish(); }} style={styles.continueLink} accessibilityRole="button"><Text style={styles.link}>{replay ? "Back to Settings" : savedCount > 0 ? "Continue to Saved" : "Continue into Frame"}</Text></Pressable> : null}
     </View>
   </KeyboardAvoidingView>;
 }
@@ -151,22 +164,27 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     finally { lock.current = false; if (mounted.current) { setBusy(false); onBusyChange(false); } }
   };
   return <>
-    <Text style={styles.title} accessibilityRole="header">Begin with{"\n"}a favorite.</Text>
-    <Text style={styles.body}>Add a YouTube channel you enjoy. Use a channel or video link, an @handle, or a channel ID.</Text>
-    <Text style={styles.fieldLabel}>Source link or @handle</Text>
+    <Text style={styles.title} accessibilityRole="header">{resolution ? "A source for\nyour Frame." : "Begin with\na favorite."}</Text>
+    <Text style={styles.body}>{resolution ? "Follow this source to include its videos in Today. You can change your sources later." : "Your sources shape your daily selection. Start with one you enjoy; you can add more whenever you like."}</Text>
+    {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.suggestions}>
+      <Text style={type.heading}>Picked for your interests</Text><Text style={type.bodySoft}>Choose a source to see what it offers. You’ll confirm before following.</Text>
+      {picks.isLoading ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : picks.data?.items.length ? picks.data.items.map((pick) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}`} style={styles.sourcePreview}>
+        <MediaImage source={pick.thumbnailUrl ? { uri: pick.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={type.label}>{pick.displayName}</Text><Text style={styles.sourceMeta}>{INTEREST_LIBRARY.find((item) => item.id === pick.interestId)?.name ?? "From your interests"}</Text>{pick.description ? <Text style={styles.sourceMeta} numberOfLines={2}>{pick.description}</Text> : null}<Text style={styles.pickAction}>Review source</Text></View>
+      </Pressable>) : <><Text style={type.bodySoft}>No suggestions are available right now. Add a source below, or try again.</Text><Pressable disabled={picks.isFetching} onPress={() => { void picks.refetch(); }} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>Try suggestions again</Text></Pressable></>}
+    </View> : null}
+    {!resolution ? <>
+    <Text style={styles.fieldLabel}>{interests.length > 0 && activeProfile?.role !== "managed" ? "Or bring a favorite" : "Source link or @handle"}</Text>
+    <Text style={styles.sourceMeta}>Paste a YouTube channel or video link, an @handle, or a channel ID.</Text>
     <View style={styles.inputRow}><Link2 size={18} color={palette.inkMuted} /><TextInput value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" /></View>
+    </> : null}
     {resolution ? <View style={styles.sourcePreview} testID="onboard-source-preview">
       <MediaImage source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
       <View style={styles.flex}><Text style={type.heading}>{resolution.source.displayName}</Text><Text style={styles.sourceMeta}>{resolution.source.handle ?? "YouTube channel"}</Text>{resolution.video ? <Text style={styles.sourceMeta}>From video: {resolution.video.title}</Text> : null}</View>
     </View> : null}
     <Pressable disabled={busy || (!resolution && !link.trim())} onPress={() => { void submit(); }} accessibilityRole="button" accessibilityState={{ busy, disabled: busy || (!resolution && !link.trim()) }} style={[styles.sourceAction, (busy || (!resolution && !link.trim())) && styles.disabled]} testID={resolution ? "onboard-confirm-source" : "onboard-resolve-source"}><Text style={styles.primaryText}>{busy ? (resolution ? "Following…" : "Finding source…") : resolution ? "Follow source" : "Find source"}</Text></Pressable>
+    {resolution ? <Pressable disabled={busy} onPress={() => { setResolution(null); setLink(""); setFeedback(null); }} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>Choose another source</Text></Pressable> : null}
     {feedback ? <Text style={[styles.note, { color: feedback.ok ? palette.success : palette.danger }]} accessibilityLiveRegion="polite">{feedback.message}</Text> : null}
-    {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.followed}>
-      <Text style={type.heading}>A few you might enjoy</Text><Text style={type.bodySoft}>This week’s picks, matched to your interests. Choose one to review before following.</Text>
-      {picks.isLoading ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : picks.data?.items.length ? picks.data.items.map((pick) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}`} style={styles.sourcePreview}>
-        <MediaImage source={pick.thumbnailUrl ? { uri: pick.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={type.label}>{pick.displayName}</Text><Text style={styles.sourceMeta}>{INTEREST_LIBRARY.find((item) => item.id === pick.interestId)?.name ?? "From your interests"}</Text></View>
-      </Pressable>) : <><Text style={type.bodySoft}>No suggestions are available right now. Add a source above, or try again.</Text><Pressable disabled={picks.isFetching} onPress={() => { void picks.refetch(); }} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>Try suggestions again</Text></Pressable></>}
-    </View> : null}
+
     {followedChannels.length > 0 ? <View style={styles.followed}><Text style={type.label}>Your sources · {followedChannels.length}</Text>{followedChannels.slice(0, 3).map((source) => <View style={styles.followedRow} key={source.id}><Check size={17} color={palette.success} /><Text style={styles.followedName}>{source.title}</Text></View>)}{followedChannels.length > 3 ? <Text style={type.bodySoft}>And {followedChannels.length - 3} more in Sources.</Text> : null}</View> : <Text style={styles.note}>You can add more sources later. Each one shapes what appears in Today.</Text>}
   </>;
 }
@@ -178,6 +196,9 @@ function createStyles(p: FramePalette, t: FrameType) {
     textButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.xs }, link: { ...t.label, color: p.active },
     progress: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, flexDirection: "row", gap: spacing.xs, paddingVertical: spacing.md }, progressPart: { flex: 1, height: 3, backgroundColor: p.borderSoft, borderRadius: 2 }, progressComplete: { backgroundColor: p.active },
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xxl }, replayNote: { ...t.caption, marginBottom: spacing.lg },
+    stageLabel: { ...t.caption, width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
+    benefits: { marginTop: spacing.lg }, benefit: { gap: spacing.xs, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border },
+    suggestions: { gap: spacing.sm, marginTop: spacing.lg }, pickAction: { ...t.label, color: p.active, marginTop: spacing.sm }, continueLink: { minHeight: 48, flexBasis: "100%", alignItems: "center", justifyContent: "center" },
     title: { ...t.title, fontSize: 36, lineHeight: 44 }, body: { ...t.bodySoft, marginTop: spacing.md }, note: { ...t.bodySoft, marginTop: spacing.lg },
     introduction: { padding: spacing.lg, marginTop: spacing.xl, borderRadius: radii.card, backgroundColor: p.programme, gap: spacing.md }, introTitle: { ...t.heading, color: p.onProgramme }, introBody: { ...t.body, color: p.onProgrammeSoft },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.lg }, chip: { minHeight: 48, maxWidth: "100%", flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: p.borderSoft, borderRadius: radii.control, backgroundColor: p.surface }, chipUnavailable: { borderStyle: "dashed" }, chipSelected: { borderColor: p.active, backgroundColor: p.activeSoft }, chipText: { ...t.label, flexShrink: 1 },

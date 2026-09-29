@@ -12,8 +12,8 @@ export function onboardingSelection(items: readonly TodaySnapshotItem[], profile
 }
 
 /** Completion goes to useful content; replay always returns to Settings. */
-export function onboardingDestination(sourceCount: number, replay: boolean) {
-  return replay ? "/(tabs)/settings" as const : sourceCount > 0 ? "/(tabs)" as const : "/(tabs)/sources" as const;
+export function onboardingDestination(sourceCount: number, replay: boolean, savedCount: number = 0) {
+  return replay ? "/(tabs)/settings" as const : savedCount > 0 ? "/(tabs)/saved" as const : sourceCount > 0 ? "/(tabs)" as const : "/(tabs)/sources" as const;
 }
 
 /** Illustrative prices only. Never pass these identifiers to billing. */

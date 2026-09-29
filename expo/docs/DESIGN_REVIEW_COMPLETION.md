@@ -80,3 +80,10 @@ Verification: TypeScript and lint checks; existing behavior test suite. Native r
 - Empty, loading, offline/unavailable, failed-save, and Managed-profile states remain truthful. No seeded or synthetic content, artificial wait, or new animation was added. Native screen review remains unavailable: verify narrow phones, tablets, enlarged text, keyboard/back navigation, and screen-reader focus on-device.
 
 Verification: 209 tests passed across 46 files (1,073 assertions), including completion destinations, same-profile retained selection, expired/handled metadata exclusion, duplicate avoidance, and local-only demo checkout transitions. TypeScript passes. Lint has no errors and the existing generated-file warning. Diff whitespace check passes. Final source follow-up retains saved reveal cards when returning from Premium and applies source mute rules to them.
+
+
+## Conversion-focused onboarding refinement — September 29, 2026
+
+Strengthened the welcome proposition and benefits; moved personalized source suggestions above the manual input; added visible stage labels and a first-save confirmation; connected the Premium offer to actual setup progress. After a persisted first save, the footer promotes the optional demo offer. The plan screen has one primary checkout action naming the selected sample price/period, with a visible route into the app. Completion now opens Saved when the viewer has saved a video during setup. Billing, metadata retention, profile boundaries, and skipping remain unchanged.
+
+TypeScript and lint verification plus the existing 209-test suite cover this pass. The completion-destination test now includes first-save and replay destinations. A successful save followed by a failed selection refresh is reported accurately. `ONBOARDING_CONVERSION.md` records a research-informed hypothesis and a measurement plan; no conversion uplift is claimed and no analytics collection was added. Real-device and participant validation are outstanding.
