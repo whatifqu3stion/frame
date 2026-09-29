@@ -1,8 +1,9 @@
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Check, Link2, Lock } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, useWindowDimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_STEPS } from "@/constants/navigation";
@@ -24,11 +25,7 @@ export default function Onboarding() {
   const { interests, toggleInterest, finishOnboarding } = useApp();
   const scrollRef = useRef<ScrollView>(null);
   const [step, setStep] = useState<number>(0);
-  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
-
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
-  }, []);
+  const reduceMotion = useReducedMotion();
 
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -141,6 +138,7 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
     setBusy(true);
     setResolution(null);
     setFeedback(null);
+    try {
     const result = await resolveSourceInput(link.trim());
     setBusy(false);
     if (result.status === "success") {
@@ -149,15 +147,20 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
     } else {
       setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
     }
+    } catch { setFeedback({ ok: false, message: "Couldn’t check this source. Check your connection and try again." }); }
+    finally { setBusy(false); }
   };
 
   const followSource = async (): Promise<void> => {
     if (!resolution || busy) return;
     setBusy(true);
+    try {
     const result = await confirmSource(resolution);
     setBusy(false);
     setFeedback(result);
     if (result.ok) { setLink(""); setResolution(null); }
+    } catch { setFeedback({ ok: false, message: "Couldn’t follow this source. Try again." }); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -165,6 +168,7 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
       <Text style={styles.accentCaption}>One trusted source</Text>
       <Text style={styles.stepTitle}>Start with{"\n"}someone you trust.</Text>
       <Text style={styles.stepBody}>Paste a channel ID, @handle, channel URL, or individual YouTube video. You can skip this and add a source later.</Text>
+      <Text style={[type.label, { marginTop: spacing.md }]}>Source link or @handle</Text>
       <View style={styles.inputRow}>
         <Link2 size={17} color={palette.inkMuted} strokeWidth={1.7} />
         <TextInput editable={!busy} value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />

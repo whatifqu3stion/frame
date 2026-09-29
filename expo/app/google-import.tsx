@@ -1,8 +1,8 @@
-import { Image } from "expo-image";
+import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -24,6 +24,9 @@ export default function GoogleImportScreen() {
     loadGoogleSubscriptions,
     importGoogleSubscriptions,
   } = useApp();
+  const loadLock = useRef(false);
+  const importLock = useRef(false);
+  const [query, setQuery] = useState("");
   const [subscriptions, setSubscriptions] = useState<FollowedChannel[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
@@ -34,9 +37,11 @@ export default function GoogleImportScreen() {
   const availableSlots = Math.max(0, PRODUCT_LIMITS.futureSourcesPerProfile - followedIds.size);
 
   const loadPage = useCallback(async (pageToken?: string): Promise<void> => {
-    if (!googleConnected || loadState !== "idle") return;
+    if (!googleConnected || loadLock.current) return;
+    loadLock.current = true;
     setLoadState(pageToken ? "loadingMore" : "loading");
     setFeedback(null);
+    try {
     const result = await loadGoogleSubscriptions(pageToken);
     setLoadState("idle");
     if (result.status !== "success" && result.status !== "empty" && result.status !== "partial") {
@@ -52,7 +57,9 @@ export default function GoogleImportScreen() {
     if (result.status === "partial" || result.status === "empty") {
       setFeedback({ ok: result.status === "empty", message: result.message ?? "No subscriptions were found." });
     }
-  }, [googleConnected, loadGoogleSubscriptions, loadState]);
+    } catch { setFeedback({ ok: false, message: "Couldn’t load subscriptions. Check your connection and try again." }); }
+    finally { loadLock.current = false; setLoadState("idle"); }
+  }, [googleConnected, loadGoogleSubscriptions]);
 
   useEffect(() => {
     if (googleConnected && subscriptions.length === 0 && loadState === "idle" && !feedback) void loadPage();
@@ -70,11 +77,15 @@ export default function GoogleImportScreen() {
   };
 
   const importSelected = async (): Promise<void> => {
-    if (importing || selectedIds.size === 0) return;
+    if (importLock.current || importing || selectedIds.size === 0) return;
+    importLock.current = true;
     const selected = subscriptions.filter((source) => selectedIds.has(source.id));
-    const result = await importGoogleSubscriptions(selected);
-    setFeedback({ ok: result.ok, message: result.message });
-    if (result.ok) setSelectedIds(new Set());
+    try {
+      const result = await importGoogleSubscriptions(selected);
+      setFeedback({ ok: result.ok, message: result.message });
+      if (result.ok) setSelectedIds(new Set());
+    } catch { setFeedback({ ok: false, message: "Import couldn’t finish. Check your sources before trying again." }); }
+    finally { importLock.current = false; }
   };
 
   if (!googleConnected) {
@@ -90,7 +101,7 @@ export default function GoogleImportScreen() {
   return (
     <View style={styles.screen}>
     <FlatList
-      data={subscriptions}
+      data={subscriptions.filter((source) => source.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))}
       keyExtractor={(item) => item.id}
       contentInsetAdjustmentBehavior="automatic"
       style={styles.screen}
@@ -100,6 +111,8 @@ export default function GoogleImportScreen() {
           <Text style={styles.eyebrow}>Optional setup</Text>
           <Text style={styles.title}>Choose what enters Frame.</Text>
           <Text style={styles.body}>Nothing is imported automatically. Select only the subscriptions you want for {activeProfile?.name ?? "this profile"}.</Text>
+          <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
+          <TextInput value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" style={[type.body, { minHeight: 48, padding: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control }]} />
           <View style={styles.counterRow}>
             <Text style={styles.counter}>{selectedIds.size} selected</Text>
             <Text style={styles.capacity}>{availableSlots} spaces available</Text>
@@ -121,13 +134,13 @@ export default function GoogleImportScreen() {
             accessibilityLabel={`${item.title}${followed ? ", already followed" : ""}`}
             testID={`google-subscription-${item.id}`}
           >
-            <View style={styles.avatar}>{item.thumbnailUrl ? <Image source={{ uri: item.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="none" /> : null}</View>
+            <View style={styles.avatar}><Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.avatarImage} contentFit="cover" cachePolicy="none" /></View>
             <View style={styles.rowCopy}><Text style={styles.sourceName} numberOfLines={2}>{item.title}</Text><Text style={styles.sourceState}>{followed ? "Already followed" : selected ? "Selected" : "Tap to select"}</Text></View>
             <View style={[styles.check, (selected || followed) && styles.checkSelected]}>{selected || followed ? <Check size={16} color={palette.onAccent} strokeWidth={2.4} /> : <Circle size={18} color={palette.inkMuted} strokeWidth={1.4} />}</View>
           </Pressable>
         );
       }}
-      ListEmptyComponent={loadState === "loading" ? <View style={styles.loading}><ActivityIndicator color={palette.active} /><Text style={styles.loadingText}>Loading subscriptions…</Text></View> : feedback ? null : <View style={styles.loading}><Text style={styles.emptyTitle}>No subscriptions found.</Text><Text style={styles.emptyBody}>You can still add any trusted source manually.</Text></View>}
+      ListEmptyComponent={loadState === "loading" ? <View style={styles.loading}><ActivityIndicator color={palette.active} /><Text style={styles.loadingText}>Loading subscriptions…</Text></View> : feedback ? null : <View style={styles.loading}><Text style={styles.emptyTitle}>{query.trim() ? "No matching subscriptions." : "No subscriptions found."}</Text><Text style={styles.emptyBody}>{query.trim() ? "Search covers loaded subscriptions. Clear the search or load more below." : "You can still add any trusted source manually."}</Text></View>}
       ListFooterComponent={(
         <View style={styles.footer}>
           {nextPageToken ? <Pressable onPress={() => { void loadPage(nextPageToken); }} disabled={loadState !== "idle"} style={styles.loadMore} accessibilityRole="button" testID="google-import-load-more">{loadState === "loadingMore" ? <ActivityIndicator size="small" color={palette.active} /> : <ChevronDown size={17} color={palette.active} />}<Text style={styles.loadMoreText}>Load 50 more</Text></Pressable> : subscriptions.length > 0 ? <Text style={styles.endText}>{totalResults && totalResults > subscriptions.length ? `${subscriptions.length} shown` : "End of subscriptions"}</Text> : null}
@@ -136,7 +149,7 @@ export default function GoogleImportScreen() {
         </View>
       )}
     />
-    <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+    <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><Text style={styles.counter} accessibilityLiveRegion="polite">{selectedIds.size} selected · {availableSlots} spaces available</Text>
           {feedback ? <View accessibilityLiveRegion="polite" style={[styles.feedback, feedback.ok ? styles.feedbackGood : styles.feedbackBad]}><Text style={styles.feedbackText}>{feedback.message}</Text></View> : null}
           <Pressable onPress={() => { void importSelected(); }} disabled={selectedIds.size === 0 || importing} style={[styles.primaryButton, (selectedIds.size === 0 || importing) && styles.primaryButtonDisabled]} accessibilityRole="button" testID="google-import-confirm">
             {importing ? <ActivityIndicator color={palette.onDark} /> : <><Import size={17} color={palette.onDark} /><Text style={styles.primaryButtonText}>Add {selectedIds.size || "selected"} to Frame</Text></>}

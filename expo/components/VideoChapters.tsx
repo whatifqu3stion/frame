@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   section: { marginTop: spacing.xl, padding: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: watchPalette.border },
   headingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   heading: { ...type.heading, color: palette.wall, fontSize: 18, lineHeight: 24 },
-  note: { ...type.caption, color: "rgba(250,249,246,0.52)", marginTop: spacing.xs },
+  note: { ...type.caption, fontSize: 12, color: "rgba(250,249,246,0.72)", marginTop: spacing.xs },
   list: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: "rgba(250,249,246,0.22)" },
   row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 12, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: "rgba(250,249,246,0.18)" },
   activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
@@ -75,3 +75,4 @@ const styles = StyleSheet.create({
   activeTitle: { color: palette.wall },
   pressed: { opacity: 0.56 },
 });
+

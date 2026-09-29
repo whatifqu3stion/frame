@@ -1,5 +1,5 @@
-import { Image } from "expo-image";
-import { Check, Plus } from "lucide-react-native";
+import Image from "@/components/MediaImage";
+import { Check, Plus, Play } from "lucide-react-native";
 import { useMemo } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -14,12 +14,14 @@ type Props = {
   interestName: string;
   followed: boolean;
   busy: boolean;
+  disabled?: boolean;
   feedback?: Feedback;
+  onPreview(): void;
   onFollow(): void;
   onDismiss(): void;
 };
 
-export default function WeeklyPickCard({ suggestion, interestName, followed, busy, feedback, onFollow, onDismiss }: Props) {
+export default function WeeklyPickCard({ suggestion, interestName, followed, busy, disabled = false, feedback, onPreview, onFollow, onDismiss }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const media = suggestion.featuredMedia;
@@ -28,7 +30,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
   return (
     <View style={styles.card} testID={`weekly-pick-${suggestion.providerSourceId}`}>
       {media?.thumbnailUrl ? (
-        <View style={styles.preview}>
+        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.preview}>
           <Image
             source={{ uri: media.thumbnailUrl }}
             style={styles.previewImage}
@@ -38,7 +40,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
             accessibilityLabel={`Featured video from ${suggestion.displayName}`}
           />
           {duration ? <View style={styles.durationBadge}><Text style={styles.durationText}>{duration}</Text></View> : null}
-        </View>
+        </Pressable>
       ) : null}
 
       <View style={styles.content}>
@@ -65,18 +67,18 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
         {suggestion.recommendationReason ? <Text style={styles.reason}>{suggestion.recommendationReason}</Text> : null}
         {!suggestion.recommendationReason && suggestion.description ? <Text style={styles.description} numberOfLines={3}>{suggestion.description}</Text> : null}
         {media ? (
-          <View style={styles.featuredCopy}>
+          <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.featuredCopy}>
             <Text style={styles.featuredLabel}>Featured video</Text>
-            <Text style={styles.featuredTitle} numberOfLines={2}>{media.title}</Text>
-          </View>
+            <Text style={styles.featuredTitle} numberOfLines={2}>{media.title}</Text><View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "center", minHeight: 48 }}><Play size={16} color={palette.active} /><Text style={[type.label, { color: palette.active }]}>Preview video</Text></View>
+          </Pressable>
         ) : null}
 
         <Pressable
           onPress={onFollow}
-          disabled={followed || busy}
+          disabled={followed || busy || disabled}
           style={({ pressed }) => [styles.followButton, followed && styles.followedButton, pressed && !followed && styles.pressed]}
           accessibilityRole="button"
-          accessibilityState={{ disabled: followed || busy, busy }}
+          accessibilityState={{ disabled: followed || busy || disabled, busy }}
           accessibilityLabel={followed ? `${suggestion.displayName} is followed` : `Follow ${suggestion.displayName}`}
           testID={`weekly-pick-follow-${suggestion.providerSourceId}`}
         >
@@ -86,7 +88,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
 
         <Pressable
           onPress={onDismiss}
-          disabled={busy}
+          disabled={busy || disabled}
           style={styles.dismissButton}
           accessibilityRole="button"
           accessibilityLabel={`Not for me: ${suggestion.displayName}`}
@@ -107,7 +109,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     preview: { aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep },
     previewImage: { width: "100%", height: "100%" },
     durationBadge: { position: "absolute", right: spacing.sm, bottom: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radii.small, backgroundColor: palette.overlay },
-    durationText: { ...type.caption, color: palette.onDark, fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
+    durationText: { ...type.caption, color: palette.onDark, fontSize: 12, lineHeight: 17, letterSpacing: 0.4 },
     content: { padding: spacing.md },
     sourceHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
     avatar: { width: 48, height: 48, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 24, backgroundColor: palette.surfaceDeep },

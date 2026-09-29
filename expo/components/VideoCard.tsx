@@ -1,8 +1,8 @@
 import * as Haptics from "expo-haptics";
-import { Image } from "expo-image";
+import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -15,6 +15,8 @@ import type { Video } from "@/types";
 type Props = { video: Video; variant?: "full" | "compact" | "wide"; progressSeconds?: number };
 
 function VideoCard({ video, variant = "full", progressSeconds }: Props) {
+  const { width, fontScale } = useWindowDimensions();
+  const stackWide = width < 360 || fontScale > 1.3;
   video = expireVideo(video, Date.now());
   const { palette, type } = useFrameTheme();
   const { requirePurchase } = useApp();
@@ -22,7 +24,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const navigationLocked = useRef<boolean>(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
   const progressFraction = progressSeconds && video.durationSeconds ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds)) : 0;
-  const accessibilityLabel = `Play ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}`;
+  const accessibilityLabel = `${progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
   const dateLabel = formatRelativeDate(video.publishedAt);
 
   useEffect(() => {
@@ -68,8 +70,8 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   );
 
   if (variant === "wide") return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.wideRoot, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
-      {thumbnail(styles.wideThumbWrap, styles.thumb)}
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.wideRoot, stackWide && { flexDirection: "column" }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
+      {thumbnail([styles.wideThumbWrap, stackWide && { width: "100%" }], styles.thumb)}
       <View style={styles.wideMeta}>
         {video.channelTitle ? <Text style={type.caption} numberOfLines={1}>{video.channelTitle}</Text> : null}
         <Text style={styles.wideTitle} numberOfLines={3}>{video.title}</Text>
@@ -107,7 +109,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     wideTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: spacing.xs },
     date: { marginTop: spacing.sm },
     durationBadge: { position: "absolute", right: spacing.sm, bottom: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: "rgba(20,18,16,0.82)", borderRadius: 6 },
-    durationText: { color: "#F7F1E7", fontFamily: "HankenGrotesk_600SemiBold", fontSize: 10, letterSpacing: 0.8 },
+    durationText: { color: "#F7F1E7", fontFamily: "HankenGrotesk_600SemiBold", fontSize: 12, letterSpacing: 0.3 },
     progressTrack: { position: "absolute", left: 8, right: 8, bottom: 6, height: 3, borderRadius: radii.pill, backgroundColor: "rgba(247,241,231,0.3)", overflow: "hidden" },
     progressFill: { height: "100%", borderRadius: radii.pill, backgroundColor: palette.active },
     pressed: { opacity: 0.76, transform: [{ scale: 0.987 }] },
@@ -115,3 +117,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
 }
 
 export default memo(VideoCard);
+

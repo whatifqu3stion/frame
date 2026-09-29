@@ -3,9 +3,9 @@ import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { Check, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
+import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -25,6 +25,7 @@ export default function SessionBuilder() {
   const { activeProfileId, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [name, setName] = useState<string>("");
   const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -56,6 +57,8 @@ export default function SessionBuilder() {
     ...(selectedMedia.data ?? []).filter((video): video is Video => Boolean(video)),
     ...savedVideos,
   ].map((video) => [video.id, expireVideo(video, Date.now())])).values()], [savedVideos, selectedMedia.data]);
+
+  const filteredPool = useMemo(() => pool.filter((video) => `${video.title} ${video.channelTitle}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [pool, search]);
 
   const runtime = useMemo(() => sessionRuntime(selected, pool), [pool, selected]);
   const durationSummary = `${runtime.seconds > 0 ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}${runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}`;
@@ -134,10 +137,11 @@ export default function SessionBuilder() {
 
   const header = (
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>{existingSession ? "Edit named session" : "New named session"}</Text>
-      <Text style={styles.title} accessibilityRole="header">Choose a few.{"\n"}Watch. Stop.</Text>
+      <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
       <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos. Your draft stays on this device. Only you decide when to continue.</Text>
+      <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
       <TextInput
+        editable={!isSaving}
         value={name}
         onChangeText={setName}
         placeholder="Evening at home"
@@ -154,7 +158,7 @@ export default function SessionBuilder() {
             const video = pool.find((candidate) => candidate.id === videoId);
             return <View key={videoId} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
-              <Text style={styles.trayTitle} numberOfLines={1}>{video?.title ?? "Video details unavailable"}</Text>
+              <Text style={styles.trayTitle} numberOfLines={3}>{video?.title ?? "Video details unavailable"}</Text>
               <Pressable onPress={() => move(index, -1)} disabled={index === 0 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => move(index, 1)} disabled={index === selected.length - 1 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
@@ -163,17 +167,21 @@ export default function SessionBuilder() {
           <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Finish around ${finishTime}` : " · Finish time unavailable"}</Text>
         </View>
       ) : null}
-      <Text style={styles.pickLabel}>CHOOSE FROM SAVED</Text>
+      <Text style={styles.pickLabel}>Choose videos</Text>
+      <View style={styles.searchField}><Search size={18} color={palette.inkMuted} /><TextInput value={search} onChangeText={setSearch} placeholder="Search titles or sources" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search session videos" style={[type.body, { flex: 1, minHeight: 48 }]} /></View>
     </View>
   );
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={insets.top + 56}>
       <FlatList<Video>
-        data={hydratedProfile === activeProfileId ? pool : []}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        data={hydratedProfile === activeProfileId ? filteredPool : []}
         keyExtractor={(video) => video.id}
         ListHeaderComponent={header}
-        ListEmptyComponent={<EmptyState title="Nothing to sit with yet" body="Save a few videos, then build a named session from them." />}
+        ListEmptyComponent={<EmptyState title={search.trim() ? "No matching videos" : "No videos to choose yet"} body={search.trim() ? "Try another title or source." : "Save a few videos, then build a session from them."} />}
         renderItem={({ item }) => {
           const isSelected = selected.includes(item.id);
           const order = selected.indexOf(item.id) + 1;
@@ -189,7 +197,7 @@ export default function SessionBuilder() {
               testID={`session-pick-${item.id}`}
             >
               <View style={[styles.indexBox, isSelected && styles.indexBoxOn]}>
-                {isSelected ? <Text style={styles.indexText}>{order}</Text> : <Check size={14} color={palette.inkMuted} strokeWidth={1.6} />}
+                {isSelected ? <Text style={styles.indexText}>{order}</Text> : null}
               </View>
               <View style={styles.flex}>
                 <Text style={type.caption} numberOfLines={1}>{item.channelTitle || "YouTube"}</Text>
@@ -199,7 +207,7 @@ export default function SessionBuilder() {
             </Pressable>
           );
         }}
-        contentContainerStyle={[styles.content, { paddingBottom: selected.length > 0 ? insets.bottom + 148 : insets.bottom + spacing.xxl }]}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.lg }]}
         showsVerticalScrollIndicator={false}
         initialNumToRender={8}
         maxToRenderPerBatch={8}
@@ -214,7 +222,7 @@ export default function SessionBuilder() {
             <Text style={type.caption}>{selected.length} video{selected.length === 1 ? "" : "s"}</Text>
             <Text style={styles.total}>{durationSummary}</Text>
           </View>
-          <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" testID="save-session">
+          <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" accessibilityLabel="Save session" accessibilityState={{ busy: isSaving, disabled: isSaving }} testID="save-session">
             <Save size={16} color={palette.accent} strokeWidth={1.8} />
           </Pressable>
           <Pressable onPress={() => { void saveAndBegin(); }} disabled={isSaving} style={({ pressed }) => [styles.beginBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" testID="begin-session">
@@ -223,12 +231,13 @@ export default function SessionBuilder() {
           </Pressable>
         </View>
       ) : null}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    searchField: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderColor: palette.borderSoft, borderRadius: radii.control, paddingHorizontal: spacing.md },
     screen: { flex: 1, backgroundColor: palette.wall },
     content: { flexGrow: 1, paddingHorizontal: spacing.lg },
     header: { paddingBottom: spacing.xl },
@@ -245,17 +254,17 @@ function createStyles(palette: FramePalette, type: FrameType) {
     rowTitle: { ...type.heading, fontSize: 16, lineHeight: 20, marginTop: 2 },
     selectedTitle: { color: palette.accent },
     duration: { ...type.caption, color: palette.inkMuted },
-    footer: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surfaceHigh, borderTopWidth: 1, borderTopColor: palette.border },
-    summary: { flex: 1 },
+    footer: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surfaceHigh, borderTopWidth: 1, borderTopColor: palette.border },
+    summary: { width: "100%" },
     total: { ...type.heading, marginTop: 2 },
     saveBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.activeSoft },
-    beginBtn: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
+    beginBtn: { flex: 1, minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
     beginText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
     tray: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     trayLabel: { ...type.caption, color: palette.accent },
-    trayRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
+    trayRow: { minHeight: 48, flexDirection: "row", flexWrap: "wrap", paddingVertical: spacing.sm, alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     trayNumber: { ...type.caption, color: palette.accent, width: 24 },
-    trayTitle: { ...type.label, flex: 1 },
+    trayTitle: { ...type.label, flexGrow: 1, flexBasis: "80%" },
     trayControl: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
     trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
     pickLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xl },

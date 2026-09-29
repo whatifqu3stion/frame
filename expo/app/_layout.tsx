@@ -91,6 +91,8 @@ function ThemedApp() {
 }
 
 export default function RootLayout() {
+  const [fontWaitExpired, setFontWaitExpired] = React.useState(false);
+  React.useEffect(() => { const timer = setTimeout(() => setFontWaitExpired(true), 8000); return () => clearTimeout(timer); }, []);
   const [fontsLoaded, fontError] = useFonts({
     HankenGrotesk_400Regular,
     HankenGrotesk_500Medium,
@@ -100,10 +102,10 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
-  }, [fontError, fontsLoaded]);
+    if (fontsLoaded || fontError || fontWaitExpired) SplashScreen.hideAsync().catch(() => {});
+  }, [fontError, fontsLoaded, fontWaitExpired]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError && !fontWaitExpired) return null;
 
   return (
     <ErrorBoundary>
@@ -115,3 +117,4 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+

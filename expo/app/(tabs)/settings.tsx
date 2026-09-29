@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronRight, Crown, FileText, Lock, LogOut, Moon, RotateCcw, Shield, Sun, Trash2, UserCircle2, UsersRound } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenHeader from "@/components/ScreenHeader";
 import ProfileControlsModal from "@/components/ProfileControlsModal";
@@ -24,25 +24,32 @@ export default function SettingsScreen() {
     signOutGoogle, prefs, setTheme, setAccent, activeProfile, profiles,
     requestOwnerAuthorization,
   } = useApp();
+  const accountLock = useRef(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
   const [profileControlsOpen, setProfileControlsOpen] = useState<boolean>(false);
   const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
 
   const onConnect = async (): Promise<void> => {
-    setAccountBusy(true);
-    const result = await signInWithGoogle();
-    setAccountBusy(false);
-    if (result.ok) router.push("/google-import");
-    else Alert.alert("Sign-in", result.message);
+    if (accountLock.current) return;
+    accountLock.current = true; setAccountBusy(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result.ok) router.push("/google-import");
+      else Alert.alert("Sign-in", result.message);
+    } catch { Alert.alert("Sign-in", "Google couldn’t connect. Try again when you’re ready."); }
+    finally { accountLock.current = false; setAccountBusy(false); }
   };
   const onSignOut = (): void => {
     Alert.alert("Disconnect Google?", "Frame will revoke Google access. Manually followed sources stay on this device.", [
       { text: "Cancel", style: "cancel" },
       { text: "Disconnect", style: "destructive", onPress: async () => {
-        setAccountBusy(true);
-        const result = await signOutGoogle();
-        setAccountBusy(false);
-        Alert.alert(result.ok ? "Disconnected" : "Couldn't disconnect", result.message);
+        if (accountLock.current) return;
+        accountLock.current = true; setAccountBusy(true);
+        try {
+          const result = await signOutGoogle();
+          Alert.alert(result.ok ? "Disconnected" : "Couldn't disconnect", result.message);
+        } catch { Alert.alert("Couldn’t disconnect", "Check the connection status and try again."); }
+        finally { accountLock.current = false; setAccountBusy(false); }
       } },
     ]);
   };
@@ -64,7 +71,7 @@ export default function SettingsScreen() {
           <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : activeProfile?.role === "managed" ? "Managed" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
         </View>
         <Pressable onPress={() => { void openProfileControls(); }} style={({ pressed }) => [styles.protectedRow, pressed && styles.pressed]} accessibilityRole="button" testID="open-profile-controls">
-          <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & boundaries</Text><Text style={styles.supporting}>Create or rename Standard profiles, remove profiles, and manage the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
+          <View style={styles.protectedIcon}><UsersRound size={19} color={palette.active} /></View><View style={styles.flex}><Text style={type.label}>Profiles & boundaries</Text><Text style={styles.supporting}>Manage profiles, viewing time, schedules, content approvals, and the Owner PIN.</Text></View><ChevronRight size={17} color={palette.inkMuted} />
         </Pressable>
         {googleConnected ? (
           <View style={styles.accountBlock}>
@@ -80,7 +87,7 @@ export default function SettingsScreen() {
           </View>
         ) : googleConfigured ? (
           <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" testID="connect-google">
-            {accountBusy || importing ? <ActivityIndicator color={palette.onAccent} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
+            {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
           </Pressable>
         ) : <Text style={styles.infoText}>Google connection is unavailable in this build. Manual source setup remains available.</Text>}
       </Section>

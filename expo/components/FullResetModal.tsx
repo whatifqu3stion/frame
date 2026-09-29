@@ -48,7 +48,8 @@ export default function FullResetModal({ visible, onClose, forgottenPinRecovery 
       <View style={styles.header}><View style={styles.icon}><AlertTriangle size={20} color={palette.danger} /></View><Pressable onPress={close} disabled={busy} style={styles.close} accessibilityRole="button" accessibilityLabel="Close reset"><X size={18} color={palette.inkMuted} /></Pressable></View>
       <Text style={styles.title}>Erase all Frame data and start over</Text>
       {step === "review" ? <>
-        <Text style={styles.body}>This permanently deletes {DELETED_ITEMS} from this device.</Text>
+        <Text style={styles.body}>This permanently deletes the following from this device:</Text>
+        {DELETED_ITEMS.split("; ").map((item) => <Text key={item} style={styles.body}>• {item.replace(/^and /, "")}</Text>)}
         <Text style={styles.note}>Store purchase records remain with the app store. Nothing can be selectively preserved, and the Owner PIN cannot be recovered separately.</Text>
         <Pressable onPress={() => setStep("type")} style={styles.primary} accessibilityRole="button"><Text style={styles.primaryText}>Continue</Text></Pressable>
       </> : <>

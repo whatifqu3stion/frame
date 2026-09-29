@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image } from "expo-image";
+import Image from "@/components/MediaImage";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
-import { useCallback, useMemo } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
@@ -17,6 +17,9 @@ import { refreshStoredLibraryMetadata } from "@/db/database";
 import type { Video } from "@/types";
 
 export default function ChannelScreen() {
+  const followLock = useRef(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
@@ -42,17 +45,18 @@ export default function ChannelScreen() {
   const rawChannel = videosQuery.data?.channel ?? savedChannel;
   const channel = rawChannel ? expireChannel(rawChannel, Date.now()) : undefined;
   const videos = (videosQuery.data?.videos ?? []).filter((video) => isMetadataCurrent(video.fetchedAt, Date.now()));
-  const videosMessage = videosQuery.error instanceof Error ? videosQuery.error.message : videosQuery.data?.message;
+  const videosMessage = videosQuery.isError ? "Videos couldn’t refresh. Check your connection and try again." : undefined;
   const following = id ? isChannelFollowed(id) : false;
 
   const toggleFollow = useCallback(async (): Promise<void> => {
-    if (!channel) return;
+    if (!channel || followLock.current) return;
+    followLock.current = true; setFollowBusy(true); setFeedback(null);
     try {
-      if (following) await unfollowChannel(channel.id);
-      else if (requirePurchase("creators")) await followChannel({ ...channel, followedAt: Date.now(), source: "manual" });
+      if (following) { await unfollowChannel(channel.id); setFeedback("Source unfollowed. You can follow it again here."); }
+      else if (requirePurchase("creators")) { await followChannel({ ...channel, followedAt: Date.now(), source: "manual" }); setFeedback("Source followed"); }
     } catch {
       Alert.alert("Source unchanged", "Owner authorization was cancelled or the source could not be updated.");
-    }
+    } finally { followLock.current = false; setFollowBusy(false); }
   }, [channel, followChannel, following, requirePurchase, unfollowChannel]);
 
   const retryUploads = useCallback((): void => {
@@ -63,17 +67,15 @@ export default function ChannelScreen() {
     <>
       <View style={styles.header}>
         <View style={styles.avatar}>
-          {channel?.thumbnailUrl ? (
             <Image
-              source={{ uri: channel.thumbnailUrl }}
+              source={channel?.thumbnailUrl ? { uri: channel.thumbnailUrl } : null}
               style={styles.avatarImage}
               contentFit="cover"
               cachePolicy="none"
-              recyclingKey={channel.id}
+              recyclingKey={channel?.id}
             />
-          ) : null}
         </View>
-        <Text style={type.caption}>Channel</Text>
+        <Text style={type.caption}>Source</Text>
         <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? "—"}</Text>
         {channel?.description ? (
           <Text style={styles.description} numberOfLines={4}>{channel.description}</Text>
@@ -81,18 +83,20 @@ export default function ChannelScreen() {
 
         {channel ? (
           <Pressable
-            onPress={toggleFollow}
+            onPress={() => { if (following) Alert.alert("Unfollow source?", "New videos from this source will stop appearing in Today. Saved videos stay in your library.", [{ text: "Cancel", style: "cancel" }, { text: "Unfollow", onPress: () => { void toggleFollow(); } }]); else void toggleFollow(); }}
+            disabled={followBusy}
             style={({ pressed }) => [styles.followBtn, following && styles.followBtnActive, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityState={{ selected: following }}
+            accessibilityState={{ selected: following, busy: followBusy, disabled: followBusy }}
             accessibilityLabel={following ? `Unfollow ${channel.title}` : `Follow ${channel.title}`}
             testID="follow-channel"
           >
-            {following ? <Check size={15} color={palette.active} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
-            <Text style={[styles.followText, { color: following ? palette.active : palette.onDark }]}>{following ? "Following" : "Follow channel"}</Text>
+            {followBusy ? <ActivityIndicator color={following ? palette.active : palette.onDark} /> : following ? <Check size={15} color={palette.active} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
+            <Text style={[styles.followText, { color: following ? palette.active : palette.onDark }]}>{followBusy ? "Updating…" : following ? "Following" : "Follow source"}</Text>
           </Pressable>
         ) : null}
       </View>
+      {feedback ? <Text accessibilityLiveRegion="polite" style={[type.bodySoft, { marginHorizontal: spacing.lg, marginTop: spacing.md }]}>{feedback}</Text> : null}
       <View style={styles.videoHeading}>
         <Text style={type.caption}>Videos</Text>
         {videosMessage ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{videosMessage}</Text> : null}
@@ -110,10 +114,10 @@ export default function ChannelScreen() {
   ) : videosQuery.isLoading ? (
     <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading verified uploads" />
   ) : videosQuery.data && videos.length === 0 ? (
-    <EmptyState title="No playable recent uploads" body={videosQuery.data.message} />
+    <EmptyState title="No playable recent uploads" body="No recent videos are available from this source. Try again later." />
   ) : (
     <View>
-      <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "The saved creator is still on your shelf. Check your connection and try again."} />
+      <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "This source is still followed. Check your connection and try again."} />
       <Pressable onPress={retryUploads} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
         <RotateCcw size={16} color={palette.accent} />
         <Text style={styles.retryText}>Try again</Text>
@@ -125,7 +129,7 @@ export default function ChannelScreen() {
     <FlatList<Video>
       data={videos}
       keyExtractor={(video) => video.id}
-      renderItem={({ item }) => <VideoCard video={item} variant="wide" />}
+      renderItem={({ item }) => <View style={{ paddingHorizontal: spacing.lg }}><VideoCard video={item} variant="wide" /></View>}
       ListHeaderComponent={header}
       ListEmptyComponent={empty}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}
@@ -162,3 +166,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
   pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   });
 }
+

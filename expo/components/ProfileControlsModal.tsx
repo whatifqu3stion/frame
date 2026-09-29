@@ -46,6 +46,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? null;
   const [allowance, setAllowance] = useState<ViewingAllowance>({ mode: "dailyLimit", minutes: 30 });
+  const [playbackTimesValid, setPlaybackTimesValid] = useState(true);
   const [playbackControls, setPlaybackControls] = useState<ManagedPlaybackControls>({ ...DEFAULT_MANAGED_PLAYBACK_CONTROLS });
   const [contentOverview, setContentOverview] = useState<ManagedContentOverview | null>(null);
   const [allowanceStatus, setAllowanceStatus] = useState<Record<string, ViewingAllowanceStatus>>({});
@@ -57,7 +58,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     setAllowanceStatus(Object.fromEntries(entries));
   }, [getPlaybackAllowance, profiles]);
 
-  useEffect(() => { if (visible) void refreshAllowances(); else { setSelectedProfileId(null); setEditor(null); setFeedback(null); } }, [refreshAllowances, visible]);
+  useEffect(() => { if (visible) void refreshAllowances().catch(() => setFeedback({ ok: false, message: "Allowances couldn’t load. Close this panel and try again." })); else { setSelectedProfileId(null); setEditor(null); setFeedback(null); } }, [refreshAllowances, visible]);
   useEffect(() => { if (visible && !isOwnerAuthorized) onClose(); }, [isOwnerAuthorized, onClose, visible]);
   useEffect(() => {
     if (!visible || !hasOwnerPin) return;
@@ -72,6 +73,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   };
 
   const begin = (next: Editor): void => {
+    setPlaybackTimesValid(true);
     setEditor(next);
     setValue(next?.kind === "rename" ? next.profile.name : "");
     setConfirmation(""); setCurrentPin(""); setFeedback(null);
@@ -127,35 +129,43 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const changeContentMode = async (profile: Profile, mode: ManagedContentMode): Promise<void> => {
     if (busy) return;
     setBusy(true);
+    try {
     const result = await setManagedContentMode(profile.id, mode);
     setFeedback(result);
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
-    setBusy(false);
+    } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
+    finally { setBusy(false); }
   };
 
   const reviewRequest = async (profile: Profile, request: ManagedApprovalRequest, decision: "approve" | "deny"): Promise<void> => {
     if (busy) return;
     setBusy(true);
+    try {
     const result = await reviewManagedApprovalRequest(profile.id, request, decision);
     setFeedback(result);
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
-    setBusy(false);
+    } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
+    finally { setBusy(false); }
   };
 
   const revokeContent = async (profile: Profile, kind: "video" | "source", targetId: string): Promise<void> => {
     if (busy) return;
     setBusy(true);
+    try {
     const result = await revokeManagedContent(profile.id, kind, targetId);
     setFeedback(result);
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
-    setBusy(false);
+    } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
+    finally { setBusy(false); }
   };
 
   const submitEditor = async (): Promise<void> => {
     if (!editor || busy) return;
     if (editor.kind === "content") return;
+    if (editor.kind === "controls" && (!playbackTimesValid || validateManagedPlaybackControls(playbackControls))) return;
     if (editor.kind === "pin" && value !== confirmation) return setFeedback({ ok: false, message: "Those PINs don’t match." });
     setBusy(true);
+    try {
     const result = editor.kind === "createStandard" ? await createStandardProfile(value)
       : editor.kind === "createManaged" ? await createManagedProfile(value, allowance as ManagedAllowance)
         : editor.kind === "rename" ? await renameLocalProfile(editor.profile.id, value)
@@ -163,39 +173,59 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
             : editor.kind === "controls" ? await setManagedPlaybackControls(editor.profile.id, playbackControls)
             : editor.kind === "removePin" ? await clearOwnerPin(currentPin)
               : await saveOwnerPin(value, currentPin);
-    setBusy(false); setFeedback(result);
+    setFeedback(result);
     if (result.ok) {
       const createdManagedWithoutPin = editor.kind === "createManaged" && !hasOwnerPin;
       setEditor(null); setValue(""); setConfirmation(""); setCurrentPin("");
       await refreshAllowances();
       if (createdManagedWithoutPin) Alert.alert("Add an Owner PIN when ready", "Add an Owner PIN in Profiles & boundaries to protect Managed settings.");
     }
+    } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
+    finally { setBusy(false); }
   };
 
   const confirmDelete = (profile: Profile): void => {
     Alert.alert(`Delete ${profile.name}?`, "This permanently removes only this profile’s sources, library, progress, sessions, interests, appearance, Daily Frame time, playback schedule, content approvals, and approval requests from this device.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete profile", style: "destructive", onPress: async () => { setBusy(true); const result = await deleteLocalProfile(profile.id); setBusy(false); setFeedback(result); } },
+      { text: "Delete profile", style: "destructive", onPress: async () => {
+        setBusy(true);
+        try { setFeedback(await deleteLocalProfile(profile.id)); }
+        catch { setFeedback({ ok: false, message: "The profile couldn’t be deleted. Check the list and try again." }); }
+        finally { setBusy(false); }
+      } },
     ]);
   };
 
   const cancelPending = async (): Promise<void> => {
+    if (busy) return;
     setBusy(true);
-    const result = await cancelPendingOwnerAllowance();
-    setBusy(false);
-    setFeedback(result);
-    if (result.ok) await refreshAllowances();
+    try {
+      const result = await cancelPendingOwnerAllowance();
+      setFeedback(result);
+      if (result.ok) await refreshAllowances();
+    } catch { setFeedback({ ok: false, message: "The pending change couldn’t be updated. Try again." }); }
+    finally { setBusy(false); }
   };
 
   const confirmRemovePin = (): void => begin({ kind: "removePin" });
 
   const chooseProfile = async (profileId: string): Promise<void> => {
-    setBusy(true); const result = await switchProfile(profileId); setBusy(false); setFeedback(result);
-    if (result.ok) close();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await switchProfile(profileId);
+      setFeedback(result);
+      if (result.ok) { relockOwnerAccess(); onClose(); }
+    } catch { setFeedback({ ok: false, message: "The profile couldn’t switch. Try again." }); }
+    finally { setBusy(false); }
   };
 
   const reorder = async (profileId: string, direction: "up" | "down"): Promise<void> => {
-    setBusy(true); const result = await reorderLocalProfile(profileId, direction); setBusy(false); setFeedback(result);
+    if (busy) return;
+    setBusy(true);
+    try { setFeedback(await reorderLocalProfile(profileId, direction)); }
+    catch { setFeedback({ ok: false, message: "The order couldn’t be saved. Try again." }); }
+    finally { setBusy(false); }
   };
 
   const statusLabel = (profile: Profile): string => {
@@ -214,7 +244,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const editorNeedsName = editor?.kind === "createStandard" || editor?.kind === "createManaged" || editor?.kind === "rename";
   const allowanceInvalid = (editor?.kind === "createManaged" || editor?.kind === "allowance")
     && allowance.mode === "dailyLimit" && (!Number.isInteger(allowance.minutes) || allowance.minutes < 1 || allowance.minutes > 1_440);
-  const controlsInvalid = editor?.kind === "controls" && Boolean(validateManagedPlaybackControls(playbackControls));
+  const controlsInvalid = editor?.kind === "controls" && (!playbackTimesValid || Boolean(validateManagedPlaybackControls(playbackControls)));
   const editorInvalid = busy || allowanceInvalid || controlsInvalid || ((editorNeedsName || editor?.kind === "pin") && !value.trim()) || ((editor?.kind === "pin" && hasOwnerPin || editor?.kind === "removePin") && currentPin.length < 4);
 
   const back = (): void => {
@@ -282,15 +312,15 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
       </> : null}
           {editor ? <View style={styles.editor}>
             <Text style={styles.editorTitle}>{editor.kind === "createStandard" ? "New Standard profile" : editor.kind === "createManaged" ? "New Managed profile" : editor.kind === "rename" ? `Rename ${editor.profile.name}` : editor.kind === "allowance" ? `${editor.profile.name} · Daily viewing allowance` : editor.kind === "controls" ? `${editor.profile.name} · Playback schedule` : editor.kind === "content" ? `${editor.profile.name} · Content access` : editor.kind === "removePin" ? "Remove Owner PIN" : hasOwnerPin ? "Change Owner PIN" : "Add Owner PIN"}</Text>
-            {(editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") ? <TextInput value={currentPin} onChangeText={(text) => setCurrentPin(text.replace(/\D/g, "").slice(0, 6))} placeholder="Current Owner PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus accessibilityLabel="Current Owner PIN" /> : null}
-            {editorNeedsName || editor.kind === "pin" ? <TextInput value={value} onChangeText={(text) => { setValue(editor.kind === "pin" ? text.replace(/\D/g, "").slice(0, 6) : text); setFeedback(null); }} placeholder={editor.kind === "pin" ? "4–6 digit PIN" : "Profile name"} placeholderTextColor={palette.inkMuted} style={[styles.input, editor.kind === "pin" && styles.pinInput]} keyboardType={editor.kind === "pin" ? "number-pad" : "default"} secureTextEntry={editor.kind === "pin"} maxLength={editor.kind === "pin" ? 6 : 32} autoFocus={!hasOwnerPin || editor.kind !== "pin"} accessibilityLabel={editor.kind === "pin" ? "New Owner PIN" : "Profile name"} /> : null}
-            {editor.kind === "pin" ? <TextInput value={confirmation} onChangeText={(text) => { setConfirmation(text.replace(/\D/g, "").slice(0, 6)); setFeedback(null); }} placeholder="Repeat PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} accessibilityLabel="Repeat new Owner PIN" /> : null}
+            {(editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") ? <TextInput editable={!busy} value={currentPin} onChangeText={(text) => setCurrentPin(text.replace(/\D/g, "").slice(0, 6))} placeholder="Current Owner PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus accessibilityLabel="Current Owner PIN" /> : null}
+            {editorNeedsName || editor.kind === "pin" ? <TextInput editable={!busy} value={value} onChangeText={(text) => { setValue(editor.kind === "pin" ? text.replace(/\D/g, "").slice(0, 6) : text); setFeedback(null); }} placeholder={editor.kind === "pin" ? "4–6 digit PIN" : "Profile name"} placeholderTextColor={palette.inkMuted} style={[styles.input, editor.kind === "pin" && styles.pinInput]} keyboardType={editor.kind === "pin" ? "number-pad" : "default"} secureTextEntry={editor.kind === "pin"} maxLength={editor.kind === "pin" ? 6 : 32} autoFocus={!hasOwnerPin || editor.kind !== "pin"} accessibilityLabel={editor.kind === "pin" ? "New Owner PIN" : "Profile name"} /> : null}
+            {editor.kind === "pin" ? <TextInput editable={!busy} value={confirmation} onChangeText={(text) => { setConfirmation(text.replace(/\D/g, "").slice(0, 6)); setFeedback(null); }} placeholder="Repeat PIN" placeholderTextColor={palette.inkMuted} style={[styles.input, styles.pinInput]} keyboardType="number-pad" secureTextEntry maxLength={6} accessibilityLabel="Repeat new Owner PIN" /> : null}
             {editor.kind === "createManaged" || editor.kind === "allowance" ? <AllowancePicker value={allowance} onChange={setAllowance} /> : null}
-            {editor.kind === "controls" ? <ManagedPlaybackControlsEditor value={playbackControls} onChange={(next) => { setPlaybackControls(next); setFeedback(null); }} /> : null}
+            {editor.kind === "controls" ? <ManagedPlaybackControlsEditor value={playbackControls} onChange={(next) => { setPlaybackControls(next); setFeedback(null); }} onValidityChange={setPlaybackTimesValid} /> : null}
             {editor.kind === "content" && contentOverview ? <ManagedContentAccessEditor value={contentOverview} busy={busy} onModeChange={(mode) => { void changeContentMode(editor.profile, mode); }} onReview={(request, decision) => { void reviewRequest(editor.profile, request, decision); }} onRevoke={(kind, targetId) => { void revokeContent(editor.profile, kind, targetId); }} /> : null}
-            {controlsInvalid ? <Text style={[styles.feedback, { color: palette.danger }]}>{validateManagedPlaybackControls(playbackControls)}</Text> : null}
+            {controlsInvalid ? <Text style={[styles.feedback, { color: palette.danger }]}>{!playbackTimesValid ? "Enter valid times before saving." : validateManagedPlaybackControls(playbackControls)}</Text> : null}
             {editor.kind === "allowance" && editor.profile.role === "owner" ? <Text style={styles.ownerDelayNote}>Enabling or reducing your Owner limit is immediate. Increasing it or choosing Unlimited takes effect 24 hours later. There is no PIN bypass or “add time” action.</Text> : null}
-            {editor.kind === "content" ? <Pressable accessibilityRole="button" onPress={() => begin(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Done</Text></Pressable> : <View style={styles.actionRow}><Pressable accessibilityRole="button" onPress={() => begin(null)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void submitEditor(); }} disabled={editorInvalid} style={[styles.primaryButton, editorInvalid && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>}
+            {editor.kind === "content" ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Done</Text></Pressable> : <View style={styles.actionRow}><Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void submitEditor(); }} disabled={editorInvalid} style={[styles.primaryButton, editorInvalid && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>}
           </View> : null}
 
       {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}

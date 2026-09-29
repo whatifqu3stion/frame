@@ -26,10 +26,12 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
     if (switchingId) return;
     setFeedback(null);
     setSwitchingId(profileId);
-    const result = await switchProfile(profileId);
-    setSwitchingId(null);
-    if (result.ok) close();
-    else if (result.message !== "Profile switch cancelled.") setFeedback(result.message);
+    try {
+      const result = await switchProfile(profileId);
+      if (result.ok) { setFeedback(null); onClose(); }
+      else if (result.message !== "Profile switch cancelled.") setFeedback(result.message);
+    } catch { setFeedback("Frame couldn’t switch profiles. Try again."); }
+    finally { setSwitchingId(null); }
   };
 
   return (
@@ -48,10 +50,10 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
                 <Pressable
                   key={profile.id}
                   onPress={() => { void choose(profile.id); }}
-                  disabled={profileSwitching || isActive}
+                  disabled={Boolean(switchingId) || profileSwitching || isActive}
                   style={({ pressed }) => [styles.row, isActive && styles.rowActive, pressed && styles.pressed]}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: isActive, disabled: profileSwitching || isActive }}
+                  accessibilityState={{ selected: isActive, disabled: Boolean(switchingId) || profileSwitching || isActive }}
                   testID={`switch-profile-${profile.id}`}
                 >
                   <View style={[styles.avatar, isActive && styles.avatarActive]}>{profile.role === "managed" ? <Clock3 size={19} color={isActive ? palette.active : palette.inkMuted} /> : <UserRound size={19} color={isActive ? palette.active : palette.inkMuted} />}</View>

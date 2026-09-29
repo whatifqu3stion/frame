@@ -1,7 +1,14 @@
+import { Link } from "expo-router";
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
+
+const HELP_LINKS = [
+  { label: "YouTube Terms of Service", url: "https://www.youtube.com/t/terms" },
+  { label: "Manage an Apple subscription", url: "https://support.apple.com/118428" },
+  { label: "Manage a Google Play subscription", url: "https://support.google.com/googleplay/answer/7018481" },
+];
 
 const SECTIONS: { title: string; body: string }[] = [
   {
@@ -36,15 +43,20 @@ export default function TermsScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
-      <Text style={styles.title}>Terms of Use</Text>
+      <Text accessibilityRole="header" style={styles.title}>Terms of Use</Text>
       <Text style={styles.updated}>Effective August 4, 2026</Text>
       <Text style={styles.intro}>By using Frame, you agree to use the app lawfully and respect the services and content it helps you access.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text style={styles.heading}>{section.title}</Text>
+          <Text accessibilityRole="header" style={styles.heading}>{section.title}</Text>
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={styles.heading}>Service and subscription help</Text>
+        {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => Alert.alert("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
+      </View>
+      <Link href="/(tabs)/settings" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open data and account controls</Text></Pressable></Link>
     </ScrollView>
   );
 }
@@ -61,3 +73,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
   body: { ...type.bodySoft, color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 23 },
   });
 }
+

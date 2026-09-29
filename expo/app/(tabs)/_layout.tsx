@@ -1,3 +1,4 @@
+import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,16 +25,16 @@ export default function TabLayout() {
           borderTopWidth: 1,
           borderTopColor: palette.borderSoft,
           elevation: 0,
-          height: 58 + bottomInset,
+          height: 64 + bottomInset,
           paddingTop: 8,
           paddingBottom: bottomInset,
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color }) => <CalendarDays size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color }) => <Users size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color }) => <Bookmark size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color }) => <Settings size={20} color={color} strokeWidth={1.7} /> }} />
+      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><CalendarDays size={22} color={color} strokeWidth={2} /></View> }} />
+      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Users size={22} color={color} strokeWidth={2} /></View> }} />
+      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Bookmark size={22} color={color} strokeWidth={2} /></View> }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color, focused }) => <View style={{ width: 44, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: focused ? palette.activeSoft : "transparent" }}><Settings size={22} color={color} strokeWidth={2} /></View> }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="library" options={{ href: null }} />
     </Tabs>

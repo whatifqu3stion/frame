@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ArrowRight, Play, Plus, Search, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -25,7 +25,7 @@ export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, requirePurchase } = useApp();
+  const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, requirePurchase, unsaveVideo } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
   const [showOtherSessions, setShowOtherSessions] = useState(false);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
@@ -54,13 +54,17 @@ export default function SavedScreen() {
   };
 
   return (
-    <ScrollView
+    <FlatList
       style={styles.screen}
+      data={libraryLoading ? [] : filteredSaved}
+      keyExtractor={(item) => item.video.id}
+      renderItem={({ item }) => <View style={styles.page}><VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} /><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.video.title} from Saved`} style={{ minHeight: 48, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md }} onPress={() => Alert.alert("Remove saved video?", `“${item.video.title}” will be removed from Saved.`, [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: () => { void unsaveVideo(item.video.id).catch(() => Alert.alert("Couldn’t remove video", "Try again when you’re ready.")); } }])}><X size={16} color={palette.inkMuted} /><Text style={[type.label, { color: palette.inkMuted }]}>Remove from Saved</Text></Pressable></View>}
       contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
-      showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-    >
+      initialNumToRender={8}
+      windowSize={7}
+      ListHeaderComponent={(
       <View style={styles.page}>
         <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Your viewing plan, saved videos, and where you left off." />
 
@@ -157,15 +161,10 @@ export default function SavedScreen() {
         {!libraryLoading && savedVideos.length > 0 ? (
           <Text style={styles.resultCount} accessibilityLiveRegion="polite">{filteredSaved.length} of {savedVideos.length} saved</Text>
         ) : null}
-        {libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? (
-          <EmptyState title="Nothing saved" body="Save a video from Today or while watching to find it here." />
-        ) : filteredSaved.length === 0 ? (
-          <EmptyState title="No matches here" body={hasActiveFilter ? "Try another title, source, or viewing status. Your saved videos are unchanged." : "Your saved videos are still here."} />
-        ) : filteredSaved.map((item) => <VideoCard key={item.video.id} video={item.video} variant="wide" progressSeconds={item.progressSeconds} />)}
-
-
       </View>
-    </ScrollView>
+      )}
+      ListEmptyComponent={<View style={styles.page}>{libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? <EmptyState compact title="Nothing saved" body="Save a video from Today or while watching to find it here." action={{ label: "Open Today", onPress: () => router.push("/(tabs)") }} /> : <EmptyState compact title="No matches here" body={hasActiveFilter ? "Try another title, source, or viewing status. Your saved videos are unchanged." : "Your saved videos are still here."} />}</View>}
+    />
   );
 }
 

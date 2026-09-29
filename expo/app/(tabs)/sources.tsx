@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image } from "expo-image";
+import Image from "@/components/MediaImage";
 import { router } from "expo-router";
-import { ArrowRight, Import, Plus, SlidersHorizontal } from "lucide-react-native";
+import { ArrowRight, Import, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import InterestChoices from "@/components/InterestChoices";
+import { resolutionVideoToVideo } from "@/services/youtube";
+import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import AddChannelModal from "@/components/AddChannelModal";
 import EmptyState from "@/components/EmptyState";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -25,9 +28,10 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, getManagedContentOverview } = useApp();
+  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, requirePurchase, getManagedContentOverview } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
+  const googleLock = useRef(false);
   const [googleBusy, setGoogleBusy] = useState<boolean>(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const [editionBusy, setEditionBusy] = useState(false);
@@ -78,11 +82,14 @@ export default function SourcesScreen() {
 
   const openGoogleImport = async (): Promise<void> => {
     if (googleConnected) { router.push("/google-import"); return; }
-    setGoogleBusy(true);
-    const result = await signInWithGoogle();
-    setGoogleBusy(false);
-    if (result.ok) router.push("/google-import");
-    else Alert.alert("Google connection", result.message);
+    if (googleLock.current) return;
+    googleLock.current = true; setGoogleBusy(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result.ok) router.push("/google-import");
+      else Alert.alert("Google connection", result.message);
+    } catch { Alert.alert("Google connection", "Google couldn’t connect. Try again when you’re ready."); }
+    finally { googleLock.current = false; setGoogleBusy(false); }
   };
 
   const followWeeklyPick = async (suggestion: WeeklyPickSourceSuggestion): Promise<void> => {
@@ -170,7 +177,7 @@ export default function SourcesScreen() {
               </Pressable> : null}
 
               {libraryLoading || managedContentQuery.isLoading ? (
-                <VideoFeedSkeleton count={3} accessibilityLabel="Loading followed sources" />
+                <VideoFeedSkeleton variant="source" count={3} accessibilityLabel="Loading followed sources" />
               ) : sourcesError ? (
                 <EmptyState title="Sources couldn't load" body="Your saved source data was not changed. Close and reopen Frame to try again." />
               ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
@@ -189,7 +196,7 @@ export default function SourcesScreen() {
                       testID={`source-${channel.id}`}
                     >
                       <View style={styles.avatar}>
-                        {channel.thumbnailUrl ? <Image source={{ uri: channel.thumbnailUrl }} style={styles.avatarImage} contentFit="cover" cachePolicy="none" recyclingKey={channel.id} /> : null}
+                        <Image source={channel.thumbnailUrl ? { uri: channel.thumbnailUrl } : null} style={styles.avatarImage} contentFit="cover" cachePolicy="none" recyclingKey={channel.id} />
                       </View>
                       <View style={styles.flex}>
                         <Text style={styles.sourceName} numberOfLines={2}>{channel.title}</Text>
@@ -209,28 +216,26 @@ export default function SourcesScreen() {
               </View>
               {discoverQuery.data?.reason === "no_interests" ? (
                 <View>
-                  <EmptyState title="Choose interests when you’re ready" body="Discover stays empty until you choose interests in Settings. You can still add and follow any trusted source manually." />
-                  <Pressable onPress={() => router.push("/(tabs)/settings")} style={styles.settingsButton} accessibilityRole="button" testID="discover-choose-interests">
-                    <SlidersHorizontal size={16} color={palette.active} strokeWidth={1.8} />
-                    <Text style={styles.settingsButtonText}>Choose interests in Settings</Text>
-                  </Pressable>
+                  <Text style={type.heading} accessibilityRole="header">Choose your interests</Text>
+                  <Text style={[type.bodySoft, { marginVertical: spacing.md }]}>Choose up to five to see this week’s source suggestions.</Text>
+                  <InterestChoices />
                 </View>
               ) : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
-                <VideoFeedSkeleton count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
+                <VideoFeedSkeleton variant="full" count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
               ) : discoverQuery.data?.reason === "offline" ? (
                 <View>
-                  <EmptyState title="Discover is offline" body={discoverQuery.data.message ?? "Weekly picks need a connection. Your sources and preferences were not changed."} />
+                  <EmptyState title="Discover is offline" body="Connect to the internet to load this week’s picks. Your sources and preferences are saved." />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data?.reason === "configuration" ? (
-                <EmptyState title="Weekly picks aren’t available" body={discoverQuery.data.message ?? "You can still add a source you know."} />
+                <EmptyState title="Weekly picks aren’t available" body="You can still add a source you know, or try weekly picks again later." />
               ) : discoverQuery.data?.reason === "maintenance" ? (
-                <EmptyState title="Weekly picks are paused" body={discoverQuery.data.message ?? "Frame is preparing the next weekly publication."} />
+                <EmptyState title="Weekly picks are paused" body="Please try again later. Your followed sources are still available." />
               ) : discoverQuery.data?.reason === "empty" ? (
-                <EmptyState title="No picks this week" body={discoverQuery.data.message ?? "There is no current publication for your interests."} />
+                <EmptyState title="No picks this week" body="There are no new suggestions for your interests this week. You can still open a source you follow." />
               ) : discoverQuery.isError || discoverQuery.data?.reason === "backend" || discoverQuery.data?.status === "temporarily_unavailable" ? (
                 <View>
-                  <EmptyState title="Discover couldn't load" body={discoverQuery.data?.message ?? "Weekly picks couldn’t load. Try again, or open a source you follow."} />
+                  <EmptyState title="Discover couldn't load" body="Try again, or open a source you follow." />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data && (discoverQuery.data.items.length > 0 || discoverQuery.data.canShowMore) ? (
@@ -243,8 +248,14 @@ export default function SourcesScreen() {
                       suggestion={suggestion}
                       interestName={interestNames.get(suggestion.interestId) ?? "Your interests"}
                       followed={followedIds.has(suggestion.providerSourceId)}
-                      busy={editionBusy || followBusyId === suggestion.providerSourceId}
+                      busy={followBusyId === suggestion.providerSourceId}
+                      disabled={editionBusy || Boolean(followBusyId)}
                       feedback={followFeedback[suggestion.providerSourceId]}
+                      onPreview={() => {
+                        if (!requirePurchase("library")) return;
+                        const video = resolutionVideoToVideo(weeklyPickToSourceResolution(suggestion));
+                        if (video) router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", fetchedAt: String(video.fetchedAt ?? 0), cachedMetadata: "1" } });
+                      }}
                       onFollow={() => { void followWeeklyPick(suggestion); }}
                       onDismiss={() => { void changeEdition("dismiss", suggestion.providerSourceId); }}
                     />

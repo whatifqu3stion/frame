@@ -6,7 +6,7 @@ import { formatMinute } from "@/domain/playbackControls";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
-type Props = { label: string; minuteOfDay: number; onChange: (minute: number) => void };
+type Props = { label: string; minuteOfDay: number; onChange: (minute: number) => void; onValidityChange?: (valid: boolean) => void };
 
 export default function ClockTimePicker({ label, minuteOfDay, onChange }: Props) {
   const { palette, type } = useFrameTheme();
@@ -42,3 +42,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     value: { ...type.label, color: palette.accent },
   });
 }
+

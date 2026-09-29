@@ -11,7 +11,7 @@ import {
 import { radii, spacing, type FramePalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
-type SkeletonVariant = "full" | "wide";
+type SkeletonVariant = "full" | "wide" | "source";
 
 type VideoFeedSkeletonProps = {
   count?: number;
@@ -23,13 +23,13 @@ type VideoFeedSkeletonProps = {
 function usePulseAnimation(): Animated.Value {
   const opacity = useRef<Animated.Value>(new Animated.Value(0.52)).current;
   const animation = useRef<Animated.CompositeAnimation | null>(null);
-  const [isReduceMotionEnabled, setIsReduceMotionEnabled] = useState<boolean>(false);
+  const [isReduceMotionEnabled, setIsReduceMotionEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
     void AccessibilityInfo.isReduceMotionEnabled().then((enabled: boolean) => {
       if (isMounted) setIsReduceMotionEnabled(enabled);
-    });
+    }).catch(() => {});
     const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setIsReduceMotionEnabled);
     return () => {
       isMounted = false;
@@ -69,6 +69,7 @@ function usePulseAnimation(): Animated.Value {
 
 function VideoSkeletonCard({ variant, palette }: { variant: SkeletonVariant; palette: FramePalette }) {
   const styles = useMemo(() => createStyles(palette), [palette]);
+  if (variant === "source") return <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, minHeight: 80, marginBottom: spacing.sm }}><View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: palette.surfaceDeep }} /><View style={{ flex: 1, gap: spacing.sm }}><View style={[styles.bar, { width: "70%" }]} /><View style={[styles.bar, { width: "45%" }]} /></View></View>;
   if (variant === "full") {
     return (
       <View style={styles.fullCard}>
@@ -165,3 +166,4 @@ function createStyles(palette: FramePalette) {
     wideTitleShortBar: { width: "68%", height: 12 },
   });
 }
+

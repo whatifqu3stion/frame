@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useApp } from "@/providers/AppProvider";
 import { IS_CLOSED_BETA } from "@/constants/config";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -32,10 +33,9 @@ import {
 
 const FEATURES: string[] = [
   "Save videos and build a personal shelf",
-  "Keep a calm Watch Later list",
   "Resume exactly where you stopped",
   "Create intentional one-to-three-video sessions",
-  "Follow trusted creators and use enhanced discovery",
+  "Follow trusted sources and review weekly suggestions",
 ];
 
 function packageLabel(aPackage: PurchasesPackage): string {
@@ -44,12 +44,13 @@ function packageLabel(aPackage: PurchasesPackage): string {
 
 function packageDetail(aPackage: PurchasesPackage): string {
   if (aPackage.identifier === "$rc_annual") {
-    return `${aPackage.product.priceString} per year · best value`;
+    return `${aPackage.product.priceString} per year`;
   }
   return `${aPackage.product.priceString} per month`;
 }
 
 export default function PaywallSheet() {
+  const reducedMotion = useReducedMotion();
   const { paywallOpen, paywallMessage, setPaywallOpen, isPremium } = useApp();
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -62,7 +63,7 @@ export default function PaywallSheet() {
   const offeringQuery = useQuery({
     queryKey: REVENUECAT_OFFERING_KEY,
     queryFn: getPremiumOffering,
-    enabled: paywallOpen && isRevenueCatConfigured,
+    enabled: paywallOpen && isRevenueCatConfigured && Platform.OS !== "web",
     retry: 1,
   });
 
@@ -164,7 +165,7 @@ export default function PaywallSheet() {
   const plansUnavailable = isWebPreview || !isRevenueCatConfigured || offeringQuery.isError || (!offeringQuery.isLoading && packages.length === 0);
 
   return (
-    <Modal visible animationType="slide" transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
+    <Modal visible animationType={reducedMotion ? "none" : "slide"} transparent statusBarTranslucent onRequestClose={() => setPaywallOpen(false)}>
       <Backdrop {...backdropProps} style={[StyleSheet.absoluteFill, styles.backdrop]} />
       <View style={styles.overlay}>
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
@@ -231,9 +232,9 @@ export default function PaywallSheet() {
             </View>
 
             {plansUnavailable ? (
-              <Text style={styles.feedback}>Subscription options are unavailable. Check your connection and try again.</Text>
+              <View><Text style={styles.feedback}>{isWebPreview ? "Purchases are available in the iPhone and Android apps." : !isRevenueCatConfigured ? "Purchases aren’t available in this build." : "Store prices couldn’t load. Check your connection and try again."}</Text>{!isWebPreview && isRevenueCatConfigured ? <Pressable onPress={() => { void offeringQuery.refetch(); }} disabled={offeringQuery.isFetching} accessibilityRole="button" style={{ minHeight: 48, alignItems: "center", justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>{offeringQuery.isFetching ? "Loading…" : "Retry store prices"}</Text></Pressable> : null}</View>
             ) : null}
-            {feedback ? <Text style={[styles.feedback, feedbackIsSuccess && styles.feedbackSuccess]}>{feedback}</Text> : null}
+            {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, feedbackIsSuccess && styles.feedbackSuccess]}>{feedback}</Text> : null}
 
             <Pressable
               onPress={onPurchase}
@@ -377,3 +378,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
   previewNotice: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: spacing.sm },
   });
 }
+

@@ -1,6 +1,6 @@
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -38,6 +38,7 @@ export default function OwnerPinModal() {
   }, [ownerPinPromptOpen]);
 
   const close = (): void => {
+    if (busy) return;
     setPin("");
     cancelOwnerAuthorization();
   };
@@ -45,9 +46,9 @@ export default function OwnerPinModal() {
   const submit = async (): Promise<void> => {
     if (pin.length < 4 || busy || remainingSeconds > 0) return;
     setBusy(true);
-    await submitOwnerAuthorization(pin);
-    setPin("");
-    setBusy(false);
+    try { await submitOwnerAuthorization(pin); setPin(""); }
+    catch { Alert.alert("Couldn’t verify PIN", "Try again. Protected controls remain locked."); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -56,7 +57,7 @@ export default function OwnerPinModal() {
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <View style={styles.icon}><LockKeyhole size={20} color={palette.active} /></View>
-            <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cancel PIN entry">
+            <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cancel PIN entry">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
@@ -69,6 +70,7 @@ export default function OwnerPinModal() {
             placeholder="4–6 digit PIN"
             placeholderTextColor={palette.inkMuted}
             keyboardType="number-pad"
+            editable={!busy}
             secureTextEntry
             autoFocus
             maxLength={6}
@@ -88,10 +90,10 @@ export default function OwnerPinModal() {
           >
             {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.buttonText}>Continue</Text>}
           </Pressable>
-          <Pressable onPress={() => { setPin(""); setBusy(false); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
+          <Pressable disabled={busy} onPress={() => { setPin(""); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
             <Text style={styles.forgotText}>Forgot PIN?</Text>
           </Pressable>
-          <Text style={styles.recovery}>There is no cloud PIN recovery. The only recovery is to erase all local Frame data and start over.</Text>
+          <Text style={styles.recovery}>PIN recovery erases all local Frame data. Review the details under Forgot PIN.</Text>
     </Sheet>
     <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} forgottenPinRecovery />
     </>

@@ -1,126 +1,31 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Check, ListPlus } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { Alert, Text, View } from "react-native";
+import TodaySessionModal from "@/components/TodaySessionModal";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
-import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
+/** Compatibility route: use the same named-session picker as Today. */
 export default function AddToSessionModal() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { sessions, updateSessionVideos, createSession, requirePurchase } = useApp();
-  const [creating, setCreating] = useState<boolean>(false);
-  const [name, setName] = useState<string>("");
-
-  const onPick = async (sessionId: string) => {
-    if (!id || !requirePurchase("sessions")) return;
-    const session = sessions.find((candidate) => candidate.id === sessionId);
-    if (!session || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return;
-    await updateSessionVideos(sessionId, [...session.orderedVideoIds, id]);
-    router.back();
+  const { sessions, savedVideos, updateSessionVideos, createSession, requirePurchase } = useApp();
+  const [busy, setBusy] = useState(false);
+  const locked = useRef(false);
+  const run = async (action: () => Promise<boolean>): Promise<void> => {
+    if (!id || locked.current || !requirePurchase("sessions")) return;
+    locked.current = true; setBusy(true);
+    try { if (await action()) router.back(); }
+    catch { Alert.alert("Couldn’t update session", "Check your sessions in Saved before trying again."); }
+    finally { locked.current = false; setBusy(false); }
   };
-
-  const onCreate = async () => {
-    if (!name.trim() || !id || !requirePurchase("sessions")) return;
-    await createSession(name, [id]);
-    router.back();
-  };
-
-  return (
-    <View style={{ flex: 1, backgroundColor: palette.wall }}>
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
-        <Text style={type.caption}>Add to</Text>
-        <Text style={[type.title, { marginTop: spacing.xs }]}>A named session.</Text>
-
-        <View style={{ marginTop: spacing.xl }}>
-          {sessions.length === 0 && !creating ? (
-            <Text style={[type.bodySoft, { color: palette.inkMuted }]}>No named sessions yet. Create one below.</Text>
-          ) : (
-            sessions.map((q) => {
-              const isAlreadyAdded = q.orderedVideoIds.includes(id ?? "");
-              return (
-                <Pressable key={q.id} onPress={() => onPick(q.id)} disabled={!isAlreadyAdded && q.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems} style={styles.row} testID={`session-${q.id}`}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={type.caption}>{q.orderedVideoIds.length} videos</Text>
-                    <Text style={[type.heading, { marginTop: 2 }]}>{q.name}</Text>
-                  </View>
-                  {isAlreadyAdded ? <Check size={16} color={palette.accent} /> : null}
-                </Pressable>
-              );
-            })
-          )}
-        </View>
-
-        {creating ? (
-          <View style={{ marginTop: spacing.lg }}>
-            <Text style={type.caption}>New named session</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Name"
-              placeholderTextColor={palette.inkMuted}
-              autoFocus
-              style={styles.input}
-              onSubmitEditing={onCreate}
-              returnKeyType="done"
-            />
-            <Pressable onPress={onCreate} style={styles.createBtn}>
-              <Text style={styles.createText}>Create & Add</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable onPress={() => setCreating(true)} style={styles.newRow} testID="open-new-session">
-            <ListPlus size={16} color={palette.accent} strokeWidth={1.6} />
-            <Text style={[type.label, { color: palette.accent }]}>New named session</Text>
-          </Pressable>
-        )}
-      </ScrollView>
-    </View>
-  );
-}
-
-function createStyles(palette: FramePalette, type: FrameType) {
-  return StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: spacing.md,
-    backgroundColor: palette.surface,
-    marginBottom: spacing.sm,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: palette.borderSoft,
-  },
-  newRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  input: {
-    ...type.body,
-    fontSize: 16,
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    backgroundColor: palette.surface,
-    borderRadius: radii.control,
-    borderWidth: 1,
-    borderColor: palette.borderSoft,
-  },
-  createBtn: {
-    marginTop: spacing.md,
-    backgroundColor: palette.accentDeep,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderRadius: radii.control,
-    minHeight: 48,
-    justifyContent: "center",
-  },
-  createText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
-  });
+  return <View style={{ flex: 1, backgroundColor: palette.wall }}>
+    {!id ? <Text style={[type.body, { padding: 24 }]}>This video link is unavailable. Go back and choose a video.</Text> : null}
+    <TodaySessionModal visible={Boolean(id)} videoId={id ?? ""} title={savedVideos.find((video) => video.id === id)?.title ?? "Choose a session for this video"} sessions={sessions} busy={busy} onClose={() => router.back()} onPick={(sessionId) => { void run(async () => {
+      const session = sessions.find((item) => item.id === sessionId);
+      if (!session || !id || session.orderedVideoIds.includes(id) || session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems) return false;
+      await updateSessionVideos(session.id, [...session.orderedVideoIds, id]); return true;
+    }); }} onCreate={(name) => { void run(async () => Boolean(id && await createSession(name, [id]))); }} />
+  </View>;
 }
