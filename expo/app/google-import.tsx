@@ -109,8 +109,8 @@ export default function GoogleImportScreen() {
       ListHeaderComponent={(
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>Optional setup</Text>
-          <Text style={styles.title}>Choose what enters Frame.</Text>
-          <Text style={styles.body}>Nothing is imported automatically. Select only the subscriptions you want for {activeProfile?.name ?? "this profile"}.</Text>
+          <Text style={styles.title}>Bring your sources along.</Text>
+          <Text style={styles.body}>Choose the YouTube subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
           <TextInput value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" style={[type.body, { minHeight: 48, padding: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control }]} />
           <View style={styles.counterRow}>
@@ -135,12 +135,12 @@ export default function GoogleImportScreen() {
             testID={`google-subscription-${item.id}`}
           >
             <View style={styles.avatar}><Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.avatarImage} contentFit="cover" cachePolicy="none" /></View>
-            <View style={styles.rowCopy}><Text style={styles.sourceName} numberOfLines={2}>{item.title}</Text><Text style={styles.sourceState}>{followed ? "Already followed" : selected ? "Selected" : "Tap to select"}</Text></View>
+            <View style={styles.rowCopy}><Text style={styles.sourceName} numberOfLines={2}>{item.title}</Text><Text style={styles.sourceState}>{followed ? "Already followed" : selected ? "Selected" : "Not selected"}</Text></View>
             <View style={[styles.check, (selected || followed) && styles.checkSelected]}>{selected || followed ? <Check size={16} color={palette.onAccent} strokeWidth={2.4} /> : <Circle size={18} color={palette.inkMuted} strokeWidth={1.4} />}</View>
           </Pressable>
         );
       }}
-      ListEmptyComponent={loadState === "loading" ? <View style={styles.loading}><ActivityIndicator color={palette.active} /><Text style={styles.loadingText}>Loading subscriptions…</Text></View> : feedback ? null : <View style={styles.loading}><Text style={styles.emptyTitle}>{query.trim() ? "No matching subscriptions." : "No subscriptions found."}</Text><Text style={styles.emptyBody}>{query.trim() ? "Search covers loaded subscriptions. Clear the search or load more below." : "You can still add any trusted source manually."}</Text></View>}
+      ListEmptyComponent={loadState === "loading" ? <View style={styles.loading}><ActivityIndicator color={palette.active} /><Text style={styles.loadingText}>Loading subscriptions…</Text></View> : feedback ? null : <View style={styles.loading}><Text style={styles.emptyTitle}>{query.trim() ? "No matching subscriptions." : "No subscriptions found."}</Text><Text style={styles.emptyBody}>{query.trim() ? "Search covers loaded subscriptions. Clear the search or load more below." : "You can still add a source using a link or @handle."}</Text></View>}
       ListFooterComponent={(
         <View style={styles.footer}>
           {nextPageToken ? <Pressable onPress={() => { void loadPage(nextPageToken); }} disabled={loadState !== "idle"} style={styles.loadMore} accessibilityRole="button" testID="google-import-load-more">{loadState === "loadingMore" ? <ActivityIndicator size="small" color={palette.active} /> : <ChevronDown size={17} color={palette.active} />}<Text style={styles.loadMoreText}>Load 50 more</Text></Pressable> : subscriptions.length > 0 ? <Text style={styles.endText}>{totalResults && totalResults > subscriptions.length ? `${subscriptions.length} shown` : "End of subscriptions"}</Text> : null}

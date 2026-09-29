@@ -276,28 +276,28 @@ export default function WatchScreen() {
     allowanceEndingRef.current = false;
     if (activeProfile?.role === "managed" && (managedOverviewQuery.isLoading || locallyStoredVideo.isLoading)) return () => { mounted = false; };
     if (activeProfile?.role === "managed" && managedOverviewQuery.isError) {
-      setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Managed content access could not be verified. Ask the Owner to review it." });
+      setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Frame couldn’t check this profile’s content approvals. Ask the Owner to review them in Settings." });
       void getPlaybackAllowance().then((allowance) => { if (mounted) applyAllowanceStatus(allowance); }).catch(() => {
-        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." });
       });
     } else if (needsManagedSourceVerification && !accessVideo) {
       if (metadataQuery.isError || metadataQuery.data?.status && metadataQuery.data.status !== "success") {
-        setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Frame could not verify this video's source. Return and try again when verification is available." });
+        setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Frame couldn’t check this video’s source. Go back and try opening the video again." });
       }
       void getPlaybackAllowance().then((allowance) => { if (mounted) applyAllowanceStatus(allowance); }).catch(() => {
-        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." });
       });
     } else if (!accessVideo) {
       setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "This video needs Owner review before playback can continue." });
-      setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+      setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." });
     } else {
       void Promise.all([getManagedContentAccess(accessVideo), getPlaybackAllowance()]).then(([access, allowance]) => {
         if (!mounted) return;
         setContentAccessStatus(access);
         applyAllowanceStatus(allowance);
       }).catch(() => {
-        if (mounted) setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Managed content access needs Owner review before playback can continue." });
-        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." });
+        if (mounted) setContentAccessStatus({ kind: "ownerReview", canPlay: false, reason: "Ask the Owner to review this profile’s content approvals in Settings before continuing." });
+        if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." });
       });
     }
     return () => { mounted = false; void stopAllowancePlayback(); };
@@ -361,7 +361,7 @@ export default function WatchScreen() {
   const failClosedAllowance = useCallback((): void => {
     playerRef.current?.pause();
     setPlaybackState("paused");
-    setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time couldn’t be saved safely. Ask the Owner to review it before continuing." });
+    setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Frame couldn’t save your viewing time. Ask the Owner to review this profile’s daily viewing allowance before continuing." });
     void persist();
   }, [persist]);
 
@@ -628,7 +628,7 @@ export default function WatchScreen() {
       });
     } catch {
       navigationLockedRef.current = false;
-      Alert.alert("Couldn’t continue", "Your next video is still in the Session. Open it from Saved when you’re ready.");
+      Alert.alert("Couldn’t continue", "Your next video is still in the session. Open it from Saved to continue.");
     }
   }, [activeProfileId, closePlayer, haptic, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition]);
 
@@ -646,7 +646,7 @@ export default function WatchScreen() {
       setPlaybackState("playing");
       playerRef.current?.seekTo(0);
       playerRef.current?.play();
-    } catch { Alert.alert("Couldn’t restart", "Your place is still saved in the Session."); }
+    } catch { Alert.alert("Couldn’t restart", "Your place in the session is saved."); }
     finally { setAction(null); }
   }, [beginAction, haptic, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
 
@@ -732,7 +732,7 @@ export default function WatchScreen() {
       <View style={[styles.unavailableScreen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
         <StatusBar style="dark" />
         <Text style={type.heading}>Video unavailable</Text>
-        <Text style={[type.bodySoft, styles.unavailableBody]}>This link is incomplete, the Session changed, or it belongs to another profile.</Text>
+        <Text style={[type.bodySoft, styles.unavailableBody]}>This video can’t be opened here. Go back and select it again.</Text>
         <Pressable onPress={closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={[type.label, { color: palette.accent }]}>Go back</Text>
         </Pressable>
@@ -779,20 +779,20 @@ export default function WatchScreen() {
 
       {contentBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
-          <Text style={styles.endEyebrow}>Managed content access</Text>
+          <Text style={styles.endEyebrow}>Content approval</Text>
           <Text style={styles.endTitle}>{contentAccessStatus.kind === "ownerReview" ? "Owner review needed." : contentAccessStatus.kind === "videoApprovalRequired" ? "This video needs approval." : "This source needs approval."}</Text>
           <Text style={styles.allowanceBody}>{contentAccessStatus.reason}</Text>
           <View style={styles.stateActions}>
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Request</Text></Pressable> : null}
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Owner approve</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Request approval</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></Pressable> : null}
           </View>
           <Pressable onPress={goToToday} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Today</Text></Pressable>
         </View>
       ) : allowanceBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
-          <Text style={styles.endEyebrow}>{allowanceStatus.kind === "restricted" ? "Managed playback controls" : "Daily viewing allowance"}</Text>
+          <Text style={styles.endEyebrow}>{allowanceStatus.kind === "restricted" ? "Viewing schedule" : "Daily viewing allowance"}</Text>
           <Text style={styles.endTitle}>{allowanceStatus.kind === "ownerReview" ? "Owner review needed." : allowanceStatus.kind === "restricted" ? "Playback isn’t available now." : "Today’s viewing is complete."}</Text>
-          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" || allowanceStatus.kind === "restricted" ? allowanceStatus.reason : "Your Frame playback place is saved. Settings and the rest of Frame remain available."}</Text>
+          <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" || allowanceStatus.kind === "restricted" ? allowanceStatus.reason : "Your place is saved. You can still browse Frame and manage your settings."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={goToToday} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Today</Text></Pressable>
             <Pressable onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></Pressable>
@@ -827,7 +827,7 @@ export default function WatchScreen() {
             </Pressable>
             <Pressable onPress={openInYouTube} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="link" testID="open-youtube">
               <ExternalLink size={15} color={palette.wall} />
-              <Text style={styles.darkButtonText}>YouTube</Text>
+              <Text style={styles.darkButtonText}>Open in YouTube</Text>
             </Pressable>
           </View>
           {isSession ? (
@@ -844,8 +844,8 @@ export default function WatchScreen() {
           <Text style={styles.endEyebrow}>
             {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
           </Text>
-          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "One done. Pause here?" : "That’s it."}</Text>
-          <Text style={styles.allowanceBody}>{nextSessionId ? "The next video waits until you choose Continue." : "Nothing plays next. Stop here whenever you’re ready."}</Text>
+          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "A moment between videos." : "A good place to stop."}</Text>
+          <Text style={styles.allowanceBody}>{nextSessionId ? "Continue to the next video, or finish for now." : "You’ve reached the end. Nothing plays automatically."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={() => { void rewatch(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
               <RotateCcw size={15} color={palette.wall} />
@@ -978,11 +978,11 @@ export default function WatchScreen() {
             onPress={() => router.push({ pathname: "/channel/[id]", params: { id: video.channelId } })}
             style={({ pressed }) => [styles.channelLink, pressed && styles.pressed]}
             accessibilityRole="link"
-            accessibilityLabel={`View ${video.channelTitle || "video"} channel`}
+            accessibilityLabel={`View source: ${video.channelTitle || "YouTube channel"}`}
           >
-            <Text style={[type.caption, { color: watchPalette.inkSoft }]}>Channel</Text>
+            <Text style={[type.caption, { color: watchPalette.inkSoft }]}>Source</Text>
             <Text style={[type.heading, styles.channelTitle, { marginTop: spacing.xs }]}>{video.channelTitle}</Text>
-            <Text style={[type.caption, styles.channelLinkLabel]}>View channel →</Text>
+            <Text style={[type.caption, styles.channelLinkLabel]}>View source →</Text>
           </Pressable>
         ) : null}
       </ScrollView>

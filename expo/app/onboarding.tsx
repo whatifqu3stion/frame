@@ -63,7 +63,7 @@ export default function Onboarding() {
       <View style={[styles.bottomRow, { paddingBottom: insets.bottom + spacing.md }]}>
         {step > 0 ? <Pressable onPress={() => goTo(step - 1)} style={styles.backButton} accessibilityRole="button"><Text style={styles.mutedCaption}>Back</Text></Pressable> : <View style={styles.backButton} />}
         <Pressable onPress={() => { if (step === LAST_STEP) void finish(); else goTo(step + 1); }} disabled={finishing} accessibilityState={{ busy: finishing, disabled: finishing }} style={styles.nextButton} accessibilityRole="button" testID="onboarding-next">
-          <Text style={styles.nextText}>{finishing ? "Opening…" : step === LAST_STEP ? "Enter Today" : "Continue"}</Text>
+          <Text style={styles.nextText}>{finishing ? "Opening…" : step === LAST_STEP ? "Open Today" : "Continue"}</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -77,12 +77,12 @@ function ApproachStep({ stepWidth }: { stepWidth: number }) {
     <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>Frame</Text>
       <View style={styles.frameSymbol}><View style={styles.frameOuter} /></View>
-      <Text style={styles.bigTitle}>A finite inbox.{"\n"}Then, stop.</Text>
-      <Text style={styles.bigBody}>Frame gathers a small set from sources you trust. Nothing autoplays, nothing scrolls forever, and nothing invents a reason to stay.</Text>
+      <Text style={styles.bigTitle}>Watch with{"\n"}intention.</Text>
+      <Text style={styles.bigBody}>A small selection of videos from sources you choose. Watch what interests you, with a clear place to stop.</Text>
       <View style={styles.principles}>
-        <Text style={styles.principle}>01 · You choose the sources.</Text>
-        <Text style={styles.principle}>02 · Today has a visible end.</Text>
-        <Text style={styles.principle}>03 · Playback stays intentional.</Text>
+        <Text style={styles.principle}>You choose the sources.</Text>
+        <Text style={styles.principle}>Today’s selection has an end.</Text>
+        <Text style={styles.principle}>You decide what plays next.</Text>
       </View>
     </ScrollView>
   );
@@ -95,7 +95,7 @@ function InterestsStep({ stepWidth, selectedIds, onToggle }: { stepWidth: number
     <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>Choose up to 5.</Text>
       <Text style={styles.stepTitle}>What matters{"\n"}to you?</Text>
-      <Text style={styles.stepBody}>Interests shape occasional source suggestions. Choose none or up to five, and change them later in Settings.</Text>
+      <Text style={styles.stepBody}>Choose up to five interests for source suggestions. This is optional, and you can change them in Settings.</Text>
       <Text style={styles.selectionStatus} accessibilityLiveRegion="polite">
         {selectedIds.length === 0 ? "Optional · none selected" : `${selectedIds.length} of ${ONBOARDING_INTEREST_MAX} selected`}
       </Text>
@@ -143,7 +143,7 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
     setBusy(false);
     if (result.status === "success") {
       setResolution(result.data);
-      setFeedback({ ok: true, message: "Source verified. Confirm to follow it for this profile." });
+      setFeedback({ ok: true, message: "Source found. Choose Follow source to add it to this profile." });
     } else {
       setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
     }
@@ -167,26 +167,26 @@ function SourceStep({ stepWidth }: { stepWidth: number }) {
     <ScrollView style={[styles.step, { width: stepWidth }]} contentContainerStyle={styles.sourceContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>One trusted source</Text>
       <Text style={styles.stepTitle}>Start with{"\n"}someone you trust.</Text>
-      <Text style={styles.stepBody}>Paste a channel ID, @handle, channel URL, or individual YouTube video. You can skip this and add a source later.</Text>
+      <Text style={styles.stepBody}>Paste a YouTube channel or video link, an @handle, or a channel ID. You can also add a source later.</Text>
       <Text style={[type.label, { marginTop: spacing.md }]}>Source link or @handle</Text>
       <View style={styles.inputRow}>
         <Link2 size={17} color={palette.inkMuted} strokeWidth={1.7} />
-        <TextInput editable={!busy} value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Trusted source link" testID="onboard-source-link" />
+        <TextInput editable={!busy} value={link} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="youtube.com/@source" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} returnKeyType="done" onSubmitEditing={() => { void resolveSource(); }} accessibilityLabel="Source link or @handle" testID="onboard-source-link" />
       </View>
       {resolution ? (
         <View style={styles.sourcePreview} testID="onboard-source-preview">
           <Text style={styles.noticeTitle}>{resolution.source.displayName}</Text>
-          <Text style={styles.noticeBody}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>
+          <Text style={styles.noticeBody}>{resolution.source.handle ?? "YouTube channel"}</Text>
           {resolution.video ? <Text style={styles.noticeBody}>From video: {resolution.video.title}</Text> : null}
         </View>
       ) : null}
       <Pressable onPress={() => { if (resolution) void followSource(); else void resolveSource(); }} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} disabled={busy || (!resolution && !link.trim())} accessibilityRole="button" testID={resolution ? "onboard-confirm-source" : "onboard-resolve-source"}>
-        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>{resolution ? "Follow source" : "Verify source"}</Text>}
+        {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.addButtonText}>{resolution ? "Follow source" : "Find source"}</Text>}
       </Pressable>
       {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
       <View style={styles.googleNotice} accessible>
         <Text style={styles.noticeTitle}>{googleConnected ? "Google connected" : "No Google sign-in needed"}</Text>
-        <Text style={styles.noticeBody}>Manual source setup works on its own. Frame never follows Google subscriptions automatically.</Text>
+        <Text style={styles.noticeBody}>You can follow sources without connecting Google.</Text>
       </View>
     </ScrollView>
   );
@@ -199,9 +199,9 @@ function EnterTodayStep({ stepWidth }: { stepWidth: number }) {
   return (
     <ScrollView style={{ flex: 1, width: stepWidth }} contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.accentCaption}>You’re ready</Text>
-      <Text style={styles.bigTitle}>Enter Today.{"\n"}Leave whole.</Text>
-      <Text style={styles.bigBody}>{followedChannels.length > 0 ? "Your sources are saved. Open Today to see what’s available, and return to Sources whenever you want to add more." : "Open Sources to follow someone you trust. Today will show a small selection from the sources you choose."}</Text>
-      <View style={styles.endMark}><View style={styles.endLine} /><Text style={styles.endLabel}>A REAL END</Text><View style={styles.endLine} /></View>
+      <Text style={styles.bigTitle}>Make room for{"\n"}what interests you.</Text>
+      <Text style={styles.bigBody}>{followedChannels.length > 0 ? "Your sources are saved. Explore today’s selection, or add more in Sources." : "Follow a source to begin. Today will bring together a small selection of its videos."}</Text>
+      <View style={styles.endMark}><View style={styles.endLine} /><Text style={styles.endLabel}>At your pace.</Text><View style={styles.endLine} /></View>
     </ScrollView>
   );
 }

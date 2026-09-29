@@ -51,7 +51,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
       if (requestId.current !== request || profileRef.current !== expectedProfile) return;
       if (result.status === "success") {
         setResolutionProfileId(expectedProfile); setResolution(result.data);
-        setFeedback({ ok: true, message: "Source found. Check the details, then choose Follow." });
+        setFeedback({ ok: true, message: "Source found. Check the details, then choose Follow source." });
       } else setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
     } catch { if (requestId.current === request) setFeedback({ ok: false, message: "Couldn’t check this source. Check your connection and try again." }); }
     finally { if (requestId.current === request) { locked.current = false; setBusy(false); } }
@@ -107,13 +107,13 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     <Sheet visible={visible} onClose={close}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
-            <Text style={styles.eyebrow}>Add a trusted source</Text>
+            <Text style={styles.eyebrow}>Add a source</Text>
             <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Paste a link.</Text>
-          <Text style={styles.body}>Use a channel ID, @handle, channel URL, or individual YouTube video. Choose Follow after checking the source.</Text>
+          <Text style={styles.heading}>Find a YouTube source</Text>
+          <Text style={styles.body}>Use a channel or video link, an @handle, or a channel ID. Check the result before following.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>YouTube source or video link</Text>
           <View style={styles.inputRow}>
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
@@ -140,7 +140,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               <Image source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
               <View style={styles.previewCopy}>
                 <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
-                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>
+                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "YouTube channel"}</Text>
                 {resolution.video ? <Text style={styles.videoTitle} numberOfLines={2}>Video · {resolution.video.title}</Text> : null}
               </View>
             </View>
@@ -165,7 +165,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             </Pressable>
           ) : (
             <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
-              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Verify source</Text>}
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Find source</Text>}
             </Pressable>
           )}
     </Sheet>

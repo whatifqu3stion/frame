@@ -52,7 +52,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
         onLoadStart={() => setIsThumbnailLoading(true)}
         onLoad={() => setIsThumbnailLoading(false)}
         onError={() => setIsThumbnailLoading(false)}
-      /> : <Text style={type.caption}>Details expired · link kept</Text>}
+      /> : <Text style={type.caption}>Details unavailable · link saved</Text>}
       {video.thumbnailUrl && isThumbnailLoading ? <ThumbnailSkeleton /> : null}
       {!isThumbnailLoading && video.durationSeconds > 0 ? <View style={styles.durationBadge}><Text style={styles.durationText}>{formatDuration(video.durationSeconds)}</Text></View> : null}
       {!isThumbnailLoading && progressFraction > 0 ? <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progressFraction * 100)} percent watched`}><View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} /></View> : null}

@@ -61,3 +61,12 @@ Expanded color tests exercise six tonal backgrounds, all three accents, inverse 
 ## Restrained grain follow-up
 
 The user approved fine static grain after the initial material pass. `ProgrammeGrain` now sits behind content on the current-session card and session detail header only. It uses local density-aware PNG tiles with capped alpha and separately tuned light/dark opacity. The reproducible generator and embedded origin metadata accompany the original assets. Text, control fills, imagery and main backgrounds stay clear. No motion, touch target or playback behavior changed. Contrast tests also check the brightest possible grain pixel behind programme text; final strength and tiling still require the real-device visual check.
+
+
+## Copy refinement — September 29, 2026
+
+Reviewed the main onboarding, Today, Sources, Saved, session-building, playback, importing, and profile-control paths in source. Replaced internal terminology and repeated product-manifesto copy with plain language and restrained brand expression. Action labels now describe their outcome; surfaced player and approval errors include clearer recovery. Retained the existing profile-role vocabulary, legal text, purchase terms, content supplied by creators, and destructive-action consequences.
+
+Session duration text distinguishes partial totals from complete totals, and the existing tomorrow pause action now names its actual 7 am end time. No playback, authorization, persistence, pricing, layout, or motion behavior changed. Voice and terminology guidance is recorded in DESIGN.md.
+
+Verification: TypeScript and lint checks; existing behavior test suite. Native runtime access remains unavailable, so phone/tablet wrapping, enlarged text, and screen-reader pronunciation still need real-device confirmation. This is a source copy review, not visual sign-off.

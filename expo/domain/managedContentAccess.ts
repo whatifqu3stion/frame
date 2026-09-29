@@ -22,19 +22,19 @@ export function evaluateManagedContentAccess(
 ): ManagedContentAccessStatus {
   if (profile.role !== "managed") return { kind: "allowed", canPlay: true };
   if (policy.profileId !== profile.id) {
-    return { kind: "ownerReview", canPlay: false, reason: "Managed content settings need Owner review." };
+    return { kind: "ownerReview", canPlay: false, reason: "Ask the Owner to review this profile’s content approvals in Settings." };
   }
   if (policy.mode === "selectedVideos") {
     return approvedVideoIds.has(video.id)
       ? { kind: "allowed", canPlay: true }
-      : { kind: "videoApprovalRequired", canPlay: false, reason: "This video has not been selected for this Managed profile." };
+      : { kind: "videoApprovalRequired", canPlay: false, reason: "Ask the Owner to approve this video for your profile." };
   }
   if (!video.channelId) {
     return { kind: "sourceApprovalRequired", canPlay: false, reason: "Frame cannot verify this video's source. Ask the Owner to review it." };
   }
   return approvedSourceIds.has(video.channelId)
     ? { kind: "allowed", canPlay: true }
-    : { kind: "sourceApprovalRequired", canPlay: false, reason: "This source has not been approved for this Managed profile." };
+    : { kind: "sourceApprovalRequired", canPlay: false, reason: "Ask the Owner to approve this source for your profile." };
 }
 
 export function buildManagedApprovalRequest(
@@ -66,3 +66,4 @@ export function validateManagedApprovalRequest(request: ManagedApprovalRequest):
   if (request.kind === "video" && !/^[A-Za-z0-9_-]{11}$/.test(request.targetId)) return "That video identifier is invalid.";
   return null;
 }
+

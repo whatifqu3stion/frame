@@ -66,13 +66,13 @@ export default function SavedScreen() {
       windowSize={7}
       ListHeaderComponent={(
       <View style={styles.page}>
-        <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Your viewing plan, saved videos, and where you left off." />
+        <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Saved videos, sessions, and a place to pick up again." />
 
-        <SectionTitle label="Current Session" styles={styles} />
+        <SectionTitle label="Current session" styles={styles} />
         {draft ? (
-          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your unfinished Session draft" testID="session-draft-card">
+          <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your session draft" testID="session-draft-card">
             <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
-            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Unfinished plan"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
+            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Untitled session"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
             <ArrowRight size={17} color={palette.inkMuted} />
           </Pressable>
         ) : null}
@@ -99,9 +99,9 @@ export default function SavedScreen() {
           </Pressable>
         )) : null}
 
-        <SectionTitle label="Continue Watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
+        <SectionTitle label="Continue watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
         {libraryLoading ? <VideoFeedSkeleton count={2} accessibilityLabel="Loading continue watching" /> : continueWatching.length === 0 ? (
-          <Text style={type.bodySoft}>Videos you pause will wait here.</Text>
+          <Text style={type.bodySoft}>Videos you’ve started appear here.</Text>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
             {continueWatching.map((item) => <VideoCard key={item.video.id} video={item.video} variant="compact" progressSeconds={item.progressSeconds} />)}
@@ -151,7 +151,7 @@ export default function SavedScreen() {
         ) : null}
       </View>
       )}
-      ListEmptyComponent={<View style={styles.page}>{libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? <EmptyState compact title="Nothing saved" body="Save a video from Today or while watching to find it here." action={{ label: "Open Today", onPress: () => router.push("/(tabs)") }} /> : <EmptyState compact title="No matches here" body={hasActiveFilter ? "Try another title, source, or viewing status. Your saved videos are unchanged." : "Your saved videos are still here."} />}</View>}
+      ListEmptyComponent={<View style={styles.page}>{libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? <EmptyState compact title="No saved videos yet" body="Save a video from Today or while watching to find it here." action={{ label: "Open Today", onPress: () => router.push("/(tabs)") }} /> : <EmptyState compact title="No matching videos" body={hasActiveFilter ? "Try another title, source, or filter." : "Your saved videos are still here."} />}</View>}
     />
   );
 }

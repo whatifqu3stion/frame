@@ -94,7 +94,7 @@ export function reconcileManagedAllowanceRecord(
   now: number,
 ): { ok: true; record: ManagedAllowanceRecord; didRollover: boolean } | { ok: false; reason: string } {
   if (!parseManagedAllowance(record) || !hasValidRollover(record) || !Number.isFinite(now)) {
-    return { ok: false, reason: "Daily Frame time needs Owner review before playback can continue." };
+    return { ok: false, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." };
   }
   const currentDay = getLocalDay(now);
   const isForwardClock = now >= record.lastSeenAt;
@@ -127,9 +127,9 @@ export function reconcileManagedAllowanceRecord(
 
 export function statusForProfile(profile: Profile, record: ManagedAllowanceRecord | null): DailyAllowanceStatus {
   if (profile.role !== "managed") return { kind: "unlimited", canPlay: true };
-  if (!record) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." };
+  if (!record) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." };
   const allowance = parseManagedAllowance(record);
-  if (!allowance) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Daily Frame time needs Owner review before playback can continue." };
+  if (!allowance) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." };
   if (allowance.mode === "unlimited") return { kind: "unlimited", canPlay: true };
   const totalSeconds = allowance.minutes * 60 + record.addedSeconds;
   const remainingSeconds = Math.max(0, totalSeconds - record.consumedSeconds);
@@ -171,3 +171,4 @@ export function updateRecurringAllowance(
     updatedAt: now,
   };
 }
+

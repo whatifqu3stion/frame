@@ -61,7 +61,7 @@ export default function SessionBuilder() {
   const filteredPool = useMemo(() => pool.filter((video) => `${video.title} ${video.channelTitle}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [pool, search]);
 
   const runtime = useMemo(() => sessionRuntime(selected, pool), [pool, selected]);
-  const durationSummary = `${runtime.seconds > 0 ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}${runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}`;
+  const durationSummary = `${runtime.seconds > 0 ? `${runtime.unknown ? "At least " : ""}${formatDuration(runtime.seconds)}` : "Duration unavailable"}${runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}`;
   const finishTime = runtime.unknown === 0 && runtime.seconds > 0 ? new Date(Date.now() + runtime.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
 
   const move = useCallback((index: number, direction: -1 | 1): void => {
@@ -87,7 +87,7 @@ export default function SessionBuilder() {
   const persistSession = useCallback(async (): Promise<string | null> => {
     if (!requirePurchase("sessions")) return null;
     if (!name.trim()) {
-      Alert.alert("Name this session", "Give this small plan a name you’ll recognize later.");
+      Alert.alert("Name this session", "Choose a name you’ll recognize later.");
       return null;
     }
     if (selected.length === 0) {
@@ -132,13 +132,13 @@ export default function SessionBuilder() {
   }, [activeProfileId, persistSession, selected]);
 
   if (hydratedProfile !== activeProfileId || (id && !existingSession)) {
-    return <View style={styles.screen}><EmptyState title={id && !existingSession ? "Session unavailable" : "Opening your draft"} body={id && !existingSession ? "It may have been removed from this profile." : "Finding your place on this device."} /></View>;
+    return <View style={styles.screen}><EmptyState title={id && !existingSession ? "Session unavailable" : "Opening your draft"} body={id && !existingSession ? "It may have been removed from this profile." : "Loading your saved draft."} /></View>;
   }
 
   const header = (
     <View style={styles.header}>
       <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
-      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos. Your draft stays on this device. Only you decide when to continue.</Text>
+      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. Your draft is saved on this device.</Text>
       <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
       <TextInput
         editable={!isSaving}
@@ -153,7 +153,7 @@ export default function SessionBuilder() {
       />
       {selected.length ? (
         <View style={styles.tray}>
-          <Text style={styles.trayLabel}>YOUR SHORT PLAN · {selected.length}/{PRODUCT_LIMITS.sessionDraftMaxItems}</Text>
+          <Text style={styles.trayLabel}>Video order · {selected.length}/{PRODUCT_LIMITS.sessionDraftMaxItems}</Text>
           {selected.map((videoId, index) => {
             const video = pool.find((candidate) => candidate.id === videoId);
             return <View key={videoId} style={styles.trayRow}>
@@ -164,7 +164,7 @@ export default function SessionBuilder() {
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
             </View>;
           })}
-          <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Finish around ${finishTime}` : " · Finish time unavailable"}</Text>
+          <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Ends around ${finishTime} without breaks` : " · Finish time unavailable"}</Text>
         </View>
       ) : null}
       <Text style={styles.pickLabel}>Choose videos</Text>

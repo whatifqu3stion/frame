@@ -140,7 +140,7 @@ export default function SourcesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.page}>
-          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle={activeProfile?.role === "managed" ? "Content follows the access choices set by the Owner." : "Follow trusted sources directly, or review three optional picks each week."} />
+          <ScreenHeader eyebrow="Sources" title={"People you\nchoose."} subtitle={activeProfile?.role === "managed" ? "Videos and sources need the Owner’s approval." : "Follow YouTube channels you enjoy, or explore this week’s picks."} />
           {FOUNDATION_CAPABILITIES.weeklyDiscovery && activeProfile?.role !== "managed" ? <View style={styles.segmented} accessibilityRole="tablist">
             {(["followed", "discover"] as const).map((item) => {
               const selected = section === item;
@@ -164,26 +164,26 @@ export default function SourcesScreen() {
               <Pressable onPress={openAddSource} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-add-source">
                 <View style={styles.addIcon}><Plus size={17} color={palette.active} strokeWidth={2} /></View>
                 <View style={styles.flex}>
-                  <Text style={type.label}>Add a trusted source</Text>
-                  <Text style={styles.supporting}>Paste a supported channel, handle, or video link.</Text>
+                  <Text style={type.label}>Add a source</Text>
+                  <Text style={styles.supporting}>Use a YouTube link or @handle.</Text>
                 </View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable>
 
               {googleConfigured && managedOverview?.policy.mode !== "selectedVideos" ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
                 <View style={styles.importIcon}>{googleBusy ? <ActivityIndicator size="small" color={palette.active} /> : <Import size={17} color={palette.active} strokeWidth={1.8} />}</View>
-                <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose Google subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Select sources yourself. Nothing is followed automatically.</Text></View>
+                <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose YouTube subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Choose which YouTube subscriptions to follow in Frame.</Text></View>
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable> : null}
 
               {libraryLoading || managedContentQuery.isLoading ? (
                 <VideoFeedSkeleton variant="source" count={3} accessibilityLabel="Loading followed sources" />
               ) : sourcesError ? (
-                <EmptyState title="Sources couldn't load" body="Your saved source data was not changed. Close and reopen Frame to try again." />
+                <EmptyState title="Sources couldn't load" body="Your sources are saved. Close and reopen Frame to try again." />
               ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
                 <EmptyState title="Selected Videos is on" body="Only individual videos approved by the Owner can play. Paste a video link to request one." />
               ) : visibleChannels.length === 0 ? (
-                <EmptyState title={activeProfile?.role === "managed" ? "No approved sources" : "No followed sources"} body={activeProfile?.role === "managed" ? "An Owner can add a source here or approve a request from Profiles & boundaries." : "Add one trusted source manually. Nothing is imported or followed automatically."} />
+                <EmptyState title={activeProfile?.role === "managed" ? "No approved sources" : "No followed sources"} body={activeProfile?.role === "managed" ? "An Owner can add a source here or approve a request from Profiles & boundaries." : "Add a YouTube channel to see its videos in Today."} />
               ) : (
                 <View style={styles.sourceList}>
                   {visibleChannels.map((channel) => (
@@ -200,7 +200,7 @@ export default function SourcesScreen() {
                       </View>
                       <View style={styles.flex}>
                         <Text style={styles.sourceName} numberOfLines={2}>{channel.title}</Text>
-                        <Text style={styles.supporting}>{channel.fetchedAt ? "Open recent videos" : `Follow kept · ${channel.id}`}</Text>
+                        <Text style={styles.supporting}>{channel.fetchedAt ? "Open recent videos" : "Still followed · details unavailable"}</Text>
                       </View>
                       <ArrowRight size={17} color={palette.inkMuted} />
                     </Pressable>
@@ -212,7 +212,7 @@ export default function SourcesScreen() {
             <View style={styles.section}>
               <View style={styles.weeklyHeader}>
                 <Text style={type.caption}>Weekly picks</Text>
-                <Text style={styles.limitLabel}>FINITE · WEEKLY</Text>
+                <Text style={styles.limitLabel}>A few at a time</Text>
               </View>
               {discoverQuery.data?.reason === "no_interests" ? (
                 <View>
@@ -240,8 +240,8 @@ export default function SourcesScreen() {
                 </View>
               ) : discoverQuery.data && (discoverQuery.data.items.length > 0 || discoverQuery.data.canShowMore) ? (
                 <View style={styles.weeklyList}>
-                  {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing the saved weekly edition.</Text> : null}
-                  {discoverQuery.data.items.length === 0 ? <EmptyState title="You've seen these picks" body="There are more sources in this week's fixed pool if you want one." /> : null}
+                  {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing previously loaded picks.</Text> : null}
+                  {discoverQuery.data.items.length === 0 ? <EmptyState title="You've seen these picks" body="Explore more from this week’s selection below." /> : null}
                   {discoverQuery.data.items.map((suggestion) => (
                     <WeeklyPickCard
                       key={`${suggestion.provider}:${suggestion.providerSourceId}`}
@@ -267,14 +267,14 @@ export default function SourcesScreen() {
                   ) : null}
                 </View>
               ) : (
-                <EmptyState title="You're caught up" body="There are no more picks in your weekly edition. Your followed sources are still available." />
+                <EmptyState title="You're caught up" body="You’ve reached the end of this week’s selection. You can still browse sources you follow." />
               )}
               <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />
                 <Text style={styles.endText}>End of weekly picks</Text>
                 <View style={styles.endLine} />
               </View>
-              <Text style={styles.discoverNote}>Frame shows no more than {WEEKLY_DISCOVERY_DISPLAY_MAX} shared suggestions. Next edition: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
+              <Text style={styles.discoverNote}>Up to {WEEKLY_DISCOVERY_DISPLAY_MAX} picks at a time. Next selection: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
             </View>
           )}
         </View>

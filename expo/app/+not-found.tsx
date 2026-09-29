@@ -12,12 +12,12 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ title: "" }} />
       <View style={styles.container}>
         <Text style={type.caption}>404</Text>
-        <Text style={[type.title, { marginTop: spacing.sm }]}>Empty frame.</Text>
+        <Text style={[type.title, { marginTop: spacing.sm }]}>Page not found</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 280 }]}>
-          The page you were looking for is not here.
+          This page isn’t available. Return to Today to continue.
         </Text>
         <Link href="/" asChild><Pressable style={styles.link} accessibilityRole="button">
-          <Text style={[type.caption, { color: palette.accent }]}>← Back home</Text>
+          <Text style={[type.caption, { color: palette.accent }]}>Back to Today</Text>
         </Pressable></Link>
       </View>
     </>

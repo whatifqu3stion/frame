@@ -61,8 +61,8 @@ export default function OwnerPinModal() {
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Owner access.</Text>
-          <Text style={styles.body}>Enter the household PIN to continue. This is a boundary inside Frame, not device-wide protection.</Text>
+          <Text style={styles.heading}>Owner access</Text>
+          <Text style={styles.body}>Enter the Owner PIN to continue. It protects settings in Frame only.</Text>
           <TextInput
             value={pin}
             onChangeText={(value) => setPin(value.replace(/\D/g, "").slice(0, 6))}
@@ -93,7 +93,7 @@ export default function OwnerPinModal() {
           <Pressable disabled={busy} onPress={() => { setPin(""); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
             <Text style={styles.forgotText}>Forgot PIN?</Text>
           </Pressable>
-          <Text style={styles.recovery}>PIN recovery erases all local Frame data. Review the details under Forgot PIN.</Text>
+          <Text style={styles.recovery}>Forgotten PINs can only be reset by erasing Frame’s data on this device.</Text>
     </Sheet>
     <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} forgottenPinRecovery />
     </>

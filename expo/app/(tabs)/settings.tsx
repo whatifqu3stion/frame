@@ -65,7 +65,7 @@ export default function SettingsScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><ScreenHeader eyebrow="Settings" title={"Frame\nsettings."} /></View>
 
-      <Section label="Profile" hint="Each local profile keeps its own sources, library, progress, interests, and appearance.">
+      <Section label="Profile" hint="Each profile has its own sources, saved videos, sessions, and preferences on this device.">
         <View style={styles.profileCard} accessible accessibilityLabel={`${activeProfile?.name ?? "Owner"} profile`}>
           <View style={styles.profileAvatar}><UserCircle2 size={25} color={palette.active} strokeWidth={1.6} /></View>
           <View style={styles.flex}><Text style={styles.profileName}>{activeProfile?.name ?? "Owner"}</Text><Text style={styles.supporting}>{activeProfile?.role === "owner" ? "Owner" : activeProfile?.role === "managed" ? "Managed" : "Standard"} · {profiles.length} local {profiles.length === 1 ? "profile" : "profiles"}</Text></View>
@@ -76,7 +76,7 @@ export default function SettingsScreen() {
         {googleConnected ? (
           <View style={styles.accountBlock}>
             <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google connected"}</Text>
-            <Text style={styles.supporting}>Connected for optional import. Nothing is followed automatically.</Text>
+            <Text style={styles.supporting}>Choose which YouTube subscriptions to follow in Frame.</Text>
             <Pressable onPress={() => router.push("/google-import")} style={styles.inlineAction} accessibilityRole="button" testID="settings-google-import">
               <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
             </Pressable>
@@ -89,10 +89,10 @@ export default function SettingsScreen() {
           <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" testID="connect-google">
             {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
           </Pressable>
-        ) : <Text style={styles.infoText}>Google connection is unavailable in this build. Manual source setup remains available.</Text>}
+        ) : <Text style={styles.infoText}>Google connection isn’t available in this version. You can still add sources with a link or @handle.</Text>}
       </Section>
 
-      <Section label={`Interests · ${interests.length} of ${ONBOARDING_INTEREST_MAX}`} hint="Optional choices shape occasional source suggestions. Select up to five; changing them never starts a search.">
+      <Section label={`Interests · ${interests.length} of ${ONBOARDING_INTEREST_MAX}`} hint="Choose up to five interests for weekly source suggestions. This is optional.">
         <View style={styles.chipGrid} accessibilityRole="list">
           {INTEREST_LIBRARY.map((interest) => {
             const selectedIds = interests.map((item) => item.id);
@@ -107,7 +107,7 @@ export default function SettingsScreen() {
         </View>
       </Section>
 
-      <Section label="Appearance" hint="The video room stays dark and focused.">
+      <Section label="Appearance" hint="The video player always uses a dark background.">
         <View style={styles.choiceRow} accessibilityRole="radiogroup">
           <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { void setTheme("warm"); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
           <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { void setTheme("ink"); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
@@ -129,7 +129,7 @@ export default function SettingsScreen() {
       <Section label="Focus and boundaries">
         <View style={styles.infoCard} accessible>
           <Lock size={18} color={palette.active} strokeWidth={1.7} />
-          <View style={styles.flex}><Text style={type.label}>A genuine stopping point</Text><Text style={styles.supporting}>Frame does not autoplay or choose an algorithmic next video. Today and Sessions end visibly.</Text></View>
+          <View style={styles.flex}><Text style={type.label}>A clear place to stop</Text><Text style={styles.supporting}>Today offers a limited selection. In a session, you choose when to play the next video.</Text></View>
         </View>
       </Section>
 
@@ -148,14 +148,14 @@ export default function SettingsScreen() {
         ) : null}
       </Section> : null}
 
-      <Section label="Privacy and data" hint="Your local data remains under your control.">
-        <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Saved videos, interests, sources, Sessions, and progress stay on this device.</Text></View></View>
+      <Section label="Privacy and data" hint="Manage what Frame keeps on this device.">
+        <View style={styles.infoCard}><Shield size={18} color={palette.active} /><View style={styles.flex}><Text style={type.label}>Private by design</Text><Text style={styles.supporting}>Your library and preferences are stored on this device.</Text></View></View>
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
         <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
         <Pressable onPress={() => { void onWipe(); }} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, playback and content boundary, usage record, request, and library item.</Text></View></Pressable>
       </Section>
 
-      <Section label="About"><Text style={styles.infoText}>Frame is an intentional YouTube viewer: a finite inbox from trusted sources, followed by intentional viewing and a genuine stopping point.</Text><Text style={styles.version}>Version 1.0</Text></Section>
+      <Section label="About"><Text style={styles.infoText}>Frame brings together the YouTube sources you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
       {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
       <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />

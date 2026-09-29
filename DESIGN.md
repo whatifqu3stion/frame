@@ -238,7 +238,7 @@ Use the observed radius scale above: restrained media corners, slightly softer c
 | `WeeklyPickCard` | Mounted featured media, source identity and explanatory copy. Follow changes to Followed with selected-tonal styling; separate dismiss action and polite success/error feedback. |
 | `SessionProgramme` | Deep umber with static grain, `lg` padding and `card` radius. Ordered two-digit rows with rules, current position, known remaining runtime and unknown-runtime disclosure. Entire programme is a labelled Open session button. |
 | Saved search and filters | Native `TextInput` with leading search icon and labelled clear action; surface fill and soft border. Pill radios expose checked state inside a named radio group; selected colors use active/activeSoft. No custom web focus or hover rules are implied. |
-| Session detail | Umber heading panel and pale Begin/Continue/Begin again action; separated edit/duplicate/delete controls and numbered ruled video list. Unavailable metadata and the explicit stop note remain visible. |
+| Session detail | Umber heading panel and pale Start session/Continue/Watch again action; separated edit/duplicate/delete controls and numbered ruled video list. Unavailable metadata and the explicit stop note remain visible. |
 | `Sheet` | Native modal, safe-area padding, keyboard avoidance and scrollable contents with modal accessibility. Uses `surfaceHigh`, `lg` padding and existing soft shadow. |
 | Tab navigation | Today, Sources, Saved and Settings retain labels and native tab semantics; selected icon sits on activeSoft. SurfaceHigh bar, hairline top border and safe-area-aware bottom inset. Hidden legacy routes are not new tabs. |
 
@@ -259,3 +259,20 @@ Existing pressed opacity/scale feedback and reduced-motion-aware Sheet fade are 
 - Don't replace Libre Caslon Text or Hanken Grotesk, or collapse the six themes into one palette.
 - Don't substitute approximate HTML mockups for native implementation or introduce infinite viewing or autoplay.
 - Don't add or design new motion in this static refinement; motion belongs to the next phase.
+
+
+### Voice and terminology
+
+Frame sounds calm, clear, and interested in what the viewer enjoys. Use short, natural sentences and restrained warmth in welcome and completion moments. Everyday controls describe the action directly. Avoid internal vocabulary such as “finite inbox,” “fixed pool,” or “protected boundary,” and avoid moralizing about viewing or promising wellbeing.
+
+| Term | Use |
+| --- | --- |
+| Today | The tab and its daily selection of videos. Call the contents “today’s selection,” not an inbox. |
+| Source | A YouTube channel followed in Frame. Explain that connection when adding or importing one. |
+| Saved | The destination; “saved videos” for the items within it. |
+| Session | A short, ordered viewing plan. Use lowercase “session” in ordinary copy and sentence case in labels. |
+| Weekly picks | Optional source suggestions; “this week’s selection” in explanatory text. |
+| Owner / Standard / Managed | Existing profile roles. Preserve the role names and explain what their controls do. |
+| Owner PIN | The PIN protecting Frame’s controls. Do not call it device protection or a household password. |
+
+Use specific actions such as “Find source,” “Request approval,” “Open in YouTube,” and “Start session.” Error messages state what failed and the available recovery. Unknown durations remain explicitly unavailable; partial duration totals say “At least.” Finish estimates exclude breaks. Keep deletion, privacy, purchase, and restriction consequences explicit. Align accessibility names with the visible action.

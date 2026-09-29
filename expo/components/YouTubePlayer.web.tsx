@@ -70,12 +70,12 @@ function loadIframeApi(): Promise<YouTubeNamespace> {
     window.onYouTubeIframeAPIReady = (): void => {
       previousReady?.();
       if (window.YT?.Player) resolve(window.YT);
-      else reject(new Error("YouTube API loaded without a player constructor."));
+      else reject(new Error("YouTube couldn’t start the player. Try again."));
     };
 
     const existingScript = document.getElementById(API_SCRIPT_ID) as HTMLScriptElement | null;
     const script = existingScript ?? document.createElement("script");
-    const handleError = (): void => reject(new Error("YouTube API could not be loaded."));
+    const handleError = (): void => reject(new Error("YouTube couldn’t load the player. Check your connection and try again."));
     script.addEventListener("error", handleError, { once: true });
     if (!existingScript) {
       script.id = API_SCRIPT_ID;
@@ -97,7 +97,7 @@ function youtubeError(code?: number): YouTubePlayerError {
   if (code === 153) return { code, message: "YouTube could not verify this player. Please retry or open the video in YouTube." };
   if (code === 2) return { code, message: "This YouTube link is not valid." };
   if (code === 5) return { code, message: "This video could not play in this browser." };
-  return { code, message: "The player could not load this video." };
+  return { code, message: "The player couldn’t load this video. Try again or open it in YouTube." };
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
@@ -251,3 +251,4 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
 });
 
 export default YouTubePlayer;
+

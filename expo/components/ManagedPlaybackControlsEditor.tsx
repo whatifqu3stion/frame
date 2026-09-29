@@ -52,7 +52,7 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
       </View>
       <View style={styles.pauseActions}>
         <PauseButton label="1 hour" onPress={() => onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 })} styles={styles} />
-        <PauseButton label="Until tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); onChange({ ...value, pausedUntil: tomorrow.getTime() }); }} styles={styles} />
+        <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); onChange({ ...value, pausedUntil: tomorrow.getTime() }); }} styles={styles} />
         <PauseButton label="Until resumed" onPress={() => onChange({ ...value, pausedUntil: INDEFINITE_PAUSE })} styles={styles} />
         {value.pausedUntil !== null ? <PauseButton label="Resume now" onPress={() => onChange({ ...value, pausedUntil: null })} styles={styles} /> : null}
       </View>

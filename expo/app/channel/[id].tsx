@@ -106,15 +106,15 @@ export default function ChannelScreen() {
 
   const empty = !canUseLibrary ? (
     <View style={styles.premiumGate}>
-      <EmptyState title="Creator shelves are part of Premium" body="Follow trusted channels and browse their recent verified uploads without a recommendation feed." />
+      <EmptyState title="Source browsing is part of Premium" body="Follow sources and browse their recent videos." />
       <Pressable onPress={() => requirePurchase("creators")} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
         <Text style={styles.retryText}>See Premium</Text>
       </Pressable>
     </View>
   ) : videosQuery.isLoading ? (
-    <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading verified uploads" />
+    <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading recent videos" />
   ) : videosQuery.data && videos.length === 0 ? (
-    <EmptyState title="No playable recent uploads" body="No recent videos are available from this source. Try again later." />
+    <EmptyState title="No recent videos available" body="No recent videos are available from this source. Try again later." />
   ) : (
     <View>
       <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "This source is still followed. Check your connection and try again."} />

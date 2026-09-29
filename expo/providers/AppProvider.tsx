@@ -652,7 +652,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       return await managedContentAccessService.getAccess(profile, video);
     } catch {
-      return { kind: "ownerReview", canPlay: false, reason: "Managed content access could not be verified. Ask the Owner to review it." };
+      return { kind: "ownerReview", canPlay: false, reason: "Frame couldn’t check this profile’s content approvals. Ask the Owner to review them in Settings." };
     }
   }, [profiles]);
 
@@ -1575,3 +1575,4 @@ export const [AppProvider, useApp] = createContextHook(() => {
     ],
   );
 });
+

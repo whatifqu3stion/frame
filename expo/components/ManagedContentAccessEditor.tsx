@@ -30,20 +30,20 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
       <Text style={styles.explanation}>{value.policy.mode === "selectedVideos" ? "Only individual videos approved by the Owner can play." : "Videos can play only when their source is approved by the Owner."}</Text>
 
       <Text style={styles.sectionLabel}>Requests · {value.requests.length}</Text>
-      {value.requests.length === 0 ? <Text style={styles.empty}>No requests are waiting on this device.</Text> : value.requests.map((request) => (
+      {value.requests.length === 0 ? <Text style={styles.empty}>No requests to review.</Text> : value.requests.map((request) => (
         <View key={`${request.kind}:${request.targetId}`} style={{ gap: spacing.sm }}><View style={styles.row}>
           <View style={styles.flex}><Text style={styles.title} numberOfLines={2}>{request.title}</Text><Text style={styles.meta}>{request.kind === "video" ? `Video · ${request.sourceTitle || "Unknown source"}` : "Source"}</Text></View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === request.targetId }} accessibilityLabel={`Review details for ${request.title}`} onPress={() => setExpanded(expanded === request.targetId ? null : request.targetId)} style={styles.iconButton}><Info size={18} color={palette.active} /></Pressable>
           <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Approve ${request.title}`}><Check size={16} color={palette.success} /></Pressable>
           <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Deny ${request.title}`}><X size={16} color={palette.danger} /></Pressable>
         </View>
-          {expanded === request.targetId ? <View style={{ gap: spacing.sm, padding: spacing.md }}><Text style={type.heading}>{request.title}</Text>{isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details have expired. Ask this profile to open the video or source again before reviewing it.</Text>}</View> : null}
+          {expanded === request.targetId ? <View style={{ gap: spacing.sm, padding: spacing.md }}><Text style={type.heading}>{request.title}</Text>{isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}</View> : null}
         </View>
       ))}
 
       <Text style={styles.sectionLabel}>{value.policy.mode === "selectedVideos" ? `Selected videos · ${value.approvedVideos.length}` : `Approved sources · ${value.approvedSources.length}`}</Text>
       {value.policy.mode === "selectedVideos" ? (
-        value.approvedVideos.length === 0 ? <Text style={styles.empty}>No videos selected yet. A Managed profile can request one from a blocked player.</Text> : value.approvedVideos.map((video) => (
+        value.approvedVideos.length === 0 ? <Text style={styles.empty}>No videos approved yet. Open a video in this profile and choose Request approval.</Text> : value.approvedVideos.map((video) => (
           <ApprovalRow key={video.id} title={video.title} meta={video.channelTitle} busy={busy} onRemove={() => confirmRevoke("video", video.id, video.title)} styles={styles} danger={palette.danger} />
         ))
       ) : (
@@ -51,7 +51,7 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
           <ApprovalRow key={source.id} title={source.title} meta="Approved source" busy={busy} onRemove={() => confirmRevoke("source", source.id, source.title)} styles={styles} danger={palette.danger} />
         ))
       )}
-      <View style={styles.boundary}><ShieldCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>Requests and approvals stay on this device. Switching modes does not silently approve anything.</Text></View>
+      <View style={styles.boundary}><ShieldCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>Requests and approvals stay on this device. Changing modes does not approve new videos or sources.</Text></View>
     </View>
   );
 }

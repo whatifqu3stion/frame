@@ -25,9 +25,9 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   ].map((video) => [video.id, expireVideo(video, Date.now())])), [media.data, savedVideos]);
   const position = sessionPosition(session);
   const remaining = sessionRuntime(session.orderedVideoIds, [...videos.values()], position);
-  const status = position >= session.orderedVideoIds.length ? "Complete" : `Next ${position + 1} of ${session.orderedVideoIds.length}`;
-  const duration = remaining.seconds ? `${Math.ceil(remaining.seconds / 60)} min known left` : "";
-  const summary = [status, duration, remaining.unknown ? "Some runtimes unknown" : ""].filter(Boolean).join(" · ");
+  const status = position >= session.orderedVideoIds.length ? "Complete" : `Next: video ${position + 1} of ${session.orderedVideoIds.length}`;
+  const duration = remaining.seconds ? `${remaining.unknown ? "At least " : ""}${Math.ceil(remaining.seconds / 60)} min of video` : "";
+  const summary = [status, duration, remaining.unknown ? "Some durations unavailable" : ""].filter(Boolean).join(" · ");
   return <Pressable onPress={onOpen} style={({ pressed }) => [styles.root, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open current session ${session.name}. ${summary}. ${session.orderedVideoIds.map((id, index) => `${index + 1}: ${videos.get(id)?.title ?? "Video details unavailable"}`).join(". ")}`}>
     <ProgrammeGrain />
     <Text style={styles.title}>{session.name}</Text>

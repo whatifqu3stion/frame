@@ -73,7 +73,7 @@ export default function SavedSessionScreen() {
 
   const confirmDelete = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
-    Alert.alert("Delete named session?", `“${session.name}” will be removed.`, [
+    Alert.alert("Delete session?", `“${session.name}” will be removed.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => { await removeSession(session.id); router.back(); } },
     ]);
@@ -93,13 +93,13 @@ export default function SavedSessionScreen() {
       <View style={styles.programme}>
       <ProgrammeGrain />
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}{runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete · Rest here, or begin again when you choose." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${formatDuration(remaining.seconds)} known remaining` : "Runtime unknown"}${finishTime ? ` · Finish around ${finishTime}` : ""}`}</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${runtime.unknown ? "At least " : ""}${formatDuration(runtime.seconds)}` : "Duration unavailable"}{runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete. You can watch it again below." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${remaining.unknown ? "At least " : ""}${formatDuration(remaining.seconds)} of video` : "Duration unavailable"}${finishTime ? ` · Ends around ${finishTime} without breaks` : ""}`}</Text>
 
       {session.orderedVideoIds.length > 0 ? (
         <Pressable onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
           <Play size={17} color={palette.programme} fill={palette.programme} />
-          <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Begin again" : position > 0 ? `Continue with video ${position + 1}` : "Begin session"}</Text>
+          <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Watch again" : position > 0 ? `Continue with video ${position + 1}` : "Start session"}</Text>
         </Pressable>
       ) : null}
 
@@ -111,7 +111,7 @@ export default function SavedSessionScreen() {
         <Pressable onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">
           <Copy size={16} color={palette.accent} /><Text style={styles.actionText}>Duplicate</Text>
         </Pressable>
-        <Pressable onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete named session">
+        <Pressable onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete session">
           <Trash2 size={17} color={palette.danger} />
         </Pressable>
       </View>
@@ -125,9 +125,9 @@ export default function SavedSessionScreen() {
             <View key={videoId} style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
               <Pressable onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
-                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "YouTube · local link"}</Text>
+                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "YouTube · saved link"}</Text>
                 <Text style={styles.videoTitle} numberOfLines={2}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
-                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Runtime unknown · playback needs internet"}</Text>
+                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text>
               </Pressable>
 
             </View>
@@ -135,7 +135,7 @@ export default function SavedSessionScreen() {
         })}
       </View>
 
-      <Text style={styles.stopNote}>No autoplay. The next video waits for you; after the last one, Frame stops.</Text>
+      <Text style={styles.stopNote}>You choose when to play each video. After the last one, the session ends.</Text>
     </ScrollView>
   );
 }

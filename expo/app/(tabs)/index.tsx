@@ -121,7 +121,7 @@ export default function TodayScreen() {
       if (activeProfileRef.current !== activeProfileId || profileSwitching) return;
       if (!allowance.canPlay) {
         const title = allowance.kind === "restricted" ? "Playback isn’t available now" : allowance.kind === "ownerReview" ? "Owner review needed" : "Today’s viewing is complete";
-        const message = allowance.kind === "restricted" || allowance.kind === "ownerReview" ? allowance.reason : "Your daily Frame viewing allowance has been used. Save, Session, Snooze and Dismiss are still available.";
+        const message = allowance.kind === "restricted" || allowance.kind === "ownerReview" ? allowance.reason : "You’ve reached today’s viewing limit. You can still save videos, plan a session, or organize Today.";
         Alert.alert(title, message);
         return;
       }
@@ -156,7 +156,7 @@ export default function TodayScreen() {
       await performTodayAction(async () => { await updateSessionVideos(session.id, [...session.orderedVideoIds, item.id]); return true; }, () => handle(item, "session"));
       setSessionItem(null);
       setNotice("Added to session");
-    } catch { Alert.alert("Couldn’t add to Session", "Check your sessions in Saved before trying again."); }
+    } catch { Alert.alert("Couldn’t add to session", "Check your sessions in Saved before trying again."); }
     finally { actionLock.current = false; setBusyId(null); }
   }, [handle, requirePurchase, sessionItem, sessions, updateSessionVideos]);
 
@@ -171,13 +171,13 @@ export default function TodayScreen() {
       if (!handled) return;
       setSessionItem(null);
       setNotice("Added to session");
-    } catch { Alert.alert("Couldn’t create Session", "Check your sessions in Saved before trying again."); }
+    } catch { Alert.alert("Couldn’t create session", "Check your sessions in Saved before trying again."); }
     finally { actionLock.current = false; setBusyId(null); }
   }, [createSession, handle, requirePurchase, sessionItem]);
 
   const showMore = useCallback((item: TodaySnapshotItem): void => {
     if (actionLock.current) return;
-    Alert.alert(item.title, "Choose what happens to this Today card.", [
+    Alert.alert(item.title, "Remove this video from Today, or choose when it returns.", [
       { text: "Snooze", onPress: () => setSnoozeItem(item) },
       { text: "Dismiss", style: "destructive", onPress: () => { if (actionLock.current) return; actionLock.current = true; setBusyId(item.id); setNotice(null); void handle(item, "dismissed").then((changed) => { if (changed) setUndo({ item, previous: item.disposition, snoozedUntil: item.snoozedUntil }); }).catch(() => Alert.alert("Couldn’t dismiss", "Try again when you’re ready.")).finally(() => { actionLock.current = false; setBusyId(null); }); } },
       { text: "Cancel", style: "cancel" },
@@ -204,25 +204,25 @@ export default function TodayScreen() {
     setBusyId(undo.item.id);
     try {
       const restored = await todayRepository.setDisposition(activeProfileId, undo.item.periodKey, undo.item.id, undo.previous, Date.now(), undo.snoozedUntil, "dismissed");
-      if (restored) { setUndo(null); await reloadLocal(); AccessibilityInfo.announceForAccessibility("Dismiss undone."); }
+      if (restored) { setUndo(null); await reloadLocal(); AccessibilityInfo.announceForAccessibility("Video restored to Today."); }
     } catch { Alert.alert("Couldn’t undo", "Try again when you’re ready."); }
     finally { actionLock.current = false; setBusyId(null); }
   }, [activeProfileId, reloadLocal, undo]);
 
-  const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · local copy" : snapshot?.freshness === "stale" ? "Cached · refresh delayed" : isRefreshing ? "Refreshing…" : null;
+  const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · showing saved selection" : snapshot?.freshness === "stale" ? "Showing saved selection · refresh delayed" : isRefreshing ? "Refreshing…" : null;
   const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
   const initialLoading = (activeProfile?.role === "managed" && managedContentQuery.isLoading) || (!snapshot && (sourcesLoading || todayQuery.isLoading));
   let content;
-  if (initialLoading) content = <VideoFeedSkeleton variant="full" count={3} accessibilityLabel="Loading today's finite inbox" />;
+  if (initialLoading) content = <VideoFeedSkeleton variant="full" count={3} accessibilityLabel="Loading today’s videos" />;
   else if (managedOverview?.policy.mode === "selectedVideos") content = managedOverview.approvedVideos.length > 0
     ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)
-    : <StateBlock title="No selected videos yet" body="An Owner can approve a requested video from Profiles & boundaries. Frame will not fill this screen with other videos." styles={styles} success />;
-  else if (activeProfile?.role === "managed" && managedOverview?.policy.mode === "approvedSources" && sourceIds.length === 0) content = <StateBlock title="No approved sources yet" body="An Owner can add or approve a source from Profiles & boundaries. Nothing else will appear here." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
-  else if (sourceIds.length === 0) content = <StateBlock title="Choose one trusted source" body="Today begins with sources you select. Follow one source and this inbox can fill immediately." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
+    : <StateBlock title="No selected videos yet" body="Ask the Owner to approve a video in Settings → Profiles & boundaries." styles={styles} success />;
+  else if (activeProfile?.role === "managed" && managedOverview?.policy.mode === "approvedSources" && sourceIds.length === 0) content = <StateBlock title="No approved sources yet" body="Ask the Owner to add or approve a source in Settings → Profiles & boundaries." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
+  else if (sourceIds.length === 0) content = <StateBlock title="Start with a source" body="Follow a source to see its videos here." action="Open Sources" onPress={() => router.push("/(tabs)/sources")} styles={styles} />;
   else if (visible.length > 0) content = visible.map((item) => <TodayVideoCard key={item.id} item={item} busy={busyId === item.id} disabled={Boolean(busyId)} onWatch={() => { void watch(item); }} onSave={() => { void save(item); }} onSession={() => setSessionItem(item)} onMore={() => showMore(item)} />);
-  else if (hasOnlySnoozed) content = <StateBlock title="Resting for now" body={`Your next snoozed item returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}. Nothing else will replace it.`} styles={styles} />;
+  else if (hasOnlySnoozed) content = <StateBlock title="Snoozed for later" body={`Your next snoozed video returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}.`} styles={styles} />;
   else if (hasExpiredPending) content = <StateBlock title="Details need refreshing" body="Some video details need updating. Pull to refresh. Your choices are saved." styles={styles} />;
-  else if (snapshot && snapshot.items.length > 0) content = <StateBlock title="You’re caught up" body="That is the end of today’s finite inbox. Frame will not refill it behind you." styles={styles} success />;
+  else if (snapshot && snapshot.items.length > 0) content = <StateBlock title="You’re caught up" body="You’ve reached the end of today’s selection." styles={styles} success />;
   else if (snapshot) content = <StateBlock title="No new videos today" body="There are no videos from your sources that match your settings today. You can open a source directly below." styles={styles} success />;
   else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="Connect to the internet, then try again." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
   else if (todayQuery.data?.state === "no_cache") content = <StateBlock title="Your videos aren’t ready yet" body="Frame is still preparing videos from your sources. Try again later, or open a source directly below." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
@@ -232,7 +232,7 @@ export default function TodayScreen() {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
         <View style={styles.page}>
-          <ScreenHeader eyebrow="Today" title={"A finite\ninbox."} subtitle="A few videos from sources you chose." />
+          <ScreenHeader eyebrow="Today" title={"Chosen by\nyou."} subtitle="Today’s videos, from the sources you follow." />
           <View style={styles.boundaryRow} accessible accessibilityLabel={managedOverview?.policy.mode === "selectedVideos" ? "Only Owner-selected videos are available" : `Today is limited to ${TODAY_MAX_ITEMS} videos, with at most ${MAX_ITEMS_PER_SOURCE} per source`}><CircleCheck size={17} color={palette.active} /><Text style={styles.boundaryText}>{managedOverview?.policy.mode === "selectedVideos" ? "Only videos selected by the Owner" : managedOverview?.policy.mode === "approvedSources" ? `Up to ${TODAY_MAX_ITEMS} videos · approved sources only` : `Up to ${TODAY_MAX_ITEMS} videos · no more than ${MAX_ITEMS_PER_SOURCE} per source`}</Text></View>
           {status ? <View style={styles.status}><CloudOff size={14} color={palette.inkMuted} /><Text style={styles.statusText}>{status}</Text></View> : null}
           <View style={styles.content}>{content}</View>
