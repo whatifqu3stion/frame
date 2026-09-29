@@ -163,7 +163,23 @@
       },
       "verification": "Current code inspected. Runtime verification unavailable; final visual approval pending.",
       "motionScope": "Static pass only. No new motion designed; existing behavior retained for the next motion phase.",
-      "previewPolicy": "Use real native components. No HTML/CSS shadow-DOM replicas or synthesized tonal ramps."
+      "previewPolicy": "Use real native components. No HTML/CSS shadow-DOM replicas or synthesized tonal ramps.",
+      "programmeGrain": {
+        "asset": "expo/assets/textures/programme-grain.png",
+        "densityVariants": [
+          1,
+          2,
+          3
+        ],
+        "tileLogicalSize": 128,
+        "pixelAlphaMax": 0.12549019607843137,
+        "lightOpacity": 0.22,
+        "darkOpacity": 0.16,
+        "placement": "Behind programme content only; clipped; pointerEvents none; excluded from accessibility",
+        "generator": "expo/scripts/generate-programme-grain.py",
+        "origin": "Original deterministic procedural texture",
+        "motion": "Static; native image fade disabled"
+      }
     }
   },
   "components": [

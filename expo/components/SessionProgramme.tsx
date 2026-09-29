@@ -1,3 +1,4 @@
+import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight } from "lucide-react-native";
 import { useMemo } from "react";
@@ -28,6 +29,7 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   const duration = remaining.seconds ? `${Math.ceil(remaining.seconds / 60)} min known left` : "";
   const summary = [status, duration, remaining.unknown ? "Some runtimes unknown" : ""].filter(Boolean).join(" · ");
   return <Pressable onPress={onOpen} style={({ pressed }) => [styles.root, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open current session ${session.name}. ${summary}. ${session.orderedVideoIds.map((id, index) => `${index + 1}: ${videos.get(id)?.title ?? "Video details unavailable"}`).join(". ")}`}>
+    <ProgrammeGrain />
     <Text style={styles.title}>{session.name}</Text>
     <Text style={styles.summary}>{summary}</Text>
     <View style={styles.list}>

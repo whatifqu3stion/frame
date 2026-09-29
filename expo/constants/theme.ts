@@ -35,6 +35,7 @@ export type FramePalette = {
   onProgramme: string;
   onProgrammeSoft: string;
   programmeRule: string;
+  programmeGrainOpacity: number;
 };
 
 type AccentTokens = Pick<FramePalette, "accent" | "accentDeep" | "accentSoft" | "active" | "activeSoft">;
@@ -43,14 +44,14 @@ type PaletteBase = Omit<FramePalette, keyof AccentTokens | "onAccent" | "onDange
 const lightBase: PaletteBase = {
   wall: "#F3F0EA", surface: "#F8F5EF", surfaceDeep: "#E9E4DB", surfaceHigh: "#FFFDFA", surfaceDim: "#DED7CC", surfaceBright: "#FFFEFB",
   ink: "#2C2825", inkSoft: "#625B54", inkMuted: "#625B52", rose: "#B88E95", clay: "#A9755E", sage: "#60725E", success: "#4A544A", danger: "#943F36",
-  mount: "#FFFDFA", mountEdge: "#D8D0C4", programme: "#342B25", onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
+  mount: "#FFFDFA", mountEdge: "#D8D0C4", programme: "#342B25", programmeGrainOpacity: 0.22, onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(88, 76, 64, 0.24)", borderSoft: "rgba(88, 76, 64, 0.14)", overlay: "rgba(44, 40, 37, 0.48)", shadow: "rgba(54, 42, 32, 0.09)", onDark: "#FFFDF9", onDarkSoft: "rgba(255, 253, 249, 0.76)",
 };
 
 const darkBase: PaletteBase = {
   wall: "#171513", surface: "#201D1A", surfaceDeep: "#27231F", surfaceHigh: "#2D2925", surfaceDim: "#121110", surfaceBright: "#322D28",
   ink: "#F4F0ED", inkSoft: "#C7C0BA", inkMuted: "#B3A99F", rose: "#B6909A", clay: "#B87D61", sage: "#4A544A", success: "#809580", danger: "#D98276",
-  mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
+  mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", programmeGrainOpacity: 0.16, onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(244, 240, 237, 0.22)", borderSoft: "rgba(244, 240, 237, 0.13)", overlay: "rgba(7, 7, 6, 0.74)", shadow: "rgba(0, 0, 0, 0.30)", onDark: "#F4F0ED", onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
 

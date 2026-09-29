@@ -5,6 +5,7 @@ import { Copy, Pencil, Play, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ProgrammeGrain from "@/components/ProgrammeGrain";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
@@ -90,6 +91,7 @@ export default function SavedSessionScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
       <View style={styles.programme}>
+      <ProgrammeGrain />
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
       <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}{runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}</Text>
       <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete · Rest here, or begin again when you choose." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${formatDuration(remaining.seconds)} known remaining` : "Runtime unknown"}${finishTime ? ` · Finish around ${finishTime}` : ""}`}</Text>

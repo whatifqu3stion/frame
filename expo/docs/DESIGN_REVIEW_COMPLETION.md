@@ -37,7 +37,7 @@ PR #18 covers the five initial priority groups and the remaining frontend implem
 
 ## Validation and remaining device checks
 
-TypeScript passes. Expo lint has no errors and one pre-existing unused-disable warning in generated `src/integrations/supabase/types.ts`. The Expo Bun suite passes 204 tests across 45 files (1,050 assertions), including six expanded appearance contrast cases, one viewing-room contrast case, and eight schedule/link recovery cases. The earlier Impeccable source detector had no findings; its markup-oriented result is not a native visual audit.
+TypeScript passes. Expo lint has no errors and one pre-existing unused-disable warning in generated `src/integrations/supabase/types.ts`. The Expo Bun suite passes 204 tests across 45 files (1,062 assertions), including six expanded appearance contrast cases, one viewing-room contrast case, and eight schedule/link recovery cases. The earlier Impeccable source detector had no findings; its markup-oriented result is not a native visual audit.
 
 The real app still needs device verification. The available localhost browser preview was blocked, and no iOS/Android runtime was available. No mockup was substituted for this check.
 
@@ -57,3 +57,7 @@ Approved after the functional refinement: contemporary, calm and curated, with m
 - Existing motion behavior and playback controls are unchanged.
 
 Expanded color tests exercise six tonal backgrounds, all three accents, inverse programme actions and viewing-room text. A separate source reviewer identified retention refresh and enlarged-label risks; both were corrected and confirmed. Real-device visual verification remains outstanding.
+
+## Restrained grain follow-up
+
+The user approved fine static grain after the initial material pass. `ProgrammeGrain` now sits behind content on the current-session card and session detail header only. It uses local density-aware PNG tiles with capped alpha and separately tuned light/dark opacity. The reproducible generator and embedded origin metadata accompany the original assets. Text, control fills, imagery and main backgrounds stay clear. No motion, touch target or playback behavior changed. Contrast tests also check the brightest possible grain pixel behind programme text; final strength and tiling still require the real-device visual check.

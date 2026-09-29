@@ -222,7 +222,7 @@ Featured images retain a 16:9 content area inside the matte mount; its padding s
 
 ## Elevation & Depth
 
-Tonal layering and fine rules carry everyday depth. Featured media and programmes are flat at rest. Sheets retain the existing native `softShadow` (recorded in the sidecar as React Native properties); the tab bar explicitly has zero elevation. This is not a global ban on existing native shadows. Do not introduce web box-shadow replicas.
+Tonal layering and fine rules carry everyday depth. Session programme surfaces also use a fine, static neutral grain behind their content. Featured media and programmes are flat at rest. Sheets retain the existing native `softShadow` (recorded in the sidecar as React Native properties); the tab bar explicitly has zero elevation. This is not a global ban on existing native shadows. Do not introduce web box-shadow replicas.
 
 ## Shapes
 
@@ -236,11 +236,13 @@ Use the observed radius scale above: restrained media corners, slightly softer c
 | `MediaMount` | Matte `mount` surface with `mountEdge` hairline, `sm` inset and `card` radius. Shared by Today and Weekly Picks; content ratio remains inside. |
 | `TodayVideoCard` | Mounted thumbnail, source, serif title, metadata and explicit Watch / Save / Session / More actions; lower divider. Busy/disabled semantics and polite progress feedback remain. |
 | `WeeklyPickCard` | Mounted featured media, source identity and explanatory copy. Follow changes to Followed with selected-tonal styling; separate dismiss action and polite success/error feedback. |
-| `SessionProgramme` | Deep umber, `lg` padding and `card` radius. Ordered two-digit rows with rules, current position, known remaining runtime and unknown-runtime disclosure. Entire programme is a labelled Open session button. |
+| `SessionProgramme` | Deep umber with static grain, `lg` padding and `card` radius. Ordered two-digit rows with rules, current position, known remaining runtime and unknown-runtime disclosure. Entire programme is a labelled Open session button. |
 | Saved search and filters | Native `TextInput` with leading search icon and labelled clear action; surface fill and soft border. Pill radios expose checked state inside a named radio group; selected colors use active/activeSoft. No custom web focus or hover rules are implied. |
 | Session detail | Umber heading panel and pale Begin/Continue/Begin again action; separated edit/duplicate/delete controls and numbered ruled video list. Unavailable metadata and the explicit stop note remain visible. |
 | `Sheet` | Native modal, safe-area padding, keyboard avoidance and scrollable contents with modal accessibility. Uses `surfaceHigh`, `lg` padding and existing soft shadow. |
 | Tab navigation | Today, Sources, Saved and Settings retain labels and native tab semantics; selected icon sits on activeSoft. SurfaceHigh bar, hairline top border and safe-area-aware bottom inset. Hidden legacy routes are not new tabs. |
+
+The shared `ProgrammeGrain` is restricted to the current-session card and the session detail header. It repeats a bundled 128-unit tile with 1×/2×/3× density assets, clips to the card radius and is excluded from touch and accessibility. Per-pixel alpha is capped at 32/255; layer opacity is 0.22 in light mode and 0.16 in dark mode. Text and controls paint above it. The original deterministic generator and provenance ship with the assets. Main backgrounds, controls and video remain untextured.
 
 Existing pressed opacity/scale feedback and reduced-motion-aware Sheet fade are implementation facts, not new motion prescriptions. Existing image transitions, haptics and timing exports are outside this static pass. No new durations, easing, choreography or animation examples are specified here.
 

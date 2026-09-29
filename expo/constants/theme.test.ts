@@ -28,6 +28,12 @@ describe("readable text across Frame appearances", () => {
         const selectedBackground = rgb(background).map((v, i) => v * (1 - tint[3]) + tint[i] * tint[3]);
         expect(contrast(rgb(p.active), selectedBackground)).toBeGreaterThanOrEqual(4.5);
       }
+      // Brightest possible grain pixel: white at the asset's capped alpha.
+      const grainAlpha = (32 / 255) * p.programmeGrainOpacity;
+      const brightestProgramme = rgb(p.programme).map((value) => value * (1 - grainAlpha) + 255 * grainAlpha);
+      for (const foreground of [p.onProgramme, p.onProgrammeSoft]) {
+        expect(contrast(rgb(foreground), brightestProgramme)).toBeGreaterThanOrEqual(4.5);
+      }
       for (const [foreground, background] of [[p.onDark, p.accentDeep], [p.onAccent, p.accent], [p.onDanger, p.danger], [p.onProgramme, p.programme], [p.onProgrammeSoft, p.programme], [p.programme, p.onProgramme]]) {
         expect(contrast(rgb(foreground), rgb(background))).toBeGreaterThanOrEqual(4.5);
       }
