@@ -276,3 +276,14 @@ Frame sounds calm, clear, and interested in what the viewer enjoys. Use short, n
 | Owner PIN | The PIN protecting Frame’s controls. Do not call it device protection or a household password. |
 
 Use specific actions such as “Find source,” “Request approval,” “Open in YouTube,” and “Start session.” Error messages state what failed and the available recovery. Unknown durations remain explicitly unavailable; partial duration totals say “At least.” Finish estimates exclude breaks. Keep deletion, privacy, purchase, and restriction consequences explicit. Align accessibility names with the visible action.
+
+
+### First-run experience and Premium demo
+
+The welcome flow has four stages: welcome, optional interests, source choice, and a personal reveal. Interest choices feed the existing weekly source picks; viewers explicitly review and follow each source. The reveal reads the same finite Today snapshot as the app and supports a real first save. It keeps that saved card visible during setup, including a return from the Premium preview. It never fills missing content with invented videos. Managed profiles retain the existing approval path; their reveal routes them to the protected app experience rather than exposing an unrestricted selection.
+
+Use the established serif titles, warm surfaces, umber introduction, matte media mount, and ruled source rows. Keep controls reachable through scrolling, a wrapping footer, keyboard avoidance, and safe-area padding. Only the active stage is mounted. No entrance choreography, simulated progress, or new texture treatment is introduced.
+
+The optional Premium preview follows the reveal. It is controlled by `FOUNDATION_CAPABILITIES.demoPaywall` and hidden when real paid access is enabled. Sample USD prices ($39.99/year and $4.99/month) are illustrative, not approved commercial pricing. “Demo · no charge” accompanies the plans. Selection and simulated checkout remain component state; no billing request, purchase restoration, entitlement change, or subscription is created. Leaving the preview never limits app access.
+
+Settings → Demo → Preview welcome & Premium replays this flow without resetting the library or onboarding completion. Source, interest, and save actions remain real and profile-local, which the replay explicitly states. First completion goes to Today if sources exist and Sources otherwise; replay returns to Settings. Real-device validation and the planned motion phase remain outstanding.

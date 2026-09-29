@@ -70,3 +70,13 @@ Reviewed the main onboarding, Today, Sources, Saved, session-building, playback,
 Session duration text distinguishes partial totals from complete totals, and the existing tomorrow pause action now names its actual 7 am end time. No playback, authorization, persistence, pricing, layout, or motion behavior changed. Voice and terminology guidance is recorded in DESIGN.md.
 
 Verification: TypeScript and lint checks; existing behavior test suite. Native runtime access remains unavailable, so phone/tablet wrapping, enlarged text, and screen-reader pronunciation still need real-device confirmation. This is a source copy review, not visual sign-off.
+
+
+## Onboarding and demo Premium — September 29, 2026
+
+- Rebuilt first run around welcome → interests → source choice → “This is your Frame.” Weekly picks respond to the selected interests; following remains an explicit action. The reveal uses the real Today service and lets the viewer make a first save into their library. Handled items do not refill, and metadata retention/profile scoping remain enforced.
+- Added an optional, clearly labelled Premium demo after the reveal, with illustrative USD monthly/yearly plans and a local checkout confirmation. Real billing stays disabled; no entitlement or subscription is created. Existing purchase and restoration code is unchanged.
+- Added a Settings replay route. It preserves onboarding completion and existing data, while clearly explaining that customization and saving affect the current profile. Fresh setup routes to Sources when no source was selected. Fixed the initial route guard so it does not race this completion destination.
+- Empty, loading, offline/unavailable, failed-save, and Managed-profile states remain truthful. No seeded or synthetic content, artificial wait, or new animation was added. Native screen review remains unavailable: verify narrow phones, tablets, enlarged text, keyboard/back navigation, and screen-reader focus on-device.
+
+Verification: 209 tests passed across 46 files (1,073 assertions), including completion destinations, same-profile retained selection, expired/handled metadata exclusion, duplicate avoidance, and local-only demo checkout transitions. TypeScript passes. Lint has no errors and the existing generated-file warning. Diff whitespace check passes. Final source follow-up retains saved reveal cards when returning from Premium and applies source mute rules to them.

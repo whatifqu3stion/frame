@@ -37,12 +37,11 @@ function AppContent() {
 
   useEffect(() => {
     if (!ready || hasNavigated.current) return;
+    hasNavigated.current = true;
     const first = segments[0];
     if (!prefs.hasCompletedOnboarding && first !== "onboarding") {
-      hasNavigated.current = true;
       router.replace("/onboarding");
     } else if (prefs.hasCompletedOnboarding && first === "onboarding") {
-      hasNavigated.current = true;
       router.replace("/(tabs)");
     }
   }, [ready, prefs.hasCompletedOnboarding, segments, router]);
@@ -60,6 +59,7 @@ function AppContent() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="welcome-preview" options={{ headerShown: false }} />
       <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
