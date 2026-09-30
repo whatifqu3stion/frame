@@ -1,3 +1,4 @@
+import { useScreenAction } from "@/hooks/useScreenAction";
 import MotionView from "@/components/motion/MotionView";
 import { motion } from "@/constants/motion";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -134,6 +135,7 @@ export default function WatchScreen() {
     approveManagedContent,
   } = useApp();
 
+  const accessAction = useScreenAction(`${activeProfileId}:${id}`);
   const savedSessionId = firstParam(params.savedSessionId);
   const sessionProfileId = firstParam(params.sessionProfileId);
   const savedSession = savedSessionId && sessionProfileId === activeProfileId ? sessions.find((candidate) => candidate.id === savedSessionId) : undefined;
@@ -152,7 +154,7 @@ export default function WatchScreen() {
   }, [id, indexParam, savedSessionId, sessionIds]);
   const nextSessionId = sessionIndex >= 0 ? sessionIds[sessionIndex + 1] : undefined;
   const locallyStoredVideo = useQuery({
-    queryKey: ["local-playback-video", activeProfileId, id],
+    queryKey: ["local-playback-video", activeProfileId, id], networkMode: "always",
     queryFn: () => todayRepository.getVideo(activeProfileId, id),
     enabled: Boolean(VIDEO_ID_PATTERN.test(id) && !savedVideos.some((candidate) => candidate.id === id)),
   });
@@ -181,7 +183,7 @@ export default function WatchScreen() {
   const [allowanceStatus, setAllowanceStatus] = useState<ViewingAllowanceStatus | null>(null);
   const [contentAccessStatus, setContentAccessStatus] = useState<ManagedContentAccessStatus | null>(null);
   const managedOverviewQuery = useQuery({
-    queryKey: ["managed-content", activeProfileId],
+    queryKey: ["managed-content", activeProfileId], networkMode: "always",
     queryFn: () => getManagedContentOverview(activeProfileId),
     enabled: activeProfile?.role === "managed",
     staleTime: Infinity,
@@ -661,7 +663,7 @@ export default function WatchScreen() {
     try {
       await Linking.openURL(url);
     } catch {
-      void AccessibilityInfo.announceForAccessibility("Couldn’t open the original video.");
+      Alert.alert("Couldn’t open video", "Try again when your browser is available.");
     }
   }, [activeProfileId, authorizeProtectedAction]);
 
@@ -698,7 +700,7 @@ export default function WatchScreen() {
         await unsaveVideo(video.id);
       }
     } catch {
-      void AccessibilityInfo.announceForAccessibility("Couldn’t update saved videos. Please try again.");
+      Alert.alert("Couldn’t update Saved", "Check Saved before trying again.");
     } finally {
       setAction(null);
     }
@@ -707,24 +709,25 @@ export default function WatchScreen() {
   const requestAccess = useCallback(async (): Promise<void> => {
     if (!accessVideo) return;
     const done = feedback.capture();
-    const result = await requestManagedContentAccess(accessVideo);
-    if (result.ok) done("commit");
-    Alert.alert(result.ok ? "Request saved" : "Couldn’t request access", result.message);
-  }, [accessVideo, feedback, requestManagedContentAccess]);
+    await accessAction.run(() => requestManagedContentAccess(accessVideo), (result) => {
+      if (result.ok) done("commit");
+      Alert.alert(result.ok ? "Request saved" : "Couldn’t request access", result.message);
+    }, () => Alert.alert("Couldn’t request access", "Try again. This video still needs approval."));
+  }, [accessVideo, feedback, requestManagedContentAccess, accessAction]);
 
   const ownerApproveAccess = useCallback(async (): Promise<void> => {
     if (!accessVideo) return;
     const done = feedback.capture();
-    const result = await approveManagedContent(accessVideo);
-    if (!result.ok) {
-      Alert.alert("Approval not completed", result.message);
-      return;
-    }
-    done("commit");
-    const access = await getManagedContentAccess(accessVideo);
-    setContentAccessStatus(access);
-    Alert.alert("Approved", result.message);
-  }, [accessVideo, approveManagedContent, feedback, getManagedContentAccess]);
+    await accessAction.run(async () => {
+      const result = await approveManagedContent(accessVideo);
+      const access = result.ok ? await getManagedContentAccess(accessVideo) : null;
+      return { result, access };
+    }, ({ result, access }) => {
+      if (access) setContentAccessStatus(access);
+      if (result.ok) done("commit");
+      Alert.alert(result.ok ? "Approved" : "Approval not completed", result.message);
+    }, () => Alert.alert("Couldn’t finish approval", "Open this video again to check its approval. Playback stays blocked until approval is confirmed."));
+  }, [accessVideo, approveManagedContent, feedback, getManagedContentAccess, accessAction]);
 
   if (!video || invalidSavedSession || (savedSessionId && sessionIndex < 0)) {
     return (
@@ -782,8 +785,8 @@ export default function WatchScreen() {
           <Text style={styles.endTitle}>{contentAccessStatus.kind === "ownerReview" ? "Owner review needed." : contentAccessStatus.kind === "videoApprovalRequired" ? "This video needs approval." : "This source needs approval."}</Text>
           <Text style={styles.allowanceBody}>{contentAccessStatus.reason}</Text>
           <View style={styles.stateActions}>
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Request approval</Text></Pressable> : null}
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>{accessAction.busy ? "Working…" : "Request approval"}</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></Pressable> : null}
           </View>
           <Pressable onPress={goToToday} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Today</Text></Pressable>
         </View>
@@ -1009,7 +1012,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   closeLabel: { ...type.label, color: palette.wall },
-  fullscreenStatus: { ...type.caption, color: palette.wall, marginRight: spacing.sm },
+  fullscreenStatus: { ...type.caption, flexShrink: 1, textAlign: "right", color: palette.wall, marginRight: spacing.sm },
   portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center" },
   playerStage: { width: "100%", height: "100%", backgroundColor: watchPalette.stage, overflow: "hidden" },
   playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: watchPalette.stage },
@@ -1027,13 +1030,13 @@ const styles = StyleSheet.create({
   allowanceBody: { ...type.bodySoft, color: "rgba(250,249,246,0.72)", textAlign: "center", marginTop: spacing.sm, maxWidth: 380 },
   stateActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg, alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
   darkOutlineButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderColor: watchPalette.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.control, backgroundColor: watchPalette.surface, overflow: "hidden" },
-  darkButtonText: { ...type.label, color: palette.wall },
+  darkButtonText: { ...type.label, flexShrink: 1, textAlign: "center", color: palette.wall },
   skipButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.md, borderRadius: radii.control, overflow: "hidden" },
   skipButtonText: { ...type.label, color: palette.ink },
   endEyebrow: { ...type.caption, color: "rgba(250,249,246,0.7)" },
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
   lightStateButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radii.control, overflow: "hidden" },
-  lightButtonText: { ...type.label, color: palette.ink },
+  lightButtonText: { ...type.label, flexShrink: 1, textAlign: "center", color: palette.ink },
   landscapeScreen: { flex: 1, backgroundColor: watchPalette.stage, flexDirection: "row" },
   landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
   landscapeAllowance: { ...type.caption, color: palette.wall, fontSize: 10, textAlign: "center", marginTop: spacing.md, width: 56 },

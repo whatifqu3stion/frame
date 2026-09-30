@@ -281,6 +281,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const prefsWriteRef = useRef<Promise<void>>(Promise.resolve());
   const interestsWriteRef = useRef<Promise<void>>(Promise.resolve());
   const searchesWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const googleWriteRef = useRef<Promise<void>>(Promise.resolve());
   const authorizationSessionRef = useRef<OwnerAuthorizationSession>(new OwnerAuthorizationSession());
   const authorizationResolverRef = useRef<((authorized: boolean) => void) | null>(null);
   const queryClient = useQueryClient();
@@ -490,7 +491,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setProfileSwitching(true);
     const previousProfileId = activeProfileIdRef.current;
     try {
-      await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, draftWritesRef.current.get(previousProfileId)]);
+      await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current, draftWritesRef.current.get(previousProfileId)]);
       storageGenerationRef.current += 1;
       await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]);
       await Promise.all([
@@ -996,12 +997,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
   // Library queries
   const savedQuery = useQuery({
     queryKey: ["library", activeProfileId, "saved"],
+    networkMode: "always",
     queryFn: () => listSavedVideos(activeProfileId),
     enabled: ready,
   });
 
   const resumeQuery = useQuery({
     queryKey: ["library", activeProfileId, "resume"],
+    networkMode: "always",
     queryFn: () => listResume(activeProfileId),
     enabled: ready,
   });
@@ -1019,12 +1022,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const queuesQuery = useQuery({
     queryKey: ["library", activeProfileId, "queues"],
+    networkMode: "always",
     queryFn: () => listQueues(activeProfileId),
     enabled: ready,
   });
 
   const draftQuery = useQuery({
     queryKey: ["library", activeProfileId, "draft"],
+    networkMode: "always",
     queryFn: () => readSessionDraft(activeProfileId),
     enabled: ready,
   });
@@ -1056,6 +1061,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const channelsQuery = useQuery({
     queryKey: ["library", activeProfileId, "channels"],
+    networkMode: "always",
     queryFn: () => followedSourceRepository.listForProfile(activeProfileId),
     enabled: ready,
   });
@@ -1181,15 +1187,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   // Google authorization is separate from following. Import always requires explicit selection.
   const signInWithGoogle = useCallback(async (): Promise<AddChannelResult> => {
+    const generation = storageGenerationRef.current;
+    const isCurrent = () => generation === storageGenerationRef.current && activeProfileId === activeProfileIdRef.current && !switchingRef.current;
+    const cancelled = { ok: false, message: "Profile changed. Connect Google again from the profile you want to use." };
+    if (!isCurrent()) return cancelled;
     if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
     if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
       const result = await promptGoogle();
+      if (!isCurrent()) return cancelled;
       if (result?.type !== "success") return { ok: false, message: "Sign-in cancelled." };
       const token = result.authentication?.accessToken ?? null;
       if (!token) return { ok: false, message: "Google didn't return a usable credential." };
 
       const emailResult = await fetchGoogleEmail(token);
+      if (!isCurrent()) return cancelled;
       if (emailResult.status !== "success") {
         return {
           ok: false,
@@ -1203,9 +1215,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
         accessToken: token,
         expiresAt: Date.now() + Math.max(60, expiresInSeconds - 60) * 1000,
       };
-      await writeProfileGoogleCredential(SecureStore, activeProfileId, JSON.stringify(credential));
+      const write = googleWriteRef.current.then(async () => {
+        if (isCurrent()) await writeProfileGoogleCredential(SecureStore, activeProfileId, JSON.stringify(credential));
+      });
+      googleWriteRef.current = write.catch(() => {});
+      await write;
+      if (!isCurrent()) return cancelled;
       setGoogleCredential(credential);
       await updatePrefs({ googleEmail: emailResult.data, googleConnectedAt: Date.now() });
+      if (!isCurrent()) return cancelled;
       return { ok: true, message: "Google connected. Choose the subscriptions you want in Frame." };
     } catch (err) {
       console.warn("[google] sign-in failed", err instanceof Error ? err.message : "unknown error");
@@ -1318,7 +1336,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const wipeAllData = useCallback(async (): Promise<void> => {
     if (!await authorizeProtectedAction(activeProfileId)) return;
     storageGenerationRef.current += 1;
-    await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current]);
+    await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current]);
     await draftWritesRef.current.get(activeProfileId)?.catch(() => {});
     await clearAllData(activeProfileId);
     queueSourceLeaseReconciliation("local_change");
@@ -1341,7 +1359,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     storageGenerationRef.current += 1;
     await performFullReset({
       stopPlayback: async () => { await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]); },
-      flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, ...draftWritesRef.current.values()]); },
+      flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current, ...draftWritesRef.current.values()]); },
       clearProtectedCredentials: async () => {
         if (ownerPinAvailability !== "available") return;
         const [existingProfiles, sources] = await Promise.all([profileRepository.list(), followedSourceRepository.listDistinctSources()]);
@@ -1438,6 +1456,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
         || resumeQuery.isLoading
         || queuesQuery.isLoading
         || channelsQuery.isLoading,
+      libraryError: savedQuery.isError || resumeQuery.isError || queuesQuery.isError || draftQuery.isError,
+      refreshLibrary: invalidateLibrary,
       sourcesLoading: !ready || channelsQuery.isLoading,
       sourcesError: channelsQuery.isError,
       replaceInterests,
@@ -1540,6 +1560,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
       customerInfoQuery.isLoading,
       customerInfoQuery.isError,
       refreshPremiumAccess,
+      savedQuery.isError,
+      resumeQuery.isError,
+      queuesQuery.isError,
+      draftQuery.isError,
+      invalidateLibrary,
       savedQuery.isLoading,
       resumeQuery.isLoading,
       queuesQuery.isLoading,

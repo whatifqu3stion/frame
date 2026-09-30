@@ -37,7 +37,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   return (
     <Sheet visible={visible} onClose={close}>
           <View style={styles.headerRow}>
-            <View><Text style={styles.eyebrow}>This device</Text><Text style={styles.heading}>Who’s watching?</Text></View>
+            <View style={{ flex: 1 }}><Text style={styles.eyebrow}>This device</Text><Text style={styles.heading}>Who’s watching?</Text></View>
             <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
@@ -77,7 +77,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
     closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     list: { gap: spacing.sm, marginTop: spacing.lg },
-    row: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+    row: { minHeight: 64, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
     rowActive: { borderColor: palette.active, backgroundColor: palette.activeSoft },
     avatar: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: palette.surfaceDeep },
     avatarActive: { backgroundColor: palette.surfaceHigh },

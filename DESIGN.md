@@ -298,3 +298,19 @@ Onboarding explicitly explains the value of Frame through familiar creators, a b
 ### Frame-led brand language
 
 Lead with “Worth watching. At your pace.” Frame-authored onboarding, offers, everyday controls, and recovery messages use Frame’s voice without YouTube names, logos, or branded URL examples. Use “@creator” as the source-input example and “Open original video” for external playback. This is a copy and identity decision, not a change to supported providers. Preserve provider identifiers and URLs in integrations, creator-supplied metadata, the official embedded player, and accurate Terms/Privacy disclosures. The external player and account authorization screens may display their own branding.
+
+
+### September 30 field and state polish
+
+The shared `TextField` also covers profile names, PIN entry, daily allowance,
+playback-minute limits, web clock entry, reset confirmation, and the quick session
+picker. Field values use the interface sans; tracking belongs only on entered PIN
+marks and the short RESET confirmation. Profile editors use a quiet top rule,
+without an accent border around the whole form. Persistent labels identify the
+current, new, and repeated PIN.
+
+Loading and failed reads must never impersonate an empty collection. Local
+library and policy reads run offline; cached network services own their fallback
+states. Action errors need visible recovery copy as well as accessible feedback.
+Do not treat these source-level checks as native visual approval: the current
+release gate is in `expo/docs/SMOKE_TEST.md`.

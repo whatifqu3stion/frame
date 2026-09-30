@@ -1,6 +1,7 @@
+import TextField from "@/components/TextField";
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -62,10 +63,10 @@ export default function OwnerPinModal() {
           </View>
           <Text style={styles.heading}>Owner access</Text>
           <Text style={styles.body}>Enter the Owner PIN to continue. It protects settings in Frame only.</Text>
-          <TextInput
+          <TextField
             value={pin}
             onChangeText={(value) => setPin(value.replace(/\D/g, "").slice(0, 6))}
-            style={styles.input}
+            containerStyle={{ marginTop: spacing.lg }} style={[styles.input, pin.length > 0 && { letterSpacing: 4 }]}
             placeholder="4–6 digit PIN"
             placeholderTextColor={palette.inkMuted}
             keyboardType="number-pad"
@@ -85,6 +86,7 @@ export default function OwnerPinModal() {
             disabled={pin.length < 4 || busy || remainingSeconds > 0}
             style={({ pressed }) => [styles.button, (pin.length < 4 || remainingSeconds > 0) && styles.disabled, pressed && styles.pressed]}
             accessibilityRole="button"
+            accessibilityState={{ busy, disabled: pin.length < 4 || busy || remainingSeconds > 0 }}
             testID="owner-pin-submit"
           >
             {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.buttonText}>Continue</Text>}
@@ -108,7 +110,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     heading: { ...type.heading, fontSize: 25, marginTop: spacing.md },
     body: { ...type.bodySoft, marginTop: spacing.sm },
-    input: { ...type.heading, minHeight: 56, marginTop: spacing.lg, paddingHorizontal: spacing.md, textAlign: "center", letterSpacing: 8, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control, backgroundColor: palette.surface },
+    input: { textAlign: "center" },
     error: { ...type.label, marginTop: spacing.md, color: palette.danger },
     cooldown: { ...type.bodySoft, marginTop: spacing.xs, color: palette.inkMuted },
     button: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },

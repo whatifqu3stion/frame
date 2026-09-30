@@ -1,7 +1,8 @@
+import TextField from "@/components/TextField";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { formatMinute } from "@/domain/playbackControls";
-import { radii, type FramePalette, type FrameType } from "@/constants/theme";
+import { type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 type Props = { label: string; minuteOfDay: number; onChange: (minute: number) => void; onValidityChange?: (valid: boolean) => void };
@@ -26,7 +27,7 @@ export default function ClockTimePicker({ label, minuteOfDay, onChange, onValidi
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
       <Text style={type.bodySoft}>24-hour time · HH:MM</Text>
-      <TextInput value={value} onChangeText={update} onSubmitEditing={() => update(value)} placeholder="08:00" style={styles.input} accessibilityLabel={`${label}, currently ${formatMinute(minuteOfDay)}`} />
+      <TextField value={value} onChangeText={update} onSubmitEditing={() => update(value)} placeholder="08:00" style={styles.input} maxLength={5} autoCorrect={false} autoCapitalize="none" accessibilityLabel={`${label}, currently ${formatMinute(minuteOfDay)}`} />
       {error ? <Text accessibilityLiveRegion="polite" style={[type.bodySoft, { color: palette.danger }]}>{error}</Text> : null}
     </View>
   );
@@ -40,7 +41,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     wrap: { flex: 1, gap: 6 },
     label: { ...type.caption, color: palette.inkMuted },
-    input: { minHeight: 48, borderRadius: radii.control, backgroundColor: palette.surfaceDeep, color: palette.ink, textAlign: "center", paddingHorizontal: 12 },
+    input: { textAlign: "center", fontVariant: ["tabular-nums"] },
   });
 }
 

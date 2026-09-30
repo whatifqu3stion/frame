@@ -31,15 +31,20 @@ export default function SessionBuilder() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, libraryError, refreshLibrary, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const persistLock = useRef(false);
+  const savedDraft = useRef(false);
   const [search, setSearch] = useState("");
   const [name, setName] = useState<string>("");
   const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [draftState, setDraftState] = useState<"saving" | "saved" | "error" | null>(null);
+  const [draftAttempt, setDraftAttempt] = useState(0);
+  const draftRevision = JSON.stringify([name, selected]);
+  const [savedRevision, setSavedRevision] = useState<string | null>(null);
 
   const [destination, setDestination] = useState<Href | null>(null);
   const alive = useRef(true);
@@ -47,7 +52,7 @@ export default function SessionBuilder() {
   const canLeaveScope = hydratedProfile === activeProfileId && !profileSwitching && prefs.hasCompletedOnboarding;
   const scope = useRef({ profile: activeProfileId, active: canLeaveScope });
   scope.current = { profile: activeProfileId, active: canLeaveScope };
-  const dirty = Boolean(existingSession && (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",")));
+  const dirty = Boolean(existingSession ? (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",")) : !id && (name || selected.length) && savedRevision !== draftRevision);
   const confirmExit = useDiscardChanges(dirty, `${activeProfileId}:${id ?? "new"}`, canLeaveScope && !isSaving && !destination);
   usePreventRemove(canLeaveScope && !destination && (dirty || isSaving), ({ data }) => {
     // Wait for a write to finish before honoring a user exit.
@@ -60,25 +65,28 @@ export default function SessionBuilder() {
   }, [canLeaveScope, destination]);
 
   useEffect(() => {
-    if (hydratedProfile === activeProfileId || sessionDraftLoading) return;
+    if (hydratedProfile === activeProfileId || sessionDraftLoading || libraryError) return;
     if (id && !existingSession) return;
     setSelected((id ? existingSession?.orderedVideoIds : sessionDraft?.orderedVideoIds)?.slice(0, PRODUCT_LIMITS.sessionDraftMaxItems) ?? []);
     setName((id ? existingSession?.name : sessionDraft?.name) ?? "");
     setHydratedProfile(activeProfileId);
-  }, [activeProfileId, existingSession, hydratedProfile, id, sessionDraft, sessionDraftLoading]);
+  }, [activeProfileId, existingSession, hydratedProfile, id, sessionDraft, sessionDraftLoading, libraryError]);
 
   const hasDraft = Boolean(sessionDraft);
   useEffect(() => {
-    if (id || hydratedProfile !== activeProfileId) return;
-    if (!name && !selected.length) {
-      if (hasDraft) void clearSessionDraft().catch(() => Alert.alert("Couldn’t clear draft", "Try again in a moment."));
-      return;
-    }
-    void saveSessionDraft({ name, orderedVideoIds: selected }).catch(() => Alert.alert("Draft not saved", "Try again before leaving this session."));
-  }, [activeProfileId, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected]);
+    if (id || hydratedProfile !== activeProfileId || isSaving || destination || savedDraft.current) return;
+    let current = true;
+    setDraftState("saving");
+    const write = !name && !selected.length
+      ? hasDraft ? clearSessionDraft() : Promise.resolve()
+      : saveSessionDraft({ name, orderedVideoIds: selected });
+    void write.then(() => { if (current) { setSavedRevision(draftRevision); setDraftState("saved"); } })
+      .catch(() => { if (current) setDraftState("error"); });
+    return () => { current = false; };
+  }, [activeProfileId, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected, draftAttempt, draftRevision, isSaving, destination]);
 
   const selectedMedia = useQuery({
-    queryKey: ["session-editor-media", activeProfileId, selected.join(",")],
+    queryKey: ["session-editor-media", activeProfileId, selected.join(",")], networkMode: "always",
     queryFn: async () => Promise.all(selected.map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
     enabled: hydratedProfile === activeProfileId && selected.length > 0,
   });
@@ -131,7 +139,11 @@ export default function SessionBuilder() {
       }
       await saveSessionDraft({ name, orderedVideoIds: selected });
       const created = await createSession(name, selected);
-      if (created) await clearSessionDraft();
+      if (created) {
+        savedDraft.current = true;
+        try { await clearSessionDraft(); }
+        catch { Alert.alert("Session saved", "The draft couldn’t be cleared. Your new session is ready in Saved."); }
+      }
       return created?.id ?? null;
     } catch {
       Alert.alert("Couldn’t save session", "Your edits are still open. Try saving again before leaving.");
@@ -161,6 +173,8 @@ export default function SessionBuilder() {
     });
   }, [activeProfileId, feedback, persistSession, selected]);
 
+  if (libraryError) return <View style={styles.screen}><EmptyState title="Your library couldn’t load" body="Try again before editing this session." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} /></View>;
+
   if (hydratedProfile !== activeProfileId || (id && !existingSession)) {
     return <View style={styles.screen}><EmptyState title={id && !existingSession ? "Session unavailable" : "Opening your draft"} body={id && !existingSession ? "It may have been removed from this profile." : "Loading your saved draft."} /></View>;
   }
@@ -168,7 +182,11 @@ export default function SessionBuilder() {
   const header = (
     <View style={styles.header}>
       <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
-      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. {existingSession ? "Save your changes before leaving." : "Your draft is saved on this device."}</Text>
+      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. {existingSession ? "Save your changes before leaving." : "Your draft saves automatically on this device."}</Text>
+      {!id && !isSaving && draftState ? <View accessibilityLiveRegion="polite">
+        <Text style={[type.bodySoft, { marginTop: spacing.sm, color: draftState === "error" ? palette.danger : palette.inkMuted }]}>{draftState !== "error" && savedRevision !== draftRevision ? "Saving draft…" : draftState === "error" ? "Draft couldn’t save. Try again before leaving." : "Draft saved on this device"}</Text>
+        {draftState === "error" ? <Pressable accessibilityRole="button" onPress={() => setDraftAttempt((value) => value + 1)} style={{ minHeight: 48, justifyContent: "center" }}><Text style={type.label}>Retry saving draft</Text></Pressable> : null}
+      </View> : null}
       <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
       <TextField
         editable={!isSaving}
@@ -189,8 +207,8 @@ export default function SessionBuilder() {
             return <PositionedRow transitionKey={selected.join(",")} key={videoId} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
               <Text style={styles.trayTitle} numberOfLines={3}>{video?.title ?? "Video details unavailable"}</Text>
-              <Pressable onPress={() => move(videoId, -1)} disabled={index === 0 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
-              <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => move(videoId, -1)} disabled={index === 0 || isSaving} accessibilityState={{ disabled: index === 0 || isSaving }} style={[styles.trayControl, (index === 0 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
+              <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} accessibilityState={{ disabled: index === selected.length - 1 || isSaving }} style={[styles.trayControl, (index === selected.length - 1 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
             </PositionedRow>;
           })}

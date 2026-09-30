@@ -121,7 +121,7 @@ export default function ChannelScreen() {
     <EmptyState title="No recent videos available" body="No recent videos are available from this source. Try again later." />
   ) : (
     <View>
-      <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "This source is still followed. Check your connection and try again."} />
+      <EmptyState title="Couldn't refresh uploads" body={videosMessage ?? "Check your connection and try again."} />
       <Pressable onPress={retryUploads} style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]} accessibilityRole="button">
         <RotateCcw size={16} color={palette.accent} />
         <Text style={styles.retryText}>Try again</Text>
@@ -159,7 +159,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   avatarImage: { width: "100%", height: "100%" },
   channelName: { marginTop: spacing.sm },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
-  followBtn: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
+  followBtn: { minHeight: 48, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
   followBtnActive: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active },
   followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },

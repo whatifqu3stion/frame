@@ -25,5 +25,6 @@ export default function SnoozePicker({ value, onChange }: { value: Date; onChang
   );
 }
 function createStyles(palette: FramePalette, type: FrameType) {
-  return StyleSheet.create({ row: { flexDirection: "row", gap: spacing.sm }, button: { minHeight: 48, flex: 1, flexDirection: "row", gap: spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surfaceDeep }, text: { ...type.label, color: palette.accent } });
+  return StyleSheet.create({ row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, button: { minHeight: 48, flexGrow: 1, flexBasis: 130, padding: spacing.sm, flexDirection: "row", gap: spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surfaceDeep }, text: { ...type.label, flexShrink: 1, textAlign: "center", color: palette.accent } });
 }
+

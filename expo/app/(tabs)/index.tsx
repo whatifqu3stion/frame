@@ -33,7 +33,7 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching } = useApp();
+  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching, sourcesError } = useApp();
   const [clock, setClock] = useState<number>(Date.now());
   const actionLock = useRef(false);
   const handledHere = useRef(false);
@@ -48,7 +48,7 @@ export default function TodayScreen() {
   activeProfileRef.current = activeProfileId;
   const period = getTodayPeriod(clock);
   const managedContentQuery = useQuery({
-    queryKey: ["managed-content", activeProfileId],
+    queryKey: ["managed-content", activeProfileId], networkMode: "always",
     queryFn: () => getManagedContentOverview(activeProfileId),
     enabled: ready && activeProfile?.role === "managed",
     staleTime: Infinity,
@@ -62,12 +62,14 @@ export default function TodayScreen() {
   }, [activeProfile?.role, followedChannels, managedOverview]);
   const sourceIdentity = sourceIds.join(",");
   const queryKey = useMemo(() => ["today", activeProfileId, period.key] as const, [activeProfileId, period.key]);
-  const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], queryFn: () => listTodaySourceRules(activeProfileId), enabled: ready, staleTime: Infinity });
+  const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], networkMode: "always", queryFn: () => listTodaySourceRules(activeProfileId), enabled: ready, staleTime: Infinity });
   const rules = useMemo<Map<string, TodaySourceRule>>(() => new Map((rulesQuery.data ?? []).map((rule) => [rule.sourceId, rule])), [rulesQuery.data]);
+  const sourcesReady = ready && !sourcesLoading && !sourcesError && (activeProfile?.role !== "managed" || managedContentQuery.isSuccess);
   const todayQuery = useQuery({
     queryKey,
+    networkMode: "always",
     queryFn: () => todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: clock }),
-    enabled: ready && !sourcesLoading,
+    enabled: sourcesReady,
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -84,13 +86,13 @@ export default function TodayScreen() {
 
   useEffect(() => {
     const checkKey = snapshot ? `${activeProfileId}:${period.key}:${sourceIdentity}` : null;
-    if (!checkKey || checkedPeriodRef.current === checkKey) return;
+    if (!sourcesReady || !checkKey || checkedPeriodRef.current === checkKey) return;
     checkedPeriodRef.current = checkKey;
     const expectedProfile = activeProfileId;
     void todayService.load({ profileId: expectedProfile, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: true }).then((result) => {
       if (activeProfileRef.current === expectedProfile) queryClient.setQueryData(queryKey, result);
     }).catch(() => {});
-  }, [activeProfileId, period.key, queryClient, queryKey, snapshot, sourceIdentity, sourceIds]);
+  }, [activeProfileId, period.key, queryClient, queryKey, snapshot, sourceIdentity, sourceIds, sourcesReady]);
 
   const reloadLocal = useCallback(async (): Promise<void> => {
     const result = await todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
@@ -98,7 +100,7 @@ export default function TodayScreen() {
   }, [activeProfileId, queryClient, queryKey, sourceIds]);
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (isRefreshing) return;
+    if (isRefreshing || !sourcesReady) return;
     setIsRefreshing(true);
     const expectedProfile = activeProfileId;
     try {
@@ -107,7 +109,7 @@ export default function TodayScreen() {
     } catch { Alert.alert("Couldn’t refresh Today", "Check your connection and try again."); } finally {
       if (activeProfileRef.current === expectedProfile) setIsRefreshing(false);
     }
-  }, [activeProfileId, isRefreshing, queryClient, queryKey, snapshot, sourceIds]);
+  }, [activeProfileId, isRefreshing, queryClient, queryKey, snapshot, sourceIds, sourcesReady]);
 
   const handle = useCallback(async (item: TodaySnapshotItem, disposition: TodayDisposition, snoozedUntil: number | null = null): Promise<boolean> => {
     if (profileSwitching || activeProfileRef.current !== activeProfileId || item.profileId !== activeProfileId) return false;
@@ -224,11 +226,14 @@ export default function TodayScreen() {
     finally { actionLock.current = false; setBusyId(null); }
   }, [activeProfileId, feedback, reloadLocal, undo]);
 
-  const status = snapshot?.freshness === "offline" || todayQuery.data?.state === "network_error" ? "Offline · showing saved selection" : snapshot?.freshness === "stale" ? "Showing saved selection · refresh delayed" : isRefreshing ? "Refreshing…" : null;
+  const status = snapshot && (snapshot.freshness === "offline" || todayQuery.data?.state === "network_error") ? "Offline · showing saved selection" : snapshot?.freshness === "stale" ? "Showing saved selection · refresh delayed" : isRefreshing ? "Refreshing…" : null;
   const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
-  const initialLoading = (activeProfile?.role === "managed" && managedContentQuery.isLoading) || (!snapshot && (sourcesLoading || todayQuery.isLoading));
+  const initialLoading = rulesQuery.isLoading || (activeProfile?.role === "managed" && managedContentQuery.isLoading) || (!snapshot && (sourcesLoading || todayQuery.isLoading));
   let content;
   if (initialLoading) content = <VideoFeedSkeleton variant="full" count={3} accessibilityLabel="Loading today’s videos" />;
+  else if (activeProfile?.role === "managed" && managedContentQuery.isError) content = <StateBlock title="Approvals couldn’t load" body="Try again to see this profile’s selection." action="Try again" onPress={() => { void managedContentQuery.refetch(); }} styles={styles} />;
+  else if (sourcesError) content = <StateBlock title="Sources couldn’t load" body="Close and reopen Frame to try again. Your selection will return when sources are available." styles={styles} />;
+  else if (rulesQuery.isError) content = <StateBlock title="Selection settings couldn’t load" body="Try again before viewing today’s selection." action="Try again" onPress={() => { void rulesQuery.refetch(); }} styles={styles} />;
   else if (managedOverview?.policy.mode === "selectedVideos") content = managedOverview.approvedVideos.length > 0
     ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)
     : <StateBlock title="No selected videos yet" body="Ask the Owner to approve a video in Settings → Profiles & boundaries." styles={styles} success />;

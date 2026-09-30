@@ -31,7 +31,7 @@ export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, requirePurchase, unsaveVideo } = useApp();
+  const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, libraryError, refreshLibrary, requirePurchase, unsaveVideo } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
   const [showOtherSessions, setShowOtherSessions] = useState(false);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
@@ -58,6 +58,11 @@ export default function SavedScreen() {
     if (requirePurchase("sessions")) router.push("/session");
   };
 
+  if (libraryError) return <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}><View style={styles.page}>
+    <ScreenHeader eyebrow="Saved" title="Saved" />
+    <EmptyState title="Your library couldn’t load" body="Try again to see your saved videos and sessions." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} />
+  </View></ScrollView>;
+
   return (
     <FlatList
       style={styles.screen}
@@ -74,14 +79,14 @@ export default function SavedScreen() {
         <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Saved videos, sessions, and a place to pick up again." />
 
         <SectionTitle label="Current session" styles={styles} />
-        {draft ? (
+        {!libraryLoading && draft ? (
           <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your session draft" testID="session-draft-card">
             <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
             <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Untitled session"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
             <ArrowRight size={17} color={palette.inkMuted} />
           </Pressable>
         ) : null}
-        {currentSession ? (
+        {libraryLoading ? <VideoFeedSkeleton count={1} accessibilityLabel="Loading sessions" /> : currentSession ? (
           <SessionProgramme profileId={activeProfileId} session={currentSession} savedVideos={savedVideos} onOpen={() => {
             if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
           }} />
