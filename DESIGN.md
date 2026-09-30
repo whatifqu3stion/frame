@@ -288,7 +288,7 @@ Use the established serif titles, warm surfaces, umber introduction, matte media
 
 The optional Premium preview follows the reveal. It is controlled by `FOUNDATION_CAPABILITIES.demoPaywall` and hidden when real paid access is enabled. Sample USD prices ($39.99/year and $4.99/month) are illustrative, not approved commercial pricing. “Demo · no charge” accompanies the plans. Selection and simulated checkout remain component state; no billing request, purchase restoration, entitlement change, or subscription is created. Leaving the preview never limits app access.
 
-Settings → Demo → Preview welcome & Premium replays this flow without resetting the library or onboarding completion. Source, interest, and save actions remain real and profile-local, which the replay explicitly states. First completion goes to Saved after a first save, Today if sources exist without a new save, and Sources otherwise; replay returns to Settings. The motion phase is implemented; real-device validation remains outstanding.
+Settings → About & help → Demo → Preview welcome & Premium replays this flow without resetting the library or onboarding completion. Source, interest, and save actions remain real and profile-local, which the replay explicitly states. First completion goes to Saved after a first save, Today if sources exist without a new save, and Sources otherwise; replay returns to Settings. The motion phase is implemented; real-device validation remains outstanding.
 
 
 ### Conversion intent
@@ -314,3 +314,14 @@ library and policy reads run offline; cached network services own their fallback
 states. Action errors need visible recovery copy as well as accessible feedback.
 Do not treat these source-level checks as native visual approval: the current
 release gate is in `expo/docs/SMOKE_TEST.md`.
+
+
+### Settings disclosure
+
+Settings is a short index of quiet text rows, with current-value summaries and
+native detail navigation. Interests, Appearance & feedback, Google connection,
+Privacy & data, and About & help each reveal only their own controls. Profiles &
+boundaries remains a direct Owner-authorized action. Demo and beta support live
+under About & help; erasure remains under Privacy & data with the full existing
+confirmation sequence. The redundant profile card and non-interactive focus
+explanation have been removed. No setting or capability was removed.
