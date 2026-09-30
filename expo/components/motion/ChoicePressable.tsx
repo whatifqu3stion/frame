@@ -3,11 +3,14 @@ import { Animated, AppState, Easing, Pressable, StyleSheet, type PressableProps,
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { motion } from "@/constants/motion";
 
+// Web augments this state with hovered; native only requires pressed.
+const restingState = { pressed: false, hovered: false };
+
 /** Only selection backing/border moves; labels and geometry remain stable. */
 export default forwardRef<View, PressableProps>(function ChoicePressable({ style, accessibilityState, children, ...props }, ref) {
   const reduced = useReducedMotion();
   const selected = accessibilityState?.selected ?? accessibilityState?.checked;
-  const resolved = StyleSheet.flatten(typeof style === "function" ? style({ pressed: false, hovered: false }) : style) ?? {};
+  const resolved = StyleSheet.flatten(typeof style === "function" ? style(restingState) : style) ?? {};
   const background = typeof resolved.backgroundColor === "string" ? resolved.backgroundColor : "transparent";
   const border = typeof resolved.borderColor === "string" ? resolved.borderColor : "transparent";
   const value = useRef(new Animated.Value(1)).current;
