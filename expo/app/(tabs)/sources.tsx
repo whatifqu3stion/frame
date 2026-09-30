@@ -1,3 +1,4 @@
+import { useScreenAction } from "@/hooks/useScreenAction";
 import MotionView from "@/components/motion/MotionView";
 import PositionedRow from "@/components/motion/PositionedRow";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -36,8 +37,7 @@ export default function SourcesScreen() {
   const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, requirePurchase, getManagedContentOverview } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
-  const googleLock = useRef(false);
-  const [googleBusy, setGoogleBusy] = useState<boolean>(false);
+  const { busy: googleBusy, run: connect } = useScreenAction(activeProfileId);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const [editionBusy, setEditionBusy] = useState(false);
   const [followFeedback, setFollowFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
@@ -47,7 +47,7 @@ export default function SourcesScreen() {
   const followedIds = useMemo(() => new Set(followedChannels.map((channel) => channel.id)), [followedChannels]);
   const queryClient = useQueryClient();
   const managedContentQuery = useQuery({
-    queryKey: ["managed-content", activeProfileId],
+    queryKey: ["managed-content", activeProfileId], networkMode: "always",
     queryFn: () => getManagedContentOverview(activeProfileId),
     enabled: activeProfile?.role === "managed",
     staleTime: Infinity,
@@ -63,6 +63,7 @@ export default function SourcesScreen() {
   const discoverKey = ["weekly-picks", activeProfileId, weeklyPeriod, interestIds.join(","), [...followedIds].sort().join(",")];
   const discoverQuery = useQuery({
     queryKey: discoverKey,
+    networkMode: "always",
     queryFn: () => weeklyEditionService.get(activeProfileId, interestIds, [...followedIds]),
     enabled: FOUNDATION_CAPABILITIES.weeklyDiscovery && activeProfile?.role !== "managed" && section === "discover",
     retry: false,
@@ -87,14 +88,10 @@ export default function SourcesScreen() {
 
   const openGoogleImport = async (): Promise<void> => {
     if (googleConnected) { router.push("/google-import"); return; }
-    if (googleLock.current) return;
-    googleLock.current = true; setGoogleBusy(true);
-    try {
-      const result = await signInWithGoogle();
+    await connect(signInWithGoogle, (result) => {
       if (result.ok) router.push("/google-import");
       else Alert.alert("Google connection", result.message);
-    } catch { Alert.alert("Google connection", "Google couldn’t connect. Try again when you’re ready."); }
-    finally { googleLock.current = false; setGoogleBusy(false); }
+    }, () => Alert.alert("Google connection", "Google couldn’t connect. Try again when you’re ready."));
   };
 
   const followWeeklyPick = async (suggestion: WeeklyPickSourceSuggestion): Promise<void> => {
@@ -178,7 +175,7 @@ export default function SourcesScreen() {
                 <ArrowRight size={17} color={palette.inkMuted} />
               </Pressable>
 
-              {googleConfigured && managedOverview?.policy.mode !== "selectedVideos" ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
+              {googleConfigured && (activeProfile?.role !== "managed" || managedOverview?.policy.mode === "approvedSources") ? <Pressable onPress={() => { void openGoogleImport(); }} disabled={googleBusy} style={({ pressed }) => [styles.importButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-google-import">
                 <View style={styles.importIcon}>{googleBusy ? <ActivityIndicator size="small" color={palette.active} /> : <Import size={17} color={palette.active} strokeWidth={1.8} />}</View>
                 <View style={styles.flex}><Text style={type.label}>{googleConnected ? "Choose subscriptions" : "Connect Google to import"}</Text><Text style={styles.supporting}>Choose which subscriptions to follow in Frame.</Text></View>
                 <ArrowRight size={17} color={palette.inkMuted} />
@@ -186,6 +183,8 @@ export default function SourcesScreen() {
 
               {libraryLoading || managedContentQuery.isLoading ? (
                 <VideoFeedSkeleton variant="source" count={3} accessibilityLabel="Loading followed sources" />
+              ) : activeProfile?.role === "managed" && managedContentQuery.isError ? (
+                <EmptyState title="Approvals couldn’t load" body="Try again to see this profile’s approved sources." action={{ label: "Try again", onPress: () => { void managedContentQuery.refetch(); } }} />
               ) : sourcesError ? (
                 <EmptyState title="Sources couldn't load" body="Your sources are saved. Close and reopen Frame to try again." />
               ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
@@ -276,11 +275,11 @@ export default function SourcesScreen() {
               ) : (
                 <EmptyState title="You're caught up" body="You’ve reached the end of this week’s selection. You can still browse sources you follow." />
               )}
-              <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
+              {discoverQuery.data && ["success", "cached_success"].includes(discoverQuery.data.status) && !discoverQuery.data.canShowMore ? <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />
                 <Text style={styles.endText}>End of weekly picks</Text>
                 <View style={styles.endLine} />
-              </View>
+              </View> : null}
               <Text style={styles.discoverNote}>Up to {WEEKLY_DISCOVERY_DISPLAY_MAX} picks at a time. Next selection: {discoverQuery.data?.nextRefreshDate ?? "when available"}.</Text>
             </View>
           )}
@@ -322,7 +321,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     avatar: { width: 52, height: 52, overflow: "hidden", borderRadius: radii.control, backgroundColor: palette.surfaceDeep },
     avatarImage: { width: "100%", height: "100%" },
     sourceName: { ...type.heading, fontSize: 17, lineHeight: 22 },
-    weeklyHeader: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    weeklyHeader: { minHeight: 44, flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center", justifyContent: "space-between" },
     limitLabel: { ...type.caption, color: palette.active, fontSize: 12 },
     weeklyList: { gap: spacing.xl },
     cacheNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginBottom: spacing.xs },

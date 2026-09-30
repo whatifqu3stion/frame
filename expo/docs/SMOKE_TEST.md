@@ -1,6 +1,6 @@
-# Frame pre-design functional acceptance
+# Frame prepublication acceptance
 
-This is the current native acceptance pass for Frame’s implemented feature contract. Run it before graphic-design polish, the broad copy edit, or paywall work. Billing is intentionally disabled during the free beta and is not part of this pass.
+This is the current native acceptance pass for Frame’s implemented feature contract. Run it after design and hardening changes, before distributing a native build. The welcome flow includes a clearly labeled sample checkout. Billing is intentionally disabled during the free beta.
 
 Codex owns the automated logic, persistence, backend, and security checks. Rork owns running this checklist in real iOS and Android builds, native presentation fixes, signing, and build delivery. Never mark a device step complete from a web preview or export alone.
 
@@ -48,7 +48,7 @@ Pass condition: identity and all local state remain profile-scoped; protected ca
 5. Open Discover in Sources. With no interests, confirm it remains empty and makes no replacement recommendation.
 6. With interests selected and a current publication available, confirm no more than three distinct Weekly Picks appear in total.
 7. Dismiss a pick with Not for me. Confirm it stays hidden after restart and does not automatically backfill.
-8. If the fixed weekly pool has another candidate, use More like this. Confirm it fills only an empty slot, stops when exhausted, and makes no YouTube or AI request.
+8. If the fixed weekly pool has another candidate, use More from this week. Confirm it fills only an empty slot, stops when exhausted, and makes no YouTube or AI request.
 9. Follow a pick and confirm it disappears from the current edition without backfill; switch profiles and confirm their editions remain independent.
 10. Change interests during the week and confirm the issued edition stays stable until the next weekly period. Confirm the next edition date is shown.
 11. Confirm offline, maintenance, configuration, empty-publication, and backend-failure states are truthful and do not silently generate substitutes.
@@ -179,3 +179,22 @@ Do not proceed to design/paywall work if any of these occurs:
 - [ ] Android: Approved Sources and deep-link verification.
 - [ ] Android: time controls, playback completion, and reset.
 - [ ] Completed result sheet with every failure classified and assigned.
+
+
+
+## 15. September 30 polish and interruption regressions
+
+All items below require real iOS and Android evidence; they are not signed off by automated tests.
+
+- [ ] Inspect every route in light and dark appearance at small phone width, default text size, and largest supported text size. Check PIN/name/allowance inputs, profile editor, snooze, Google import dock, session footer, and player error/end states. No clipped controls, overlapping labels, or square inner focus outline.
+- [ ] With a hardware keyboard, confirm focus is visibly distinguishable, labels remain visible after typing, and fields retain expected capitalization, secure entry, and keyboard types.
+- [ ] Restart offline with an existing library. Saved, resume records, sessions, draft, approved content, and Today snapshot must load from device storage. Playback still requires internet.
+- [ ] Inject failed local-library and approval reads: show a recovery state, not “no saved videos” or “no approved sources.” Retry must restore the appropriate view.
+- [ ] Force a draft write failure, then edit or reorder again. Show unsaved status and Retry; Back must warn while the latest changes are unsaved. Retry succeeds, and saving a session does not recreate its old draft.
+- [ ] Double-tap session Start, Duplicate, and Delete. Each action runs once. Leave during a delayed operation: no late navigation or alerts; any committed change remains scoped to its original profile.
+- [ ] Cancel final reset, close/reopen reset, edit RESET, or leave its confirmation step. An obsolete confirmation cannot erase data. Confirm a fresh reset once on disposable data; repeat the flow to ensure it remains usable.
+- [ ] Delay Google sign-in, switch profiles or reset, then complete sign-in. It must not change the current profile’s account or navigate into import. Retry a fresh sign-in normally.
+- [ ] Fail Request approval, Approve with PIN, Save, and Open original video. Each gives visible recovery feedback; blocked playback remains blocked.
+- [ ] Discover loading, offline, and failed editions must not claim “End of weekly picks.” An edition with more choices must retain its More action.
+- [ ] Complete welcome with no choices, with a followed source, and with a first saved video. Preview the sample checkout, Back, skip, and complete it; confirm there is no purchase and the destination fits the user’s saved choices.
+- [ ] Enable Reduced Motion and disable haptics. Confirm selection, reorder, onboarding reveal, sheets, and ending states remain usable; re-enable each on supported hardware and assess the actual feedback.

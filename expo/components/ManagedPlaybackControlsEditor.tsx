@@ -1,8 +1,9 @@
+import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
 import MotionView from "@/components/motion/MotionView";
 import { PauseCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import ClockTimePicker from "@/components/ClockTimePicker";
 import { scheduleSummary } from "@/domain/scheduleSummary";
 import { INDEFINITE_PAUSE, MAX_SESSION_LIMIT_MINUTES, MAX_SESSION_BREAK_MINUTES } from "@/domain/playbackControls";
@@ -67,7 +68,7 @@ function ControlSection({ title, body, enabled, onToggle, styles, children }: { 
   return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={`${title} ${enabled ? "on" : "off"}`} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
 }
 function NumberField({ label, value, onChange, styles }: { label: string; value: number; onChange: (text: string) => void; styles: ReturnType<typeof createStyles> }) {
-  return <View style={styles.flex}><Text style={styles.fieldLabel}>{label}</Text><TextInput value={String(value)} onChangeText={onChange} keyboardType="number-pad" maxLength={3} style={styles.numberInput} accessibilityLabel={label} /></View>;
+  return <View style={styles.flex}><Text style={styles.fieldLabel}>{label}</Text><TextField value={String(value)} onChangeText={onChange} keyboardType="number-pad" maxLength={3} containerStyle={{ marginTop: spacing.sm }} style={styles.numberInput} accessibilityLabel={label} /></View>;
 }
 function PauseButton({ label, onPress, styles }: { label: string; onPress: () => void; styles: ReturnType<typeof createStyles> }) {
   return <Pressable onPress={onPress} style={styles.pauseButton} accessibilityRole="button"><Text style={styles.pauseButtonText}>{label}</Text></Pressable>;
@@ -78,7 +79,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     section: { gap: spacing.md, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.surfaceDeep },
     sectionHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md }, flex: { flex: 1 }, title: { ...type.label, color: palette.ink }, body: { ...type.bodySoft, color: palette.inkMuted },
     timeRow: { gap: spacing.md }, numberRow: { gap: spacing.md }, fieldLabel: { ...type.caption, color: palette.inkMuted },
-    numberInput: { minHeight: 48, marginTop: 6, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surface, color: palette.ink, textAlign: "center" },
+    numberInput: { textAlign: "center", fontVariant: ["tabular-nums"] },
     pauseCard: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
     pauseActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, pauseButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surfaceDeep }, pauseButtonText: { ...type.label, color: palette.active },
   });

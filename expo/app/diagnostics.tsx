@@ -38,7 +38,7 @@ function DiagnosticsScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { premiumAccessState, activeProfileId } = useApp();
   const databaseQuery = useQuery<DatabaseDiagnostics>({
-    queryKey: ["diagnostics", "database"],
+    queryKey: ["diagnostics", "database"], networkMode: "always",
     queryFn: getDatabaseDiagnostics,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -86,12 +86,12 @@ function DiagnosticsScreen() {
       <DiagnosticSection title="Persistence" styles={styles} type={type}>
         <DiagnosticRow
           label="Database version"
-          value={database ? `${database.version}${database.version === 0 ? " (unversioned baseline)" : ""}` : `${DATABASE_SCHEMA_VERSION} (loading)`}
+          value={database ? `${database.version}${database.version === 0 ? " (unversioned baseline)" : ""}` : databaseQuery.isError ? "unavailable" : `${DATABASE_SCHEMA_VERSION} (loading)`}
           styles={styles}
           type={type}
         />
         <DiagnosticRow label="Storage" value={database?.storage ?? (databaseQuery.isError ? "unavailable" : "loading")} styles={styles} type={type} />
-        <DiagnosticRow label="Tables" value={database?.tables.join(", ") ?? "loading"} styles={styles} type={type} />
+        <DiagnosticRow label="Tables" value={database?.tables.join(", ") ?? (databaseQuery.isError ? "unavailable" : "loading")} styles={styles} type={type} />
       </DiagnosticSection>
 
       <DiagnosticSection title="Thumbnail cleanup" styles={styles} type={type}>
@@ -105,7 +105,7 @@ function DiagnosticsScreen() {
         <DiagnosticRow label="Video service" value={FEATURE_FLAGS.knownYouTubeUrlResolution ? `${APP_ENV} shared cache configured` : "not configured"} styles={styles} type={type} />
         <DiagnosticRow label="Google on this device" value={isGooglePlatformConfigured() ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
         <DiagnosticRow label="Premium service" value={!FEATURE_FLAGS.paidAccess ? "disabled for free beta" : isRevenueCatConfigured ? `${APP_ENV === "production" ? "production" : "test"} configured` : "not configured"} styles={styles} type={type} />
-        <DiagnosticRow label="Storage mode" value={database?.storage === "sqlite" ? "persistent on device" : "preview only; resets on refresh"} styles={styles} type={type} />
+        <DiagnosticRow label="Storage mode" value={database?.storage === "sqlite" ? "persistent on device" : database ? "preview only; resets on refresh" : databaseQuery.isError ? "unavailable" : "checking storage"} styles={styles} type={type} />
       </DiagnosticSection>
 
       <DiagnosticSection title="Feature flags" styles={styles} type={type}>

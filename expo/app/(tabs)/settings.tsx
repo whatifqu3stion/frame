@@ -1,3 +1,4 @@
+import { useScreenAction } from "@/hooks/useScreenAction";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useFeedback, useFeedbackPreference } from "@/hooks/useFeedback";
 import { setFeedbackEnabled } from "@/services/feedback";
@@ -30,23 +31,21 @@ export default function SettingsScreen() {
     signOutGoogle, prefs, setTheme, setAccent, activeProfile, profiles,
     requestOwnerAuthorization,
   } = useApp();
+  const { busy: connectBusy, run: connect } = useScreenAction(activeProfile?.id ?? "");
   const accountLock = useRef(false);
   const [accountBusy, setAccountBusy] = useState<boolean>(false);
   const [profileControlsOpen, setProfileControlsOpen] = useState<boolean>(false);
   const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
 
   const onConnect = async (): Promise<void> => {
-    if (accountLock.current) return;
-    accountLock.current = true; setAccountBusy(true);
-    try {
-      const result = await signInWithGoogle();
+    await connect(signInWithGoogle, (result) => {
       if (result.ok) router.push("/google-import");
-      else Alert.alert("Sign-in", result.message);
-    } catch { Alert.alert("Sign-in", "Google couldn’t connect. Try again when you’re ready."); }
-    finally { accountLock.current = false; setAccountBusy(false); }
+      else Alert.alert("Google connection", result.message);
+    }, () => Alert.alert("Google connection", "Google couldn’t connect. Try again when you’re ready."));
   };
+
   const onSignOut = (): void => {
-    Alert.alert("Disconnect Google?", "Frame will revoke Google access. Manually followed sources stay on this device.", [
+    Alert.alert("Disconnect Google?", "Frame will revoke Google access. Followed sources stay on this device.", [
       { text: "Cancel", style: "cancel" },
       { text: "Disconnect", style: "destructive", onPress: async () => {
         if (accountLock.current) return;
@@ -87,12 +86,12 @@ export default function SettingsScreen() {
               <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
             </Pressable>
             <Pressable onPress={onSignOut} style={styles.inlineAction} disabled={accountBusy} accessibilityRole="button" testID="sign-out-google">
-              {accountBusy ? <ActivityIndicator size="small" color={palette.inkMuted} /> : <LogOut size={15} color={palette.inkMuted} />}
+              {accountBusy || connectBusy ? <ActivityIndicator size="small" color={palette.inkMuted} /> : <LogOut size={15} color={palette.inkMuted} />}
               <Text style={styles.inlineActionText}>Disconnect Google</Text>
             </Pressable>
           </View>
         ) : googleConfigured ? (
-          <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityRole="button" testID="connect-google">
+          <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || connectBusy || importing} accessibilityRole="button" testID="connect-google">
             {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Text style={styles.googleMark}>G</Text><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
           </Pressable>
         ) : <Text style={styles.infoText}>Google connection isn’t available in this version. You can still add sources with a link or @handle.</Text>}
@@ -114,11 +113,11 @@ export default function SettingsScreen() {
       </Section>
 
       <Section label="Appearance" hint="The video player always uses a dark background.">
-        <View style={styles.choiceRow} accessibilityRole="radiogroup">
+        <View style={styles.choiceRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
           <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
           <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
         </View>
-        <View style={styles.accentRow} accessibilityRole="radiogroup">
+        <View style={styles.accentRow} accessibilityRole="radiogroup" accessibilityLabel="Accent color">
           {accentOptions.map((option) => {
             const selected = prefs.accent === option.id;
             const swatch = createPalette(isDark, option.id).accent;
@@ -134,7 +133,7 @@ export default function SettingsScreen() {
 
       <Section label="Touch feedback" hint={Platform.OS === "web" ? "Touch feedback is available in the mobile app on supported phones." : "Subtle feedback for choices and completed actions. Applies to every profile on this device."}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, minHeight: 48 }}>
-          <Text style={type.label}>Haptic feedback</Text>
+          <Text style={[type.label, styles.flex]}>Haptic feedback</Text>
           <Switch value={Platform.OS !== "web" && haptics.enabled} disabled={Platform.OS === "web" || !haptics.ready || hapticsBusy} accessibilityLabel="Haptic feedback" onValueChange={(value) => { setHapticsBusy(true); void setFeedbackEnabled(value).catch(() => Alert.alert("Couldn’t save touch feedback", "Try again in a moment.")).finally(() => setHapticsBusy(false)); }} />
         </View>
       </Section>

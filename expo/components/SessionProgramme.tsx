@@ -17,7 +17,7 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const media = useQuery({
-    queryKey: ["library", profileId, "session-programme", session.orderedVideoIds.join(",")],
+    queryKey: ["library", profileId, "session-programme", session.orderedVideoIds.join(",")], networkMode: "always",
     queryFn: () => Promise.all(session.orderedVideoIds.map((id) => todayRepository.getVideo(profileId, id))),
   });
   const videos = useMemo(() => new Map([

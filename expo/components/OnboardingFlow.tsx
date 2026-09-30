@@ -155,6 +155,7 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
   const { resolveSourceInput, confirmSource, followedChannels, interests, activeProfileId, activeProfile } = useApp();
   const picks = useQuery({
     queryKey: ["weekly-picks", activeProfileId, weeklyDiscoveryPeriodKey(), interests.map((item) => item.id).join(","), followedChannels.map((item) => item.id).sort().join(",")],
+    networkMode: "always",
     queryFn: () => weeklyEditionService.get(activeProfileId, interests.map((item) => item.id), followedChannels.map((item) => item.id)),
     enabled: FOUNDATION_CAPABILITIES.weeklyDiscovery && interests.length > 0 && activeProfile?.role !== "managed",
     retry: false, staleTime: Infinity, refetchOnWindowFocus: false,

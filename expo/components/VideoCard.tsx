@@ -71,7 +71,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   if (variant === "wide") return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.wideRoot, stackWide && { flexDirection: "column" }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
       {thumbnail([styles.wideThumbWrap, stackWide && { width: "100%" }], styles.thumb)}
-      <View style={styles.wideMeta}>
+      <View style={[styles.wideMeta, stackWide && { flex: 0, width: "100%" }]}>
         {video.channelTitle ? <Text style={type.caption} numberOfLines={1}>{video.channelTitle}</Text> : null}
         <Text style={styles.wideTitle} numberOfLines={3}>{video.title}</Text>
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}

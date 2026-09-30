@@ -25,7 +25,7 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
   return (
     <View style={styles.root}>
       <Text style={styles.intro}>These choices limit what can play inside Frame. They do not rate content or block other apps.</Text>
-      <View style={styles.modeRow} accessibilityRole="radiogroup">
+      <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Content access">
         <ModeButton label="Selected Videos" selected={value.policy.mode === "selectedVideos"} disabled={busy} onPress={() => onModeChange("selectedVideos")} styles={styles} />
         <ModeButton label="Approved Sources" selected={value.policy.mode === "approvedSources"} disabled={busy} onPress={() => onModeChange("approvedSources")} styles={styles} />
       </View>

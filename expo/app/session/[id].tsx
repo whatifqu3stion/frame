@@ -1,3 +1,4 @@
+import { useScreenAction } from "@/hooks/useScreenAction";
 import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
@@ -24,10 +25,11 @@ export default function SavedSessionScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionPosition, requirePurchase } = useApp();
+  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionPosition, requirePurchase, libraryError, refreshLibrary } = useApp();
+  const { busy, run, capture } = useScreenAction(`${activeProfileId}:${id}`);
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
-    queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""],
+    queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""], networkMode: "always",
     queryFn: async () => Promise.all((session?.orderedVideoIds ?? []).map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
     enabled: Boolean(session),
   });
@@ -46,28 +48,28 @@ export default function SavedSessionScreen() {
     const videoId = session.orderedVideoIds[index];
     if (!videoId) return;
     const done = feedback.capture();
-    try {
+    await run(async () => {
       const moved = await updateSessionPosition(session.id, videoId, index, index);
       if (!moved) throw new Error("Session changed");
+    }, () => {
       done("commit");
       const video = videoMap.get(videoId);
       router.push({
         pathname: FRAME_PLAYBACK_ROUTE,
         params: { id: videoId, savedSessionId: session.id, sessionProfileId: activeProfileId, title: video?.title ?? "", channelId: video?.channelId ?? "", channelTitle: video?.channelTitle ?? "", thumbnailUrl: video?.thumbnailUrl ?? "", publishedAt: video?.publishedAt ?? "", durationSeconds: String(video?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(video?.fetchedAt ?? 0) },
       });
-    } catch {
-      Alert.alert("Couldn’t start session", "Your place was not saved. Try again.");
-    }
-  }, [activeProfileId, feedback, requirePurchase, session, updateSessionPosition, videoMap]);
+    }, () => Alert.alert("Couldn’t start session", "Check your session and try again."));
+  }, [activeProfileId, feedback, requirePurchase, session, updateSessionPosition, videoMap, run]);
 
   const duplicate = useCallback(async (): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
     const done = feedback.capture();
-    const copy = await duplicateSession(session.id);
-    if (!copy) return;
-    done("commit");
-    router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
-  }, [duplicateSession, feedback, requirePurchase, session]);
+    await run(() => duplicateSession(session.id), (copy) => {
+      if (!copy) return;
+      done("commit");
+      router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
+    }, () => Alert.alert("Couldn’t duplicate session", "Check your sessions in Saved before trying again."));
+  }, [duplicateSession, feedback, requirePurchase, session, run]);
 
   const openEditor = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
@@ -76,17 +78,20 @@ export default function SavedSessionScreen() {
 
   const confirmDelete = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
+    const isCurrent = capture();
     Alert.alert("Delete session?", `“${session.name}” will be removed.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await removeSession(session.id); router.back(); } },
+      { text: "Delete", style: "destructive", onPress: () => { if (isCurrent()) void run(() => removeSession(session.id), () => router.back(), () => Alert.alert("Couldn’t delete session", "Check your sessions in Saved before trying again.")); } },
     ]);
-  }, [removeSession, requirePurchase, session]);
+  }, [capture, removeSession, requirePurchase, session, run]);
+
+  if (libraryError) return <View style={styles.missing}><EmptyState title="Sessions couldn’t load" body="Try again to open this session." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} /></View>;
 
   if (!session) {
     return (
       <View style={[styles.missing, { paddingBottom: insets.bottom + spacing.xl }]}>
         <EmptyState title="Session unavailable" body="It may have been deleted on this device." />
-        <Pressable onPress={() => router.back()} style={styles.secondaryButton}><Text style={styles.secondaryText}>Go back</Text></Pressable>
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => router.back()} style={styles.secondaryButton} accessibilityRole="button"><Text style={styles.secondaryText}>Go back</Text></Pressable>
       </View>
     );
   }
@@ -100,21 +105,21 @@ export default function SavedSessionScreen() {
       <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete. You can watch it again below." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${remaining.unknown ? "At least " : ""}${formatDuration(remaining.seconds)} of video` : "Duration unavailable"}${finishTime ? ` · Ends around ${finishTime} without breaks` : ""}`}</Text>
 
       {session.orderedVideoIds.length > 0 ? (
-        <Pressable onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
           <Play size={17} color={palette.programme} fill={palette.programme} />
-          <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Watch again" : position > 0 ? `Continue with video ${position + 1}` : "Start session"}</Text>
+          <Text style={styles.beginText}>{busy ? "Working…" : position >= session.orderedVideoIds.length ? "Watch again" : position > 0 ? `Continue with video ${position + 1}` : "Start session"}</Text>
         </Pressable>
       ) : null}
 
       </View>
       <View style={styles.actions}>
-        <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
           <Pencil size={16} color={palette.accent} /><Text style={styles.actionText}>Edit</Text>
         </Pressable>
-        <Pressable onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">
           <Copy size={16} color={palette.accent} /><Text style={styles.actionText}>Duplicate</Text>
         </Pressable>
-        <Pressable onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete session">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete session">
           <Trash2 size={17} color={palette.danger} />
         </Pressable>
       </View>
@@ -127,7 +132,7 @@ export default function SavedSessionScreen() {
           return (
             <View key={videoId} style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
-              <Pressable onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
+              <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
                 <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Saved source"}</Text>
                 <Text style={styles.videoTitle} numberOfLines={2}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
                 <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text>
@@ -174,4 +179,3 @@ function createStyles(palette: FramePalette, type: FrameType) {
     pressed: { opacity: 0.72 },
   });
 }
-
