@@ -330,3 +330,21 @@ Settings row titles use the 15px body size with medium weight above 14px summari
 Pressed rows gain a quiet surface tint without dimming text. Theme, accent color,
 and touch feedback have separate headings. Selection uses checks and restrained
 neutral borders; reserve check space so choices do not shift when selected.
+
+### Motion refinement: outcomes, not spectacle
+
+Save and follow icons stay mounted through pending work and settle only after a
+new confirmed result (220 ms, 0.86–1 scale, no overshoot). Existing saved/followed
+states do not animate on arrival. Failed reversal does not celebrate an unchanged
+state. Profile/media changes reset the icon identity.
+
+Setup progress resolves in place over 160 ms, including Back. The first saved
+video earns a single 400 ms drawn check against the programme surface; its copy
+and controls are immediately available. Today’s persistent feedback transitions
+when its message or undo target changes. Existing native navigation, short sheet
+fades, choice color transitions, session ordering, and playback endings remain.
+
+New effects stop and settle on background, blur, unmount, or Reduce Motion. Icon
+and progress transitions use the native driver. The one 28px SVG completion mark
+uses a bounded JS-driven stroke; no loops, delays, new dependencies, or extra
+haptic events. Device smoothness and subjective timing remain unverified.

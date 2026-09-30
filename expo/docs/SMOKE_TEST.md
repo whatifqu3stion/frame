@@ -209,3 +209,13 @@ All items below require real iOS and Android evidence; they are not signed off b
 - [ ] Cancel Owner authorization and leave during a delayed Google connection or reset authorization. The departed settings page must not navigate or reopen an obsolete dialog.
 - [ ] Verify all six index destinations and detail screens at small phone width and large text, with VoiceOver/TalkBack and a hardware keyboard. Check native swipe/Android Back as well as a direct link to a detail screen.
 - [ ] Settings refinement: verify title/summary hierarchy, pressed-row contrast, and Theme/Accent color/Touch feedback grouping in both themes. Interest and theme checks must remain visible without shifting choices; test maximum text size and reduced motion.
+
+## 17. Motion: confirmed outcomes
+
+- [ ] Save in Watch and first-selection setup; follow in Discover and source detail. Confirm the spinner becomes a short, non-bouncing icon settle only after success. Opening already saved/followed content must remain still.
+- [ ] Force save/follow failure and failed unsave/unfollow. No success motion for an unchanged state. Try again; only a fresh successful addition should animate.
+- [ ] Save the first setup video. The small check draws once; copy and controls are usable immediately. Back/re-entry must not replay the milestone.
+- [ ] Step forward/back through setup rapidly; progress must settle at the correct step without delaying input or moving labels.
+- [ ] Change Today feedback while its bar remains visible; the new message must resolve without retaining an obsolete Undo target.
+- [ ] During motion, background the app, navigate away, change profile, or enable Reduce Motion. New effects must settle immediately and never replay an old outcome on return.
+- [ ] On iPhone and Android hardware, inspect both themes and large text. Verify glyphs are unclipped, first-save stroke remains smooth, and scrolling/session reordering remain responsive.

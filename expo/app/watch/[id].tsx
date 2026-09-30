@@ -1,3 +1,4 @@
+import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import MotionView from "@/components/motion/MotionView";
 import { motion } from "@/constants/motion";
@@ -886,7 +887,7 @@ export default function WatchScreen() {
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
-            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <MotionView changeKey={isSaved}><Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} /></MotionView>}
+            <OutcomeIcon key={`${activeProfileId}:${id}`} confirmed={isSaved} busy={pendingAction === "save"} size={17} color={palette.accentSoft} idle={<Bookmark size={17} color={palette.wall} strokeWidth={1.6} />}><Bookmark size={17} color={palette.accentSoft} strokeWidth={1.6} fill={palette.accentSoft} /></OutcomeIcon>
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>
@@ -961,7 +962,7 @@ export default function WatchScreen() {
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
-            {pendingAction === "save" ? <ActivityIndicator size="small" color={palette.accentSoft} /> : <MotionView changeKey={isSaved}><Bookmark size={17} color={isSaved ? palette.accentSoft : palette.wall} strokeWidth={1.6} fill={isSaved ? palette.accentSoft : "transparent"} /></MotionView>}
+            <OutcomeIcon key={`${activeProfileId}:${id}`} confirmed={isSaved} busy={pendingAction === "save"} size={17} color={palette.accentSoft} idle={<Bookmark size={17} color={palette.wall} strokeWidth={1.6} />}><Bookmark size={17} color={palette.accentSoft} strokeWidth={1.6} fill={palette.accentSoft} /></OutcomeIcon>
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>

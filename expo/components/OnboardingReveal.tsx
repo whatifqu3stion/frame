@@ -1,3 +1,5 @@
+import OutcomeIcon from "@/components/motion/OutcomeIcon";
+import CompletionMark from "@/components/motion/CompletionMark";
 import MotionView from "@/components/motion/MotionView";
 import { motion } from "@/constants/motion";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -78,9 +80,9 @@ export default function OnboardingReveal({ onChooseSource, onBusyChange, savedHe
           <Text style={type.caption}>{item.sourceTitle} · {formatDuration(item.durationSeconds)}</Text>
           <Text style={type.heading}>{item.title}</Text>
           <Pressable onPress={() => { void save(item); }} disabled={Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id))} accessibilityRole="button" accessibilityState={{ busy: busyId === item.id, disabled: Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) }} accessibilityLabel={(savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? `${item.title}, saved for later` : `Save ${item.title} for later`} style={styles.save}>
-            {(savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? <Check size={18} color={palette.success} /> : <Bookmark size={18} color={palette.active} />}<Text style={styles.saveLabel}>{busyId === item.id ? "Saving…" : (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? "Saved for later" : "Save for later"}</Text>
+            <OutcomeIcon key={`${activeProfileId}:${item.id}`} confirmed={savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)} busy={busyId === item.id} color={palette.active} idle={<Bookmark size={18} color={palette.active} />}><Check size={18} color={palette.success} /></OutcomeIcon><Text style={styles.saveLabel}>{busyId === item.id ? "Saving…" : (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? "Saved for later" : "Save for later"}</Text>
           </Pressable>
-        {savedHere[0] === item.id ? <MotionView enter={justSaved === item.id} style={styles.firstSave} accessibilityLiveRegion="polite"><Text style={styles.firstSaveTitle}>Your library has begun.</Text><Text style={styles.firstSaveBody}>{savedHere.length} {savedHere.length === 1 ? "video is" : "videos are"} saved for another day. Ready whenever you are. Find {savedHere.length === 1 ? "it" : "them"} in Saved.</Text></MotionView> : null}
+        {savedHere[0] === item.id ? <View style={styles.firstSave} accessibilityLiveRegion="polite"><CompletionMark color={palette.onProgramme} animate={justSaved === item.id} /><Text style={styles.firstSaveTitle}>Your library has begun.</Text><Text style={styles.firstSaveBody}>{savedHere.length} {savedHere.length === 1 ? "video is" : "videos are"} saved for another day. Ready whenever you are. Find {savedHere.length === 1 ? "it" : "them"} in Saved.</Text></View> : null}
         </View>)}
         <View style={styles.ending}><Text style={type.heading}>Good videos. A clear ending.</Text><Text style={type.bodySoft}>That’s your selection for today. In a session, the next video waits for you to press play.</Text></View>
       </MotionView>}

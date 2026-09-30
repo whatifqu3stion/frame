@@ -1,3 +1,4 @@
+import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -5,7 +6,7 @@ import Image from "@/components/MediaImage";
 import { useLocalSearchParams } from "expo-router";
 import { Check, Plus, RotateCcw } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
@@ -95,7 +96,7 @@ export default function ChannelScreen() {
             accessibilityLabel={following ? `Unfollow ${channel.title}` : `Follow ${channel.title}`}
             testID="follow-channel"
           >
-            {followBusy ? <ActivityIndicator color={following ? palette.active : palette.onDark} /> : following ? <Check size={15} color={palette.active} strokeWidth={1.8} /> : <Plus size={15} color={palette.onDark} strokeWidth={1.8} />}
+            <OutcomeIcon key={`${activeProfileId}:${id}`} confirmed={following} busy={followBusy} size={18} color={following ? palette.active : palette.onDark} idle={<Plus size={15} color={palette.onDark} strokeWidth={1.8} />}><Check size={15} color={palette.active} strokeWidth={1.8} /></OutcomeIcon>
             <Text style={[styles.followText, { color: following ? palette.active : palette.onDark }]}>{followBusy ? "Updating…" : following ? "Following" : "Follow source"}</Text>
           </Pressable>
         ) : null}
@@ -170,4 +171,3 @@ function createStyles(palette: FramePalette, type: FrameType) {
   pressed: { opacity: 0.7 },
   });
 }
-

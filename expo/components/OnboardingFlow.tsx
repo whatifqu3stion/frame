@@ -1,3 +1,4 @@
+import ProgressSegment from "@/components/motion/ProgressSegment";
 import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -98,7 +99,7 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
       <Pressable disabled={busy} onPress={() => { void finish(); }} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>{replay ? "Close preview" : "Skip setup"}</Text></Pressable>
     </View>
     <View style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel="Setup progress" accessibilityValue={{ min: 1, max: steps.length, now: step + 1, text: `Step ${step + 1} of ${steps.length}` }}>
-      {steps.map((name, i) => <View key={name} style={[styles.progressPart, i <= step && styles.progressComplete]} />)}
+      {steps.map((name, i) => <ProgressSegment key={name} complete={i <= step} />)}
     </View>
     <Text ref={stageLabel} accessible accessibilityRole="header" style={styles.stageLabel}>{premiumOpen ? "Frame Premium · demo" : `${step + 1} of ${steps.length} · ${["A better way to watch", "Your interests", "Your sources", "Your first selection"][step]}`}</Text>
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
@@ -217,7 +218,7 @@ function createStyles(p: FramePalette, t: FrameType) {
     screen: { flex: 1, backgroundColor: p.wall }, scroll: { flex: 1 },
     topRow: { width: "100%", maxWidth: 640, alignSelf: "center", flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", paddingHorizontal: spacing.page, gap: spacing.md }, wordmark: { ...t.heading },
     textButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.xs }, link: { ...t.label, color: p.active },
-    progress: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, flexDirection: "row", gap: spacing.xs, paddingVertical: spacing.md }, progressPart: { flex: 1, height: 3, backgroundColor: p.borderSoft, borderRadius: 2 }, progressComplete: { backgroundColor: p.active },
+    progress: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, flexDirection: "row", gap: spacing.xs, paddingVertical: spacing.md },
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xxl }, replayNote: { ...t.caption, marginBottom: spacing.lg },
     stageLabel: { ...t.caption, width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
     benefits: { marginTop: spacing.lg }, benefit: { gap: spacing.xs, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border },

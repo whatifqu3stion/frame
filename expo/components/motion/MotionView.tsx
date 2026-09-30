@@ -3,9 +3,9 @@ import { Animated, AppState, Easing, type ViewProps } from "react-native";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { motion } from "@/constants/motion";
 
-type Props = ViewProps & { changeKey?: string | number | boolean; enter?: boolean; duration?: number; distance?: number; active?: boolean; onPresented?(): void };
+type Props = ViewProps & { changeKey?: string | number | boolean; enter?: boolean; duration?: number; distance?: number; fromScale?: number; active?: boolean; onPresented?(): void };
 /** Animate only the current content. Never retain a previous screen or delay an action. */
-export default function MotionView({ changeKey, enter = false, duration = motion.state, distance = 0, active = true, onPresented, style, ...props }: Props) {
+export default function MotionView({ changeKey, enter = false, duration = motion.state, distance = 0, fromScale = 1, active = true, onPresented, style, ...props }: Props) {
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(1)).current;
   const previous = useRef(changeKey);
@@ -25,6 +25,6 @@ export default function MotionView({ changeKey, enter = false, duration = motion
     animation.start();
     const listener = AppState.addEventListener("change", (state) => { if (state !== "active") { animation.stop(); progress.setValue(1); } });
     return () => { animation.stop(); listener.remove(); progress.setValue(1); };
-  }, [active, changeKey, duration, distance, progress, reduced]);
-  return <Animated.View {...props} style={[style, { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }), transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : distance, 0] }) }] }]} />;
+  }, [active, changeKey, duration, distance, fromScale, progress, reduced]);
+  return <Animated.View {...props} style={[style, { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }), transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : distance, 0] }) }, { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 1 : fromScale, 1] }) }] }]} />;
 }
