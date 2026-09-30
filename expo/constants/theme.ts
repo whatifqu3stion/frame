@@ -25,37 +25,48 @@ export type FramePalette = {
   borderSoft: string;
   overlay: string;
   shadow: string;
+  onAccent: string;
+  onDanger: string;
   onDark: string;
   onDarkSoft: string;
+  mount: string;
+  mountEdge: string;
+  programme: string;
+  onProgramme: string;
+  onProgrammeSoft: string;
+  programmeRule: string;
+  programmeGrainOpacity: number;
 };
 
 type AccentTokens = Pick<FramePalette, "accent" | "accentDeep" | "accentSoft" | "active" | "activeSoft">;
-type PaletteBase = Omit<FramePalette, keyof AccentTokens>;
+type PaletteBase = Omit<FramePalette, keyof AccentTokens | "onAccent" | "onDanger">;
 
 const lightBase: PaletteBase = {
-  wall: "#FBF9F4", surface: "#F7F4ED", surfaceDeep: "#EEE9DF", surfaceHigh: "#FEFCF8", surfaceDim: "#E3DED4", surfaceBright: "#FFFEFB",
-  ink: "#2C2825", inkSoft: "#625B54", inkMuted: "#8A8177", rose: "#B88E95", clay: "#A9755E", sage: "#60725E", success: "#4A544A", danger: "#943F36",
+  wall: "#F3F0EA", surface: "#F8F5EF", surfaceDeep: "#E9E4DB", surfaceHigh: "#FFFDFA", surfaceDim: "#DED7CC", surfaceBright: "#FFFEFB",
+  ink: "#2C2825", inkSoft: "#625B54", inkMuted: "#625B52", rose: "#B88E95", clay: "#A9755E", sage: "#60725E", success: "#4A544A", danger: "#943F36",
+  mount: "#FFFDFA", mountEdge: "#D8D0C4", programme: "#342B25", programmeGrainOpacity: 0.22, onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(88, 76, 64, 0.24)", borderSoft: "rgba(88, 76, 64, 0.14)", overlay: "rgba(44, 40, 37, 0.48)", shadow: "rgba(54, 42, 32, 0.09)", onDark: "#FFFDF9", onDarkSoft: "rgba(255, 253, 249, 0.76)",
 };
 
 const darkBase: PaletteBase = {
-  wall: "#141312", surface: "#1C1B1A", surfaceDeep: "#201F1E", surfaceHigh: "#282625", surfaceDim: "#10100F", surfaceBright: "#252422",
-  ink: "#F4F0ED", inkSoft: "#C7C0BA", inkMuted: "#938B84", rose: "#B6909A", clay: "#B87D61", sage: "#4A544A", success: "#809580", danger: "#D98276",
+  wall: "#171513", surface: "#201D1A", surfaceDeep: "#27231F", surfaceHigh: "#2D2925", surfaceDim: "#121110", surfaceBright: "#322D28",
+  ink: "#F4F0ED", inkSoft: "#C7C0BA", inkMuted: "#B3A99F", rose: "#B6909A", clay: "#B87D61", sage: "#4A544A", success: "#809580", danger: "#D98276",
+  mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", programmeGrainOpacity: 0.16, onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(244, 240, 237, 0.22)", borderSoft: "rgba(244, 240, 237, 0.13)", overlay: "rgba(7, 7, 6, 0.74)", shadow: "rgba(0, 0, 0, 0.30)", onDark: "#F4F0ED", onDarkSoft: "rgba(244, 240, 237, 0.74)",
 };
 
 const accentTokens: Record<AccentMode, { light: AccentTokens; dark: AccentTokens }> = {
   blue: {
-    light: { accent: "#4A7186", accentDeep: "#36596B", accentSoft: "#BFD2DB", active: "#4A7186", activeSoft: "rgba(74, 113, 134, 0.16)" },
-    dark: { accent: "#8FB7CA", accentDeep: "#4E788D", accentSoft: "#C7DEE7", active: "#8FB7CA", activeSoft: "rgba(143, 183, 202, 0.18)" },
+    light: { accent: "#3B6073", accentDeep: "#36596B", accentSoft: "#BFD2DB", active: "#3B6073", activeSoft: "rgba(74, 113, 134, 0.10)" },
+    dark: { accent: "#8FB7CA", accentDeep: "#3F687C", accentSoft: "#C7DEE7", active: "#8FB7CA", activeSoft: "rgba(143, 183, 202, 0.10)" },
   },
   green: {
-    light: { accent: "#526B55", accentDeep: "#3F5944", accentSoft: "#C4D2C2", active: "#526B55", activeSoft: "rgba(82, 107, 85, 0.16)" },
-    dark: { accent: "#9AB497", accentDeep: "#587554", accentSoft: "#C6D8C4", active: "#9AB497", activeSoft: "rgba(154, 180, 151, 0.18)" },
+    light: { accent: "#49624C", accentDeep: "#3F5944", accentSoft: "#C4D2C2", active: "#49624C", activeSoft: "rgba(82, 107, 85, 0.10)" },
+    dark: { accent: "#9AB497", accentDeep: "#486345", accentSoft: "#C6D8C4", active: "#9AB497", activeSoft: "rgba(154, 180, 151, 0.10)" },
   },
   rose: {
-    light: { accent: "#9C626C", accentDeep: "#7B4752", accentSoft: "#E1C4C9", active: "#9C626C", activeSoft: "rgba(156, 98, 108, 0.15)" },
-    dark: { accent: "#D4A4AC", accentDeep: "#8B5963", accentSoft: "#E6C7CC", active: "#D4A4AC", activeSoft: "rgba(212, 164, 172, 0.18)" },
+    light: { accent: "#834B56", accentDeep: "#7B4752", accentSoft: "#E1C4C9", active: "#834B56", activeSoft: "rgba(156, 98, 108, 0.10)" },
+    dark: { accent: "#D4A4AC", accentDeep: "#8B5963", accentSoft: "#E6C7CC", active: "#D4A4AC", activeSoft: "rgba(212, 164, 172, 0.10)" },
   },
 };
 
@@ -64,7 +75,7 @@ export const accentOptions: ReadonlyArray<{ id: AccentMode; label: string }> = [
 ];
 
 export function createPalette(isDark: boolean, accent: AccentMode): FramePalette {
-  return { ...(isDark ? darkBase : lightBase), ...accentTokens[accent][isDark ? "dark" : "light"] };
+  return { ...(isDark ? darkBase : lightBase), ...accentTokens[accent][isDark ? "dark" : "light"], onAccent: isDark ? darkBase.wall : lightBase.onDark, onDanger: isDark ? darkBase.wall : lightBase.onDark };
 }
 
 export const lightPalette: FramePalette = createPalette(false, "blue");
@@ -74,15 +85,16 @@ export const darkPalette: FramePalette = createPalette(true, "blue");
 export const palette = lightPalette;
 
 export const watchPalette = {
-  wall: "#141312",
-  stage: "#0D0C0C",
-  surface: "#1C1B1A",
-  surfaceHigh: "#201F1E",
+  wall: "#181512",
+  stage: "#0D0C0B",
+  surface: "#24201C",
+  surfaceHigh: "#302922",
   ink: "#F4F0ED",
   inkSoft: "rgba(244, 240, 237, 0.76)",
-  inkMuted: "rgba(244, 240, 237, 0.55)",
+  inkMuted: "rgba(244, 240, 237, 0.68)",
   accent: "#8FB7CA",
   accentSoft: "#C7DEE7",
+  mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(244, 240, 237, 0.22)",
   glow: "rgba(143, 183, 202, 0.16)",
 } as const;
@@ -110,6 +122,7 @@ export const spacing = {
 export const radii = {
   small: 8,
   control: 10,
+  media: 6,
   card: 16,
   large: 22,
   pill: 999,
@@ -142,13 +155,14 @@ export type FrameType = {
 export function createType(p: FramePalette): FrameType {
   return {
     display: { fontFamily: fonts.serif, fontSize: 42, lineHeight: 49, letterSpacing: -0.7, color: p.ink },
-    title: { fontFamily: fonts.serif, fontSize: 28, lineHeight: 35, letterSpacing: -0.35, color: p.ink },
+    title: { fontFamily: fonts.serif, fontSize: 30, lineHeight: 37, letterSpacing: -0.45, color: p.ink },
     heading: { fontFamily: fonts.serif, fontSize: 20, lineHeight: 27, color: p.ink },
     body: { fontFamily: fonts.sans, fontSize: 15, lineHeight: 22, color: p.ink },
     bodySoft: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 21, color: p.inkSoft },
-    caption: { fontFamily: fonts.sansSemibold, fontSize: 11, lineHeight: 15, color: p.inkMuted, letterSpacing: 1.25, textTransform: "uppercase" },
+    caption: { fontFamily: fonts.sansSemibold, fontSize: 12, lineHeight: 17, color: p.inkMuted, letterSpacing: 0.2 },
     label: { fontFamily: fonts.sansMedium, fontSize: 13, lineHeight: 18, color: p.ink },
   };
 }
 
 export const type = createType(lightPalette);
+

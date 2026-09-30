@@ -43,7 +43,7 @@ export async function getChannelVideos(channelId: string): Promise<ServiceResult
 /** Disabled legacy enrichment boundary. Cached/local details remain usable without provider polling. */
 export async function getVideo(videoId: string): Promise<ServiceResult<Video | null>> {
   if (!VIDEO_ID_PATTERN.test(videoId)) {
-    return { status: "failed", message: "A valid YouTube video id is required." };
+    return { status: "failed", message: "A valid video ID is required." };
   }
   return failure("unavailable", "Additional metadata is unavailable. Playback uses the details already saved in Frame.");
 }
@@ -72,7 +72,7 @@ export const parseYouTubeLink = parseSourceInput;
 export async function resolveSourceFromInput(input: string): Promise<ServiceResult<SourceResolution>> {
   const parsed = parseYouTubeLink(input);
   if (parsed.kind === "unknown") {
-    return { status: "invalid_request", message: "Use a channel ID, @handle, channel URL, or individual YouTube video URL." };
+    return { status: "invalid_request", message: "Use a channel ID, @handle, channel URL, or individual supported video URL." };
   }
   const supabaseUrl = APP_ENV === "development" ? process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") : undefined;
   const publishableKey = APP_ENV === "development"
@@ -217,12 +217,12 @@ function isResolutionOutcome(value: unknown): value is SourceResolutionEnvelope[
 
 function sourceResolutionMessage(outcome: Exclude<SourceResolutionEnvelope["outcome"], "success">): string {
   switch (outcome) {
-    case "invalid_request": return "Use a supported YouTube source or individual video link.";
+    case "invalid_request": return "Use a supported source or individual video link.";
     case "not_found": return "No supported source was found for that link.";
     case "allowance_exhausted": return "This device has reached today’s source-verification allowance.";
-    case "quota_exhausted": return "Frame’s shared YouTube allowance is reserved for the rest of today.";
+    case "quota_exhausted": return "Frame’s shared video-service allowance is reserved for the rest of today.";
     case "temporarily_unavailable": return "Source verification is temporarily unavailable.";
-    case "network_error": return "Frame could not reach YouTube. Check your connection and try again.";
+    case "network_error": return "Frame could not reach the video service. Check your connection and try again.";
   }
 }
 
@@ -256,3 +256,4 @@ export function formatRelativeDate(iso: string): string {
     return "";
   }
 }
+

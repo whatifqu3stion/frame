@@ -1,17 +1,15 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo } from "react";
 import {
-  AccessibilityInfo,
-  Animated,
-  Easing,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import MediaMount from "@/components/MediaMount";
 import { radii, spacing, type FramePalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
-type SkeletonVariant = "full" | "wide";
+type SkeletonVariant = "full" | "wide" | "source";
 
 type VideoFeedSkeletonProps = {
   count?: number;
@@ -20,59 +18,13 @@ type VideoFeedSkeletonProps = {
   accessibilityLabel?: string;
 };
 
-function usePulseAnimation(): Animated.Value {
-  const opacity = useRef<Animated.Value>(new Animated.Value(0.52)).current;
-  const animation = useRef<Animated.CompositeAnimation | null>(null);
-  const [isReduceMotionEnabled, setIsReduceMotionEnabled] = useState<boolean>(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled: boolean) => {
-      if (isMounted) setIsReduceMotionEnabled(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setIsReduceMotionEnabled);
-    return () => {
-      isMounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    animation.current?.stop();
-    if (isReduceMotionEnabled) {
-      opacity.setValue(0.72);
-      return;
-    }
-
-    animation.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.92,
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.52,
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    animation.current.start();
-    return () => animation.current?.stop();
-  }, [isReduceMotionEnabled, opacity]);
-
-  return opacity;
-}
-
 function VideoSkeletonCard({ variant, palette }: { variant: SkeletonVariant; palette: FramePalette }) {
   const styles = useMemo(() => createStyles(palette), [palette]);
+  if (variant === "source") return <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, minHeight: 80, marginBottom: spacing.sm }}><View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: palette.surfaceDeep }} /><View style={{ flex: 1, gap: spacing.sm }}><View style={[styles.bar, { width: "70%" }]} /><View style={[styles.bar, { width: "45%" }]} /></View></View>;
   if (variant === "full") {
     return (
       <View style={styles.fullCard}>
-        <View style={styles.fullThumbnail} />
+        <MediaMount><View style={styles.fullThumbnail} /></MediaMount>
         <View style={styles.fullMeta}>
           <View style={[styles.bar, styles.eyebrowBar]} />
           <View style={[styles.bar, styles.fullTitleBar]} />
@@ -102,7 +54,6 @@ export const VideoFeedSkeleton = memo(function VideoFeedSkeleton({
   accessibilityLabel = "Loading videos",
 }: VideoFeedSkeletonProps) {
   const { palette } = useFrameTheme();
-  const opacity = usePulseAnimation();
   const items = useMemo<number[]>(() => Array.from({ length: count }, (_, index) => index), [count]);
 
   return (
@@ -114,22 +65,21 @@ export const VideoFeedSkeleton = memo(function VideoFeedSkeleton({
       accessibilityState={{ busy: true }}
       pointerEvents="none"
     >
-      <Animated.View style={{ opacity }}>
+      <View style={{ opacity: 0.72 }}>
         {items.map((item) => <VideoSkeletonCard key={item} variant={variant} palette={palette} />)}
-      </Animated.View>
+      </View>
     </View>
   );
 });
 
-/** Animated placeholder displayed until an individual thumbnail finishes loading. */
+/** Still placeholder displayed until an individual thumbnail finishes loading. */
 export const ThumbnailSkeleton = memo(function ThumbnailSkeleton() {
   const { palette } = useFrameTheme();
-  const opacity = usePulseAnimation();
 
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.surfaceDim, opacity }]}
+      style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.surfaceDim, opacity: 0.72 }]}
     />
   );
 });
@@ -144,9 +94,7 @@ function createStyles(palette: FramePalette) {
       width: "100%",
       aspectRatio: 16 / 9,
       backgroundColor: skeletonColor,
-      borderRadius: radii.card,
-      borderWidth: 1,
-      borderColor: palette.borderSoft,
+      borderRadius: radii.media,
     },
     fullMeta: { marginTop: spacing.md, paddingRight: spacing.xl, gap: spacing.sm },
     fullTitleBar: { width: "88%", height: 16 },
@@ -165,3 +113,4 @@ function createStyles(palette: FramePalette) {
     wideTitleShortBar: { width: "68%", height: 12 },
   });
 }
+

@@ -1,13 +1,14 @@
+import { feedbackGate, loadFeedbackPreference } from "@/services/feedback";
 import { HankenGrotesk_400Regular, HankenGrotesk_500Medium, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
 import { LibreCaslonText_400Regular, LibreCaslonText_700Bold } from "@expo-google-fonts/libre-caslon-text";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, usePathname } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Text, View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PaywallSheet from "@/components/PaywallSheet";
 import OwnerPinModal from "@/components/OwnerPinModal";
@@ -37,12 +38,11 @@ function AppContent() {
 
   useEffect(() => {
     if (!ready || hasNavigated.current) return;
+    hasNavigated.current = true;
     const first = segments[0];
     if (!prefs.hasCompletedOnboarding && first !== "onboarding") {
-      hasNavigated.current = true;
       router.replace("/onboarding");
     } else if (prefs.hasCompletedOnboarding && first === "onboarding") {
-      hasNavigated.current = true;
       router.replace("/(tabs)");
     }
   }, [ready, prefs.hasCompletedOnboarding, segments, router]);
@@ -60,20 +60,28 @@ function AppContent() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="welcome-preview" options={{ headerShown: false }} />
       <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: "fullScreenModal" }} />
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
       <Stack.Screen name="terms" options={{ title: "Terms" }} />
       <Stack.Screen name="diagnostics" options={{ title: "Beta Support" }} />
       <Stack.Screen name="google-import" options={{ title: "Import subscriptions", presentation: "modal" }} />
-      <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to Session" }} />
-      <Stack.Screen name="session" options={{ presentation: "modal", title: "Named Session" }} />
+      <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to session" }} />
+      <Stack.Screen name="session" options={{ presentation: "modal", title: "Session" }} />
       <Stack.Screen name="session/[id]" options={{ title: "" }} />
     </Stack>
   );
 }
 
 function ThemedApp() {
+  const pathname = usePathname();
+  React.useLayoutEffect(() => { feedbackGate.invalidate(); }, [pathname]);
+  React.useEffect(() => {
+    void loadFeedbackPreference();
+    const listener = AppState.addEventListener("change", () => feedbackGate.invalidate());
+    return () => listener.remove();
+  }, []);
   const segments = useSegments();
   const { isDark, palette } = useFrameTheme();
   const { profileSwitching, activeProfileId } = useApp();
@@ -91,6 +99,8 @@ function ThemedApp() {
 }
 
 export default function RootLayout() {
+  const [fontWaitExpired, setFontWaitExpired] = React.useState(false);
+  React.useEffect(() => { const timer = setTimeout(() => setFontWaitExpired(true), 8000); return () => clearTimeout(timer); }, []);
   const [fontsLoaded, fontError] = useFonts({
     HankenGrotesk_400Regular,
     HankenGrotesk_500Medium,
@@ -100,10 +110,10 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
-  }, [fontError, fontsLoaded]);
+    if (fontsLoaded || fontError || fontWaitExpired) SplashScreen.hideAsync().catch(() => {});
+  }, [fontError, fontsLoaded, fontWaitExpired]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError && !fontWaitExpired) return null;
 
   return (
     <ErrorBoundary>
@@ -115,3 +125,4 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+

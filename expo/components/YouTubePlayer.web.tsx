@@ -70,12 +70,12 @@ function loadIframeApi(): Promise<YouTubeNamespace> {
     window.onYouTubeIframeAPIReady = (): void => {
       previousReady?.();
       if (window.YT?.Player) resolve(window.YT);
-      else reject(new Error("YouTube API loaded without a player constructor."));
+      else reject(new Error("The video service couldn’t start the player. Try again."));
     };
 
     const existingScript = document.getElementById(API_SCRIPT_ID) as HTMLScriptElement | null;
     const script = existingScript ?? document.createElement("script");
-    const handleError = (): void => reject(new Error("YouTube API could not be loaded."));
+    const handleError = (): void => reject(new Error("The video service couldn’t load the player. Check your connection and try again."));
     script.addEventListener("error", handleError, { once: true });
     if (!existingScript) {
       script.id = API_SCRIPT_ID;
@@ -94,10 +94,10 @@ function loadIframeApi(): Promise<YouTubeNamespace> {
 function youtubeError(code?: number): YouTubePlayerError {
   if (code === 100) return { code, message: "This video was removed or is private." };
   if (code === 101 || code === 150) return { code, message: "This creator does not allow this video to play inside Frame." };
-  if (code === 153) return { code, message: "YouTube could not verify this player. Please retry or open the video in YouTube." };
-  if (code === 2) return { code, message: "This YouTube link is not valid." };
+  if (code === 153) return { code, message: "The video service could not verify this player. Try again or open the original video." };
+  if (code === 2) return { code, message: "This video link is not valid." };
   if (code === 5) return { code, message: "This video could not play in this browser." };
-  return { code, message: "The player could not load this video." };
+  return { code, message: "The player couldn’t load this video. Try again or open the original video." };
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
@@ -170,7 +170,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
               if (disposed) return;
               playerRef.current = event.target;
               const iframe = event.target.getIframe();
-              iframe.setAttribute("title", "YouTube video player");
+              iframe.setAttribute("title", "Video player");
               iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
               iframe.setAttribute("allowfullscreen", "true");
               iframe.style.width = "100%";
@@ -198,7 +198,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         playerRef.current = player;
       })
       .catch(() => {
-        if (!disposed) callbacksRef.current.onError({ message: "YouTube could not be reached. Check your connection and retry." });
+        if (!disposed) callbacksRef.current.onError({ message: "The video service could not be reached. Check your connection and try again." });
       });
 
     return () => {
@@ -251,3 +251,4 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
 });
 
 export default YouTubePlayer;
+

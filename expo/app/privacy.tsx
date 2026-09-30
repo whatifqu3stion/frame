@@ -1,5 +1,6 @@
+import { Link } from "expo-router";
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
@@ -36,15 +37,16 @@ export default function PrivacyScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
-      <Text style={styles.title}>Privacy Policy</Text>
+      <Text accessibilityRole="header" style={styles.title}>Privacy Policy</Text>
       <Text style={styles.updated}>Effective August 30, 2026</Text>
       <Text style={styles.intro}>Frame is built around a private, on-device library. This policy explains what stays on your device, when information is shared to provide a feature, and the controls available to you.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text style={styles.heading}>{section.title}</Text>
+          <Text accessibilityRole="header" style={styles.heading}>{section.title}</Text>
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}
+      <Link href="/(tabs)/settings" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open data and account controls</Text></Pressable></Link>
     </ScrollView>
   );
 }
@@ -61,3 +63,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
   body: { ...type.bodySoft, color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 23 },
   });
 }
+

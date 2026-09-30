@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useFeedback } from "@/hooks/useFeedback";
+import MotionView from "@/components/motion/MotionView";
+import Pressable from "@/components/motion/ChoicePressable";
+import { useMemo, useState } from "react";
+import {  StyleSheet, Text, TextInput, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { ViewingAllowance } from "@/models/viewingAllowance";
@@ -13,16 +16,16 @@ const PRESETS = [15, 30, 45, 60] as const;
 
 /** Compact profile viewing-allowance selector with validated whole-minute choices. */
 export default function AllowancePicker({ value, onChange }: Props) {
+  const touch = useFeedback();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const isPreset = value.mode === "dailyLimit" && PRESETS.includes(value.minutes as 15 | 30 | 45 | 60);
   const [custom, setCustom] = useState<string>(value.mode === "dailyLimit" && !isPreset ? String(value.minutes) : "");
 
-  useEffect(() => {
-    setCustom(value.mode === "dailyLimit" && !isPreset ? String(value.minutes) : "");
-  }, [isPreset, value]);
+  const [customMode, setCustomMode] = useState(!isPreset && value.mode === "dailyLimit");
 
   const chooseCustom = (text: string): void => {
+    setCustomMode(true);
     const digits = text.replace(/\D/g, "").slice(0, 4);
     setCustom(digits);
     const minutes = Number(digits);
@@ -32,16 +35,16 @@ export default function AllowancePicker({ value, onChange }: Props) {
   return (
     <View>
       <Text style={styles.label}>Daily viewing allowance</Text>
-      <View style={styles.options}>
+      <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Daily viewing allowance">
         {PRESETS.map((minutes) => {
-          const selected = value.mode === "dailyLimit" && value.minutes === minutes;
-          return <Pressable key={minutes} onPress={() => onChange({ mode: "dailyLimit", minutes })} style={[styles.option, selected && styles.selected]} accessibilityRole="radio" accessibilityState={{ selected }}><Text style={[styles.optionText, selected && styles.selectedText]}>{minutes} min</Text></Pressable>;
+          const selected = !customMode && value.mode === "dailyLimit" && value.minutes === minutes;
+          return <Pressable key={minutes} onPress={() => { if (selected) return; setCustomMode(false); onChange({ mode: "dailyLimit", minutes }); touch.selection(); }} style={[styles.option, selected && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: selected }}><Text style={[styles.optionText, selected && styles.selectedText]}>{minutes} min</Text></Pressable>;
         })}
-        <Pressable onPress={() => chooseCustom(custom || "1")} style={[styles.option, value.mode === "dailyLimit" && !isPreset && styles.selected]} accessibilityRole="radio"><Text style={[styles.optionText, value.mode === "dailyLimit" && !isPreset && styles.selectedText]}>Custom</Text></Pressable>
-        <Pressable onPress={() => onChange({ mode: "unlimited" })} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ selected: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
+        <Pressable onPress={() => { if (customMode && value.mode === "dailyLimit") return; chooseCustom(custom || "1"); touch.selection(); }} style={[styles.option, value.mode === "dailyLimit" && customMode && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: customMode && value.mode === "dailyLimit" }}><Text style={[styles.optionText, value.mode === "dailyLimit" && customMode && styles.selectedText]}>Custom</Text></Pressable>
+        <Pressable onPress={() => { if (value.mode === "unlimited") return; setCustomMode(false); onChange({ mode: "unlimited" }); touch.selection(); }} style={[styles.unlimited, value.mode === "unlimited" && styles.selected]} accessibilityRole="radio" accessibilityState={{ checked: value.mode === "unlimited" }}><Text style={[styles.optionText, value.mode === "unlimited" && styles.selectedText]}>Unlimited — no daily limit</Text></Pressable>
       </View>
-      {value.mode === "dailyLimit" && !isPreset ? <TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" /> : null}
-      <Text style={styles.note}>This allowance limits playback only inside Frame. It does not block YouTube, browsers, or other apps.</Text>
+      {value.mode === "dailyLimit" && customMode ? <MotionView enter><Text style={styles.note}>Custom minutes (1–1440)</Text><TextInput value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} style={styles.input} accessibilityLabel="Custom daily viewing allowance in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</MotionView> : null}
+      <Text style={styles.note}>This allowance limits playback only inside Frame. It does not limit viewing in browsers or other apps.</Text>
     </View>
   );
 }
@@ -50,12 +53,13 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     label: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md, marginBottom: spacing.sm },
     options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    option: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
+    option: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
     unlimited: { minHeight: 48, width: "100%", justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
     selected: { borderColor: palette.active, backgroundColor: palette.activeSoft },
     optionText: { ...type.label, color: palette.inkMuted, fontSize: 12 },
     selectedText: { color: palette.active },
     input: { ...type.body, minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: palette.borderSoft, borderRadius: radii.control, backgroundColor: palette.surfaceHigh },
-    note: { ...type.bodySoft, color: palette.inkMuted, fontSize: 11, marginTop: spacing.sm },
+    note: { ...type.bodySoft, color: palette.inkMuted, fontSize: 12, marginTop: spacing.sm },
   });
 }
+

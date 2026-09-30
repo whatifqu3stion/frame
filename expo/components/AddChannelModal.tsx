@@ -1,8 +1,11 @@
-import { Image } from "expo-image";
+import MotionView from "@/components/motion/MotionView";
+import { useFeedback } from "@/hooks/useFeedback";
+import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import Sheet from "@/components/Sheet";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -15,9 +18,15 @@ type Feedback = { ok: boolean; message: string };
 
 /** Resolves a shared source first, then requires an explicit profile-local follow. */
 export default function AddChannelModal({ visible, onClose }: Props) {
+  const touch = useFeedback();
   const { resolveSourceInput, confirmSource, requirePurchase, saveVideo, activeProfileId } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const requestId = useRef(0);
+  const locked = useRef(false);
+  const profileRef = useRef(activeProfileId);
+  profileRef.current = activeProfileId;
+  useEffect(() => () => { requestId.current += 1; }, []);
   const [value, setValue] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [resolution, setResolution] = useState<SourceResolution | null>(null);
@@ -25,6 +34,8 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const close = (): void => {
+    if (locked.current) return;
+    requestId.current += 1;
     setValue("");
     setBusy(false);
     setResolution(null);
@@ -34,34 +45,34 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   const submit = async (): Promise<void> => {
-    if (!value.trim() || busy || !requirePurchase("creators")) return;
-    setBusy(true);
-    setResolution(null);
-    setFeedback(null);
+    if (!value.trim() || locked.current || !requirePurchase("creators")) return;
+    const request = ++requestId.current;
     const expectedProfile = activeProfileId;
-    const result = await resolveSourceInput(value.trim());
-    setBusy(false);
-    if (expectedProfile !== activeProfileId) return;
-    if (result.status === "success") {
-      setResolutionProfileId(expectedProfile);
-      setResolution(result.data);
-      setFeedback({ ok: true, message: result.data.provenance === "cache" ? "Verified from Frame’s shared catalog." : "Verified with YouTube." });
-      return;
-    }
-    setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
+    locked.current = true; setBusy(true); setResolution(null); setFeedback(null);
+    try {
+      const result = await resolveSourceInput(value.trim());
+      if (requestId.current !== request || profileRef.current !== expectedProfile) return;
+      if (result.status === "success") {
+        setResolutionProfileId(expectedProfile); setResolution(result.data);
+        setFeedback({ ok: true, message: "Source found. Check the details, then choose Follow source." });
+      } else setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
+    } catch { if (requestId.current === request) setFeedback({ ok: false, message: "Couldn’t check this source. Check your connection and try again." }); }
+    finally { if (requestId.current === request) { locked.current = false; setBusy(false); } }
   };
 
   const follow = async (): Promise<void> => {
-    if (!resolution || resolutionProfileId !== activeProfileId || busy) return;
-    setBusy(true);
-    const result = await confirmSource(resolution);
-    setBusy(false);
-    setFeedback(result);
-    if (result.ok) setTimeout(close, 700);
+    if (!resolution || resolutionProfileId !== activeProfileId || locked.current) return;
+    locked.current = true; setBusy(true);
+    const done = touch.capture();
+    try {
+      const result = await confirmSource(resolution); setFeedback(result);
+      if (result.ok) { done("commit"); setResolution(null); setValue(""); }
+    } catch { setFeedback({ ok: false, message: "Couldn’t follow this source. Try again." }); }
+    finally { locked.current = false; setBusy(false); }
   };
 
   const watch = (): void => {
-    if (!resolution || resolutionProfileId !== activeProfileId) return;
+    if (!resolution || resolutionProfileId !== activeProfileId || locked.current) return;
     const video = resolutionVideoToVideo(resolution);
     if (!video) return;
     close();
@@ -82,39 +93,39 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   };
 
   const save = async (): Promise<void> => {
-    if (!resolution || resolutionProfileId !== activeProfileId || busy) return;
+    if (!resolution || resolutionProfileId !== activeProfileId || locked.current) return;
     const video = resolutionVideoToVideo(resolution);
     if (!video) return;
-    setBusy(true);
+    locked.current = true; setBusy(true);
+    const done = touch.capture();
     try {
       await saveVideo(video);
+      done("commit");
       setFeedback({ ok: true, message: `Saved ${video.title}.` });
     } catch {
       setFeedback({ ok: false, message: "That video couldn’t be saved. Try again." });
     } finally {
-      setBusy(false);
+      locked.current = false; setBusy(false);
     }
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={close}>
-      <Pressable onPress={close} style={styles.backdrop} accessibilityLabel="Close add source">
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.card} accessibilityRole="none">
-          <View style={styles.handle} />
+    <Sheet visible={visible} onClose={close}>
           <View style={styles.headerRow}>
-            <Text style={styles.eyebrow}>Add a trusted source</Text>
-            <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+            <Text style={styles.eyebrow}>Add a source</Text>
+            <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Paste a link.</Text>
-          <Text style={styles.body}>Use a channel ID, @handle, channel URL, or individual YouTube video. Frame verifies it before anything is followed.</Text>
+          <Text style={styles.heading}>Find a source</Text>
+          <Text style={styles.body}>Use a channel or video link, an @handle, or a channel ID. Check the result before following.</Text>
+          <Text style={[type.label, { marginTop: spacing.md }]}>Source or video link</Text>
           <View style={styles.inputRow}>
             <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
             <TextInput
               value={value}
               onChangeText={(text) => { setValue(text); setResolution(null); setResolutionProfileId(null); setFeedback(null); }}
-              placeholder="youtube.com/@source"
+              placeholder="@creator"
               placeholderTextColor={palette.inkMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -122,30 +133,31 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               style={styles.input}
               onSubmitEditing={() => { void submit(); }}
               returnKeyType="done"
-              accessibilityLabel="YouTube source or video link"
+              editable={!busy}
+              accessibilityLabel="Source or video link"
               testID="add-channel-input"
             />
           </View>
-          {feedback ? <Text style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
+          {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
 
           {resolution ? (
-            <View style={styles.preview} testID="resolved-source-preview">
-              {resolution.source.thumbnailUrl ? <Image source={{ uri: resolution.source.thumbnailUrl }} style={styles.avatar} contentFit="cover" cachePolicy="none" /> : <View style={styles.avatarFallback} />}
+            <MotionView enter style={styles.preview} testID="resolved-source-preview">
+              <Image source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
               <View style={styles.previewCopy}>
                 <Text style={styles.previewTitle} numberOfLines={2}>{resolution.source.displayName}</Text>
-                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Verified YouTube channel"}</Text>
+                <Text style={styles.previewMeta} numberOfLines={1}>{resolution.source.handle ?? "Channel"}</Text>
                 {resolution.video ? <Text style={styles.videoTitle} numberOfLines={2}>Video · {resolution.video.title}</Text> : null}
               </View>
-            </View>
+            </MotionView>
           ) : null}
 
           {resolution?.video ? (
             <View style={styles.actionRow}>
-              <Pressable onPress={watch} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="watch-resolved-video">
+              <Pressable disabled={busy} onPress={watch} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="watch-resolved-video">
                 <Play size={16} color={palette.accent} fill={palette.accent} />
                 <Text style={styles.secondaryText}>Watch</Text>
               </Pressable>
-              <Pressable onPress={() => { void save(); }} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="save-resolved-video">
+              <Pressable disabled={busy} onPress={() => { void save(); }} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="save-resolved-video">
                 <BookmarkPlus size={17} color={palette.accent} />
                 <Text style={styles.secondaryText}>Save</Text>
               </Pressable>
@@ -158,12 +170,10 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             </Pressable>
           ) : (
             <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
-              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Verify source</Text>}
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Find source</Text>}
             </Pressable>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -171,10 +181,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: palette.overlay, justifyContent: "flex-end", padding: spacing.md },
     card: { ...softShadow, backgroundColor: palette.surfaceHigh, padding: spacing.lg, paddingTop: spacing.md, borderRadius: radii.large, borderWidth: 1, borderColor: palette.border },
-    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: palette.surfaceDeep, alignSelf: "center", marginBottom: spacing.md },
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     eyebrow: { ...type.caption, color: palette.accent },
-    closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
+    closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -12 },
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
     body: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 350 },
     inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, minHeight: 52, marginTop: spacing.lg, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft },
@@ -193,6 +202,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     button: { minHeight: 52, marginTop: spacing.md, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: palette.active },
     buttonContent: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
     buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
-    pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.76 },
   });
 }
+

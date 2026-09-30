@@ -32,4 +32,5 @@ export const PLAYER_AND_RECOVERY_ROUTES = [
   "/add-to-queue",
 ] as const;
 
-export const ONBOARDING_STEPS = ["approach", "interests", "trusted-source", "enter-today"] as const;
+export const ONBOARDING_STEPS = ["welcome", "interests", "source", "your-frame"] as const;
+

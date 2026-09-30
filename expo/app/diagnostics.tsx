@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { Redirect } from "expo-router";
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, Share, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   APP_ENV,
@@ -57,6 +57,11 @@ function DiagnosticsScreen() {
     revenueCat: FEATURE_FLAGS.paidAccess && isRevenueCatConfigured,
   };
 
+  const shareStatus = async (): Promise<void> => {
+    const message = [`Frame ${Constants.expoConfig?.version ?? "unknown"}`, `Environment: ${APP_ENV}`, `Release: ${RELEASE_CHANNEL_LABEL}`, `Access: ${entitlementState}`, `Database: ${database?.version ?? "unavailable"}`, `Storage: ${database?.storage ?? "unavailable"}`, `Thumbnail cleanup: ${cleanup ? cleanupLabels[cleanup.state] : "unknown"}`, ...Object.entries(flags).map(([name, enabled]) => `${name}: ${enabled ? "enabled" : "disabled"}`)].join("\n");
+    try { await Share.share({ title: "Frame support status", message }); } catch { Alert.alert("Couldn’t share status", "You can select and copy the status values below."); }
+  };
+
   return (
     <ScrollView
       style={styles.root}
@@ -69,6 +74,7 @@ function DiagnosticsScreen() {
         <Text style={type.bodySoft}>Safe configuration and readiness status. Credentials and tokens are never shown.</Text>
       </View>
 
+      <Pressable onPress={() => { void shareStatus(); }} accessibilityRole="button" style={{ minHeight: 48, margin: spacing.page, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep, alignItems: "center" }}><Text style={[type.label, { color: palette.onDark }]}>Share support status</Text></Pressable>
       <DiagnosticSection title="Runtime" styles={styles} type={type}>
         <DiagnosticRow label="App version" value={Constants.expoConfig?.version ?? "unknown"} styles={styles} type={type} />
         <DiagnosticRow label="Environment" value={APP_ENV} styles={styles} type={type} />
@@ -124,7 +130,7 @@ function DiagnosticSection({
 }) {
   return (
     <View style={styles.section}>
-      <Text style={type.caption}>{title}</Text>
+      <Text accessibilityRole="header" style={type.caption}>{title}</Text>
       <View style={styles.card}>{children}</View>
     </View>
   );
@@ -173,3 +179,4 @@ function createStyles(palette: FramePalette, type: FrameType) {
     value: { color: palette.inkMuted },
   });
 }
+

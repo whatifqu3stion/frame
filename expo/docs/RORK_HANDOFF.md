@@ -16,6 +16,9 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Guarded deterministic and Gemini-assisted Weekly Picks drafting.
 - Human-reviewed, project-bound, atomic Weekly Picks publication workflow.
 - Local reset, metadata retention, diagnostics, and automated safety tests.
+- App-wide visual refinement, restrained programme grain, clearer copy, conversion-focused onboarding and a clearly labelled demo Premium surface.
+- Purposeful motion, reduced-motion handling and optional semantic haptics.
+- Mobile UX corrections: edit preservation, hierarchical Back, keyboard handling, control sizing and clear save actions.
 
 ## Rork owns next
 
@@ -24,7 +27,7 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 - Produce installable iOS and Android development/staging builds.
 - Run the native checklist in `SMOKE_TEST.md` and attach screenshots/recordings.
 - Fix native-only presentation issues: safe areas, keyboard behavior, time pickers, back gestures, orientation, and device-specific layout.
-- Later, execute the graphic-design pass, broad copy-edit pass, store-facing assets/metadata, and the visual purchase surface.
+- Validate the completed design, copy, onboarding and motion passes on real devices; prepare store-facing assets/metadata and the eventual production purchase surface.
 
 ## Codex retains
 
@@ -43,9 +46,14 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 
 ## Explicitly deferred
 
-- Graphic design and visual polish.
-- Broad text/copy editing.
 - Paid-access activation and paywall launch.
 - Deep Find or broad search.
 - Remote approvals/notifications and cloud profile sync.
 - Unreviewed or automatic Weekly Picks publication.
+
+
+## Current design handoff
+
+Integration: PR #18 brings `codex/frame-design-refinement` into `main`, including the design, copy, onboarding, motion and mobile UX implementation passes. The user authorized this integration on September 30. Rork should use the resulting `main` revision; its tracked branch and automatic sync behavior have not been verified here. Confirm the checked-out revision before reviewing the preview. Historical audit records retain their original draft-PR status.
+
+Start with `MOBILE_UX_AUDIT.md` and `MOTION_AND_HAPTICS_REVIEW.md`, then run `SMOKE_TEST.md`. Prioritize edited-session Back/swipe dismissal and failed-save recovery; profile editor Back/Cancel/X and authorization expiry; first-run versus replay Android Back; import typing, first-tap selection and dock reachability; narrow-screen large text; accessibility escape and Reduced Motion. Capture the real app in light and dark appearances. The build must retain `paidAccess: false` and `demoPaywall: true` for this demo.

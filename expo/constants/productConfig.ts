@@ -23,6 +23,7 @@ export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandid
 /** Central kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
   paidAccess: false,
+  demoPaywall: true,
   localLibrary: true,
   finiteSessions: true,
   youtubeDiscovery: false,
@@ -32,3 +33,4 @@ export const FOUNDATION_CAPABILITIES = {
   googleSelectiveImport: true,
   automaticGoogleFollowing: false,
 } as const;
+

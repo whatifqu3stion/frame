@@ -150,10 +150,10 @@ function playerHtml(videoId: string, startSeconds: number): string {
 function youtubeError(code?: number): YouTubePlayerError {
   if (code === 100) return { code, message: "This video was removed or is private." };
   if (code === 101 || code === 150) return { code, message: "This creator does not allow this video to play inside Frame." };
-  if (code === 153) return { code, message: "YouTube could not verify this player. Please retry or open the video in YouTube." };
-  if (code === 2) return { code, message: "This YouTube link is not valid." };
+  if (code === 153) return { code, message: "The video service could not verify this player. Try again or open the original video." };
+  if (code === 2) return { code, message: "This video link is not valid." };
   if (code === 5) return { code, message: "This video could not play on this device." };
-  return { code, message: "The player could not load this video." };
+  return { code, message: "The player couldn’t load this video. Try again or open the original video." };
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
@@ -212,9 +212,9 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
         onConnectivityChange(data.isOnline);
         return;
       }
-      if (data.type === "shellError") onError({ message: "YouTube could not be reached. Check your connection and retry." });
+      if (data.type === "shellError") onError({ message: "The video service could not be reached. Check your connection and try again." });
     } catch {
-      onError({ message: "The player returned an unreadable response." });
+      onError({ message: "The video player couldn’t respond. Try again." });
     }
   }, [onConnectivityChange, onEnded, onError, onFullscreenChange, onProgress, onReady, onStateChange]);
 
@@ -226,11 +226,11 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
   }, []);
 
   const handleWebViewError = useCallback((_event: WebViewErrorEvent): void => {
-    onError({ message: "YouTube could not be reached. Check your connection and retry." });
+    onError({ message: "The video service could not be reached. Check your connection and try again." });
   }, [onError]);
 
   const handleHttpError = useCallback((event: WebViewHttpErrorEvent): void => {
-    onError({ code: event.nativeEvent.statusCode, message: "YouTube returned an error while loading the player." });
+    onError({ code: event.nativeEvent.statusCode, message: "The video service couldn’t load the player. Try again." });
   }, [onError]);
 
   const shouldStart = useCallback((request: ShouldStartLoadRequest): boolean => {
@@ -278,3 +278,4 @@ export default YouTubePlayer;
 const styles = StyleSheet.create({
   webView: { flex: 1, backgroundColor: "#000" },
 });
+

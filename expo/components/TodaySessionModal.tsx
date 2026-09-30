@@ -1,27 +1,37 @@
 import { Plus, Rows3, X } from "lucide-react-native";
-import { useMemo } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import Sheet from "@/components/Sheet";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { VideoQueue } from "@/types";
 
-export default function TodaySessionModal({ visible, title, sessions, onClose, onPick, onCreate }: { visible: boolean; title: string; sessions: readonly VideoQueue[]; onClose: () => void; onPick: (sessionId: string) => void; onCreate: () => void }) {
+type Props = { visible: boolean; title: string; videoId: string; busy: boolean; nestedRoute?: boolean; sessions: readonly VideoQueue[]; onClose: () => void; onPick: (sessionId: string) => void; onCreate: (name: string) => void };
+export default function TodaySessionModal({ visible, title, videoId, busy, sessions, onClose, onPick, onCreate, nestedRoute = false }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const [name, setName] = useState("");
+  useEffect(() => { if (!visible) setName(""); }, [visible]);
+  const defaultName = `Session ${sessions.length + 1}`;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close session picker" />
-        <View style={styles.sheet}>
-          <View style={styles.header}><View style={styles.flex}><Text style={styles.eyebrow}>Add to Session</Text><Text style={styles.title} numberOfLines={2}>{title}</Text></View><Pressable onPress={onClose} style={styles.close} accessibilityRole="button"><X size={20} color={palette.ink} /></Pressable></View>
-          {sessions.map((session) => {
-            const full = session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems;
-            return <Pressable key={session.id} disabled={full} onPress={() => onPick(session.id)} style={[styles.row, full && styles.disabled]} accessibilityRole="button"><Rows3 size={18} color={palette.accent} /><View style={styles.flex}><Text style={styles.rowTitle}>{session.name}</Text><Text style={styles.meta}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View></Pressable>;
-          })}
-          <Pressable onPress={onCreate} style={styles.create} accessibilityRole="button"><Plus size={18} color={palette.onDark} /><Text style={styles.createText}>{sessions.length === 0 ? "Create Today session" : "New Today session"}</Text></Pressable>
-        </View>
+    <Sheet nestedRoute={nestedRoute} visible={visible} onClose={() => { if (!busy) onClose(); }} contentStyle={styles.content}>
+      <View style={styles.header}>
+        <View style={styles.flex}><Text style={type.heading} accessibilityRole="header">Add to session</Text><Text style={styles.meta}>{title}</Text></View>
+        <Pressable disabled={busy} onPress={onClose} style={styles.close} accessibilityRole="button" accessibilityLabel="Close session picker" accessibilityState={{ disabled: busy }}><X size={20} color={palette.ink} /></Pressable>
       </View>
-    </Modal>
+      {sessions.map((session) => {
+        const included = session.orderedVideoIds.includes(videoId);
+        const full = session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems;
+        const disabled = busy || full || included;
+        return <Pressable key={session.id} disabled={disabled} onPress={() => onPick(session.id)} style={[styles.row, disabled && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled }}><Rows3 size={18} color={palette.accent} /><View style={styles.flex}><Text style={type.label}>{session.name}</Text><Text style={styles.meta}>{included ? "Already in this session" : full ? "Full · choose another session" : `${session.orderedVideoIds.length} of ${PRODUCT_LIMITS.sessionDraftMaxItems} videos`}</Text></View></Pressable>;
+      })}
+      <Text style={styles.label}>New session name</Text>
+      <TextInput value={name} onChangeText={setName} editable={!busy} placeholder={defaultName} placeholderTextColor={palette.inkMuted} maxLength={80} style={styles.input} accessibilityLabel="New session name" />
+      <Pressable disabled={busy} onPress={() => onCreate(name.trim() || defaultName)} style={[styles.create, busy && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}>
+        {busy ? <ActivityIndicator color={palette.onDark} /> : <Plus size={18} color={palette.onDark} />}<Text style={styles.createText}>{busy ? "Adding…" : "Create and add video"}</Text>
+      </Pressable>
+    </Sheet>
   );
 }
-function createStyles(palette: FramePalette, type: FrameType) { return StyleSheet.create({ overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: palette.overlay }, sheet: { padding: spacing.page, paddingBottom: spacing.xl, backgroundColor: palette.surfaceHigh, borderTopLeftRadius: radii.large, borderTopRightRadius: radii.large, gap: spacing.sm }, header: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.md }, flex: { flex: 1 }, eyebrow: { ...type.caption, color: palette.accent }, title: { ...type.heading, marginTop: spacing.xs }, close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" }, row: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surface }, rowTitle: { ...type.label }, meta: { ...type.bodySoft, color: palette.inkMuted }, disabled: { opacity: 0.4 }, create: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep }, createText: { ...type.label, color: palette.onDark } }); }
+function createStyles(palette: FramePalette, type: FrameType) { return StyleSheet.create({ content: { gap: spacing.sm }, header: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.md }, flex: { flex: 1 }, close: { width: 48, height: 48, alignItems: "center", justifyContent: "center" }, row: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.surface }, meta: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.xs }, disabled: { opacity: 0.5 }, label: { ...type.label, marginTop: spacing.md }, input: { ...type.body, minHeight: 48, padding: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control }, create: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, padding: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep }, createText: { ...type.label, color: palette.onDark, flexShrink: 1 } }); }
