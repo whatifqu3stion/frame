@@ -1,9 +1,10 @@
+import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import Pressable from "@/components/motion/ChoicePressable";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { Check, Plus, Play } from "lucide-react-native";
 import { useMemo } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { formatDuration } from "@/services/youtube";
@@ -85,7 +86,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
           accessibilityLabel={followed ? `${suggestion.displayName} is followed` : `Follow ${suggestion.displayName}`}
           testID={`weekly-pick-follow-${suggestion.providerSourceId}`}
         >
-          {busy ? <ActivityIndicator size="small" color={palette.onAccent} /> : followed ? <Check size={17} color={palette.active} strokeWidth={2.2} /> : <Plus size={17} color={palette.onAccent} strokeWidth={2.2} />}
+          <OutcomeIcon confirmed={followed} busy={busy} size={17} color={followed ? palette.active : palette.onAccent} idle={<Plus size={17} color={palette.onAccent} strokeWidth={2.2} />}><Check size={17} color={palette.active} strokeWidth={2.2} /></OutcomeIcon>
           <Text style={[styles.followText, followed && styles.followedText]}>{busy ? "Adding…" : followed ? "Followed" : "Follow source"}</Text>
         </Pressable>
 

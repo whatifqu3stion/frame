@@ -250,7 +250,7 @@ export default function SourcesScreen() {
                   {discoverQuery.data.status === "cached_success" ? <Text style={styles.cacheNote}>Showing previously loaded picks.</Text> : null}
                   {discoverQuery.data.items.length === 0 ? <EmptyState title="You've seen these picks" body="Explore more from this week’s selection below." /> : null}
                   {discoverQuery.data.items.map((suggestion) => (
-                    <PositionedRow transitionKey={discoverQuery.data.items.map((item) => item.providerSourceId).join(",")} key={`${suggestion.provider}:${suggestion.providerSourceId}`}><WeeklyPickCard
+                    <PositionedRow transitionKey={discoverQuery.data.items.map((item) => item.providerSourceId).join(",")} key={`${activeProfileId}:${suggestion.provider}:${suggestion.providerSourceId}`}><WeeklyPickCard
                       suggestion={suggestion}
                       interestName={interestNames.get(suggestion.interestId) ?? "Your interests"}
                       followed={followedIds.has(suggestion.providerSourceId)}
