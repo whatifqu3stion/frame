@@ -67,14 +67,14 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
             <Pressable onPress={() => router.push("/google-import")} style={styles.inlineAction} accessibilityRole="button" testID="settings-google-import">
               <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
             </Pressable>
-            <Pressable onPress={onSignOut} style={styles.inlineAction} disabled={accountBusy} accessibilityRole="button" testID="sign-out-google">
+            <Pressable onPress={onSignOut} style={styles.inlineAction} disabled={accountBusy} accessibilityState={{ busy: accountBusy, disabled: accountBusy }} accessibilityRole="button" testID="sign-out-google">
               {accountBusy ? <ActivityIndicator size="small" color={palette.inkMuted} /> : <LogOut size={15} color={palette.inkMuted} />}
               <Text style={styles.inlineActionText}>Disconnect Google</Text>
             </Pressable>
           </View>
         ) : googleConfigured ? (
           <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityState={{ busy: accountBusy || importing, disabled: accountBusy || importing }} accessibilityRole="button" testID="connect-google">
-            {accountBusy || importing ? <ActivityIndicator color={palette.onDark} /> : <><Link2 size={18} color={palette.onDark} /><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
+            {accountBusy || importing ? <><ActivityIndicator color={palette.onDark} /><Text style={styles.googleText}>Connecting…</Text></> : <><Link2 size={18} color={palette.onDark} /><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
           </Pressable>
         ) : <Text style={styles.infoText}>Google connection isn’t available in this version. You can still add sources with a link or @handle.</Text>}
       </Section> : null}
@@ -88,6 +88,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
             const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
             return (
               <Pressable key={interest.id} onPress={() => { const done = feedback.capture(); void toggleInterest(interest.id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} disabled={unavailable} style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: unavailable }} accessibilityHint={unavailable ? "Remove a selected interest before choosing this one." : undefined} testID={`interest-${interest.id}`}>
+                <Check size={14} color={palette.active} style={{ opacity: selected ? 1 : 0 }} accessible={false} />
                 <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
               </Pressable>
             );
@@ -95,11 +96,13 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
         </View>
       </Section> : null}
 
-      {section === "appearance" ? <><Section hint="The video player always uses a dark background.">
+      {section === "appearance" ? <><Section label="Theme" hint="The video player always uses a dark background.">
         <View style={styles.choiceRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
           <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
           <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
         </View>
+      </Section>
+      <Section label="Accent color">
         <View style={styles.accentRow} accessibilityRole="radiogroup" accessibilityLabel="Accent color">
           {accentOptions.map((option) => {
             const selected = prefs.accent === option.id;
@@ -139,7 +142,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
       {section === "privacy" ? <Section hint="Your library and preferences are stored on this device.">
         <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
         <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
-        <Pressable onPress={onWipe} disabled={accountBusy} accessibilityState={{ busy: accountBusy, disabled: accountBusy }} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data"><Trash2 size={17} color={palette.danger} /><View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, playback and content boundary, usage record, request, and library item.</Text></View></Pressable>
+        <Pressable onPress={onWipe} disabled={accountBusy} accessibilityState={{ busy: accountBusy, disabled: accountBusy }} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data">{accountBusy ? <ActivityIndicator color={palette.danger} /> : <Trash2 size={17} color={palette.danger} />}<View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, playback and content boundary, usage record, request, and library item.</Text></View></Pressable>
       </Section> : null}
 
       {section === "about" ? <>
@@ -159,7 +162,8 @@ function Section({ label, hint, children }: { label?: string; hint?: string; chi
 }
 
 function AppearanceChoice({ label, selected, onPress, icon, styles }: { label: string; selected: boolean; onPress: () => void; icon: React.ReactNode; styles: ReturnType<typeof createStyles> }) {
-  return <Pressable onPress={onPress} style={[styles.appearanceChoice, selected && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }}>{icon}<Text style={[styles.appearanceText, selected && styles.appearanceTextActive]}>{label}</Text></Pressable>;
+  const { palette } = useFrameTheme();
+  return <Pressable onPress={onPress} style={[styles.appearanceChoice, selected && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }}>{icon}<Text style={[styles.appearanceText, selected && styles.appearanceTextActive]}>{label}</Text><Check size={16} color={palette.active} style={{ opacity: selected ? 1 : 0 }} accessible={false} /></Pressable>;
 }
 
 function StatusRow({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
@@ -180,19 +184,19 @@ function createStyles(palette: FramePalette, type: FrameType) {
     googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     googleText: { ...type.label, flex: 1, color: palette.onDark },
     chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    chip: { minHeight: 48, maxWidth: "100%", paddingVertical: spacing.sm, justifyContent: "center", paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
-    chipDisabled: { opacity: 0.48, borderStyle: "dashed" },
+    chip: { minHeight: 48, maxWidth: "100%", paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
+    chipDisabled: { opacity: 0.48 },
     chipText: { ...type.label, flexShrink: 1 },
     chipTextActive: { color: palette.active },
     choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     appearanceChoice: { minHeight: 56, flexGrow: 1, flexBasis: 180, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
-    appearanceText: { ...type.label, color: palette.inkMuted, flexShrink: 1 },
+    appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
+    appearanceText: { ...type.label, color: palette.ink, flex: 1 },
     appearanceTextActive: { color: palette.active },
-    accentRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
+    accentRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
     accentChoice: { minHeight: 82, flexGrow: 1, flexBasis: 90, alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.xs, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    accentChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.active },
+    accentChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
     swatch: { width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 16 },
     accentText: { ...type.label, color: palette.inkMuted, fontSize: 12, textAlign: "center" },
     infoCard: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.borderSoft },
