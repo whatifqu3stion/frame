@@ -1,3 +1,4 @@
+import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
@@ -5,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Check, Link2 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Alert, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Alert, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import OnboardingReveal from "@/components/OnboardingReveal";
 import { weeklyDiscoveryPeriodKey, weeklyPickToSourceResolution } from "@/services/discovery";
@@ -196,7 +197,7 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     {!resolution ? <>
     <Text style={styles.fieldLabel}>{interests.length > 0 && activeProfile?.role !== "managed" ? "Or bring a favorite" : "Source link or @handle"}</Text>
     <Text style={styles.sourceMeta}>Paste a supported channel or video link, an @handle, or a channel ID.</Text>
-    <View style={styles.inputRow}><Link2 size={18} color={palette.inkMuted} /><TextInput value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="@creator" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} style={styles.input} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" /></View>
+    <TextField containerStyle={styles.inputRow} leading={<Link2 size={18} color={palette.inkMuted} />} value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="@creator" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" />
     </> : null}
     {resolution ? <View style={styles.sourcePreview} testID="onboard-source-preview">
       <MediaImage source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
@@ -223,7 +224,7 @@ function createStyles(p: FramePalette, t: FrameType) {
     title: { ...t.title, fontSize: 36, lineHeight: 44 }, body: { ...t.bodySoft, marginTop: spacing.md }, note: { ...t.bodySoft, marginTop: spacing.lg },
     introduction: { padding: spacing.lg, marginTop: spacing.xl, borderRadius: radii.card, backgroundColor: p.programme, gap: spacing.md }, introTitle: { ...t.heading, color: p.onProgramme }, introBody: { ...t.body, color: p.onProgrammeSoft },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.lg }, chip: { minHeight: 48, maxWidth: "100%", flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: p.borderSoft, borderRadius: radii.control, backgroundColor: p.surface }, chipUnavailable: { borderStyle: "dashed" }, chipSelected: { borderColor: p.active, backgroundColor: p.activeSoft }, chipText: { ...t.label, flexShrink: 1 },
-    fieldLabel: { ...t.label, marginTop: spacing.xl }, inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 56, paddingHorizontal: spacing.md, marginTop: spacing.sm, borderRadius: radii.control, backgroundColor: p.surface, borderWidth: 1, borderColor: p.border }, input: { ...t.body, flex: 1, paddingVertical: spacing.md },
+    fieldLabel: { ...t.label, marginTop: spacing.xl }, inputRow: { marginTop: spacing.sm },
     sourceAction: { minHeight: 52, padding: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: p.accentDeep, marginTop: spacing.md }, sourcePreview: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, avatar: { width: 48, height: 48, borderRadius: radii.media }, flex: { flex: 1 }, sourceMeta: { ...t.bodySoft, marginTop: spacing.xs },
     followed: { marginTop: spacing.xl, gap: spacing.md, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, followedRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" }, followedName: { ...t.body, flex: 1 },
     footer: { width: "100%", maxWidth: 640, alignSelf: "center", flexDirection: "row", flexWrap: "wrap", gap: spacing.md, alignItems: "center", paddingHorizontal: spacing.page, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, primary: { flexGrow: 1, flexBasis: 180, minHeight: 52, padding: spacing.md, alignItems: "center", justifyContent: "center", backgroundColor: p.accentDeep, borderRadius: radii.control }, primaryText: { ...t.label, color: p.onDark, textAlign: "center" }, disabled: { opacity: 0.55 },

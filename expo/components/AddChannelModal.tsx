@@ -1,10 +1,11 @@
+import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
 import { useFeedback } from "@/hooks/useFeedback";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -120,9 +121,9 @@ export default function AddChannelModal({ visible, onClose }: Props) {
           <Text style={styles.heading}>Find a source</Text>
           <Text style={styles.body}>Use a channel or video link, an @handle, or a channel ID. Check the result before following.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Source or video link</Text>
-          <View style={styles.inputRow}>
-            <Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />
-            <TextInput
+          <TextField
+              containerStyle={styles.inputRow}
+              leading={<Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />}
               value={value}
               onChangeText={(text) => { setValue(text); setResolution(null); setResolutionProfileId(null); setFeedback(null); }}
               placeholder="@creator"
@@ -130,14 +131,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
-              style={styles.input}
               onSubmitEditing={() => { void submit(); }}
               returnKeyType="done"
               editable={!busy}
               accessibilityLabel="Source or video link"
               testID="add-channel-input"
             />
-          </View>
           {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
 
           {resolution ? (
@@ -186,8 +185,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -12 },
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
     body: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 350 },
-    inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, minHeight: 52, marginTop: spacing.lg, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft },
-    input: { flex: 1, ...type.body, paddingVertical: 0, fontSize: 15 },
+    inputRow: { marginTop: spacing.sm },
     feedback: { ...type.label, marginTop: spacing.md },
     preview: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     avatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: palette.surfaceDeep },
