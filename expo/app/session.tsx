@@ -1,3 +1,4 @@
+import TextField from "@/components/TextField";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { usePreventRemove } from "@react-navigation/native";
 import { useDiscardChanges } from "@/hooks/useDiscardChanges";
@@ -10,7 +11,7 @@ import { expireVideo } from "@/domain/metadataRetention";
 import { router, useLocalSearchParams, useNavigation, type Href } from "expo-router";
 import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -169,13 +170,13 @@ export default function SessionBuilder() {
       <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
       <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. {existingSession ? "Save your changes before leaving." : "Your draft is saved on this device."}</Text>
       <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
-      <TextInput
+      <TextField
         editable={!isSaving}
         value={name}
         onChangeText={setName}
         placeholder="Evening at home"
         placeholderTextColor={palette.inkMuted}
-        style={styles.nameInput}
+        containerStyle={styles.nameInput}
         returnKeyType="done"
         accessibilityLabel="Session name"
         maxLength={64}
@@ -197,7 +198,7 @@ export default function SessionBuilder() {
         </View>
       ) : null}
       <Text style={styles.pickLabel}>Choose videos</Text>
-      <View style={styles.searchField}><Search size={18} color={palette.inkMuted} /><TextInput value={search} onChangeText={setSearch} placeholder="Search titles or sources" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search session videos" style={[type.body, { flex: 1, minHeight: 48 }]} /></View>
+      <TextField containerStyle={styles.searchField} leading={<Search size={18} color={palette.inkMuted} />} value={search} onChangeText={setSearch} placeholder="Search titles or sources" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search session videos" autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
     </View>
   );
 
@@ -267,14 +268,14 @@ export default function SessionBuilder() {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    searchField: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderColor: palette.borderSoft, borderRadius: radii.control, paddingHorizontal: spacing.md },
+    searchField: { marginTop: spacing.sm },
     screen: { flex: 1, backgroundColor: palette.wall },
     content: { flexGrow: 1, paddingHorizontal: spacing.lg },
     header: { paddingBottom: spacing.xl },
     eyebrow: { ...type.caption, color: palette.accent },
     title: { ...type.title, marginTop: spacing.xs },
     subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 340 },
-    nameInput: { ...type.heading, minHeight: 52, marginTop: spacing.lg, paddingHorizontal: spacing.md, backgroundColor: palette.surface, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft },
+    nameInput: { marginTop: spacing.sm },
     flex: { flex: 1 },
     row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     indexBox: { width: 34, height: 34, borderRadius: radii.control, backgroundColor: palette.surface, justifyContent: "center", alignItems: "center" },
@@ -298,7 +299,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     trayTitle: { ...type.label, flexGrow: 1, flexBasis: "80%" },
     trayControl: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
-    pickLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xl },
+    pickLabel: { ...type.label, marginTop: spacing.xl },
     pressed: { opacity: 0.7 },
   });
 }

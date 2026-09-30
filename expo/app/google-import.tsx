@@ -1,3 +1,4 @@
+import TextField from "@/components/TextField";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
@@ -5,7 +6,7 @@ import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -122,7 +123,7 @@ export default function GoogleImportScreen() {
           <Text style={styles.title}>Bring your sources along.</Text>
           <Text style={styles.body}>Choose the subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
-          <TextInput value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" style={[type.body, { minHeight: 48, padding: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control }]} />
+          <TextField value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" containerStyle={{ marginTop: spacing.sm }} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
           <View style={styles.counterRow}>
             <Text style={styles.counter}>{selectedIds.size} selected</Text>
             <Text style={styles.capacity}>{availableSlots} spaces available</Text>

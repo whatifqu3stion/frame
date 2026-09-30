@@ -1,10 +1,11 @@
+import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
 import MotionView from "@/components/motion/MotionView";
 import Pressable from "@/components/motion/ChoicePressable";
 import { router } from "expo-router";
 import { ArrowRight, Play, Plus, Search, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import SessionProgramme from "@/components/SessionProgramme";
@@ -113,26 +114,23 @@ export default function SavedScreen() {
         )}
 
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
-        <View style={styles.searchField}>
-          <Search size={18} color={palette.inkMuted} strokeWidth={1.8} />
-          <TextInput
+        <TextField
+            leading={<Search size={18} color={palette.inkMuted} strokeWidth={1.8} />}
             value={searchQuery}
             onChangeText={(query) => setCriteria({ profileId: activeProfileId, query, filter: viewingFilter })}
             placeholder="Search titles or sources"
             placeholderTextColor={palette.inkMuted}
-            style={styles.searchInput}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
             accessibilityLabel="Search saved videos by title or source"
             testID="saved-search"
-          />
-          {searchQuery ? (
+            trailing={searchQuery ? (
             <Pressable onPress={() => setCriteria({ profileId: activeProfileId, query: "", filter: viewingFilter })} style={styles.clearSearch} accessibilityRole="button" accessibilityLabel="Clear Saved search" testID="clear-saved-search">
               <X size={17} color={palette.inkMuted} />
             </Pressable>
           ) : null}
-        </View>
+          />
         <View style={styles.filters} accessibilityRole="radiogroup" accessibilityLabel="Saved viewing status">
           {FILTERS.map((filter) => {
             const isSelected = viewingFilter === filter.id;
@@ -172,8 +170,6 @@ function createStyles(palette: FramePalette, type: FrameType) {
     otherSessions: { minHeight: 48, justifyContent: "center", marginTop: spacing.sm },
     sectionTitle: { ...type.heading, marginTop: spacing.xl, marginBottom: spacing.md },
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
-    searchField: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingLeft: spacing.md, paddingRight: spacing.xs, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    searchInput: { ...type.body, flex: 1, minHeight: 50, paddingVertical: 0 },
     clearSearch: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
     filters: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
     filterChip: { minHeight: 48, flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
