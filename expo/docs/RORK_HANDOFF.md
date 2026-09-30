@@ -54,6 +54,6 @@ This boundary is derived from the agreed Frame feature-set prompt and remains th
 
 ## Current design handoff
 
-Review branch: `codex/frame-design-refinement`, draft PR #18. The design, copy, onboarding, motion and mobile UX implementation passes are present on this branch once the PR update is published. The PR remains unmerged; Rork's tracked branch and automatic sync behavior have not been verified. Do not assume the app preview has updated until its checked-out revision is confirmed.
+Integration: PR #18 brings `codex/frame-design-refinement` into `main`, including the design, copy, onboarding, motion and mobile UX implementation passes. The user authorized this integration on September 30. Rork should use the resulting `main` revision; its tracked branch and automatic sync behavior have not been verified here. Confirm the checked-out revision before reviewing the preview. Historical audit records retain their original draft-PR status.
 
 Start with `MOBILE_UX_AUDIT.md` and `MOTION_AND_HAPTICS_REVIEW.md`, then run `SMOKE_TEST.md`. Prioritize edited-session Back/swipe dismissal and failed-save recovery; profile editor Back/Cancel/X and authorization expiry; first-run versus replay Android Back; import typing, first-tap selection and dock reachability; narrow-screen large text; accessibility escape and Reduced Motion. Capture the real app in light and dark appearances. The build must retain `paidAccess: false` and `demoPaywall: true` for this demo.
