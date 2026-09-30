@@ -26,7 +26,9 @@ describe("free beta boundaries", () => {
     expect(billing).toContain("if (FEATURE_FLAGS.paidAccess && revenueCatApiKey)");
     expect(billing).toContain('if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured)');
     expect(await source("../app/_layout.tsx")).toContain("{FEATURE_FLAGS.paidAccess ? <PaywallSheet /> : null}");
-    expect(await source("../app/(tabs)/settings.tsx")).toContain('{FEATURE_FLAGS.paidAccess ? <Section label="Premium">');
+    expect(await source("../components/SettingsDetails.tsx")).toContain('section === "premium" && FEATURE_FLAGS.paidAccess');
+    expect(await source("../app/settings/[section].tsx")).toContain('key === "premium" && !FEATURE_FLAGS.paidAccess');
+    expect(await source("../app/(tabs)/settings.tsx")).toContain('{FEATURE_FLAGS.paidAccess ? <SettingsRow');
   });
 
   test("legacy mobile content endpoints are removed, not hidden behind entitlement checks", async () => {

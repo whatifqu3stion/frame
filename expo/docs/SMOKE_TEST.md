@@ -198,3 +198,13 @@ All items below require real iOS and Android evidence; they are not signed off b
 - [ ] Discover loading, offline, and failed editions must not claim “End of weekly picks.” An edition with more choices must retain its More action.
 - [ ] Complete welcome with no choices, with a followed source, and with a first saved video. Preview the sample checkout, Back, skip, and complete it; confirm there is no purchase and the destination fits the user’s saved choices.
 - [ ] Enable Reduced Motion and disable haptics. Confirm selection, reorder, onboarding reveal, sheets, and ending states remain usable; re-enable each on supported hardware and assess the actual feedback.
+
+
+## 16. Distilled Settings navigation
+
+- [ ] Settings shows a compact index with current interest, appearance, and account summaries. Each row opens the named destination; native Back returns to the same Settings index.
+- [ ] Change interests and appearance, go Back, and confirm the summaries update. Switch profiles and confirm both the controls and summaries belong to the new profile.
+- [ ] Haptics is reachable through Appearance & feedback. Google import/disconnect is reachable through Google connection. Privacy, Terms, and the protected reset sequence are reachable through Privacy & data.
+- [ ] Demo welcome replay and beta diagnostics remain reachable through About & help when enabled. Premium is absent and a direct Premium settings link redirects to Settings while billing is disabled.
+- [ ] Cancel Owner authorization and leave during a delayed Google connection or reset authorization. The departed settings page must not navigate or reopen an obsolete dialog.
+- [ ] Verify all six index destinations and detail screens at small phone width and large text, with VoiceOver/TalkBack and a hardware keyboard. Check native swipe/Android Back as well as a direct link to a detail screen.

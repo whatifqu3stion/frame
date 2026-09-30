@@ -65,6 +65,7 @@ function AppContent() {
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
       <Stack.Screen name="terms" options={{ title: "Terms" }} />
+      <Stack.Screen name="settings/[section]" options={{ title: "Settings" }} />
       <Stack.Screen name="diagnostics" options={{ title: "Beta Support" }} />
       <Stack.Screen name="google-import" options={{ title: "Import subscriptions", presentation: "modal" }} />
       <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to session" }} />
