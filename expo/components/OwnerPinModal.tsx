@@ -54,7 +54,6 @@ export default function OwnerPinModal() {
   return (
     <>
     <Sheet visible={ownerPinPromptOpen} onClose={close}>
-          <View style={styles.handle} />
           <View style={styles.headerRow}>
             <View style={styles.icon}><LockKeyhole size={20} color={palette.active} /></View>
             <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cancel PIN entry">
@@ -104,10 +103,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     backdrop: { flex: 1, justifyContent: "flex-end", padding: spacing.md, backgroundColor: palette.overlay },
     card: { ...softShadow, padding: spacing.lg, paddingTop: spacing.md, borderRadius: radii.large, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
-    handle: { width: 36, height: 4, alignSelf: "center", marginBottom: spacing.md, borderRadius: 2, backgroundColor: palette.surfaceDeep },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: palette.activeSoft },
-    closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     heading: { ...type.heading, fontSize: 25, marginTop: spacing.md },
     body: { ...type.bodySoft, marginTop: spacing.sm },
     input: { ...type.heading, minHeight: 56, marginTop: spacing.lg, paddingHorizontal: spacing.md, textAlign: "center", letterSpacing: 8, borderWidth: 1, borderColor: palette.border, borderRadius: radii.control, backgroundColor: palette.surface },
@@ -116,8 +114,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
     button: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
     disabled: { opacity: 0.45 },
-    pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-    forgot: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
+    pressed: { opacity: 0.78 },
+    forgot: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
     forgotText: { ...type.label, color: palette.accent },
     recovery: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", fontSize: 12 },
   });

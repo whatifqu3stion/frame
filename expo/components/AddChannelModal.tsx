@@ -111,7 +111,6 @@ export default function AddChannelModal({ visible, onClose }: Props) {
 
   return (
     <Sheet visible={visible} onClose={close}>
-          <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.eyebrow}>Add a source</Text>
             <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
@@ -182,10 +181,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: palette.overlay, justifyContent: "flex-end", padding: spacing.md },
     card: { ...softShadow, backgroundColor: palette.surfaceHigh, padding: spacing.lg, paddingTop: spacing.md, borderRadius: radii.large, borderWidth: 1, borderColor: palette.border },
-    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: palette.surfaceDeep, alignSelf: "center", marginBottom: spacing.md },
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     eyebrow: { ...type.caption, color: palette.accent },
-    closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -12 },
+    closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", marginRight: -12 },
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
     body: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 350 },
     inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, minHeight: 52, marginTop: spacing.lg, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft },
@@ -204,7 +202,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     button: { minHeight: 52, marginTop: spacing.md, backgroundColor: palette.accentDeep, borderRadius: radii.control, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: palette.active },
     buttonContent: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
     buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
-    pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.76 },
   });
 }
 

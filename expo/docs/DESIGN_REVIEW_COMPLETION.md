@@ -100,3 +100,10 @@ Implemented the approved app-wide motion review with a restrained shared vocabul
 Native sheet/stack presentation remains responsible for its own lifetime. Reduced Motion makes new custom effects immediate. Full reset and destructive flows stay quiet; demo billing remains a clearly labeled preview (`paidAccess: false`, `demoPaywall: true`). See `MOTION_AND_HAPTICS_REVIEW.md` section 11 for implemented scope, adaptations and real-device gates.
 
 Validation: TypeScript passes; lint has zero errors and one preexisting generated-file warning; 218 tests pass across 47 files. Native timing, tactile strength and accessibility focus still require real-device verification. PR #18 remains a draft and unmerged.
+
+
+## Mobile UX corrections — September 30, 2026
+
+Implemented all eight source-audit findings: unsaved session/profile edit protection, hierarchical modal Back and accessibility escape, first-run Android exit, import keyboard accommodation, 48-unit controls, removal of nonfunctional grabbers, visible session-save text and the remaining legacy press-scale cleanup. Protected teardown bypasses edit prompts, and delayed discard callbacks cannot affect a new editor scope. See MOBILE_UX_AUDIT.md for the finding-to-change record and device acceptance checks.
+
+Verification: 220 tests pass across 48 files (1,089 assertions), TypeScript passes, lint has zero errors and one preexisting generated-file warning, and diff whitespace checks pass. Native/device validation is outstanding. The existing draft PR is the handoff surface; Rork sync and merge are not claimed.

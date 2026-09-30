@@ -80,7 +80,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     timeRow: { gap: spacing.md }, numberRow: { gap: spacing.md }, fieldLabel: { ...type.caption, color: palette.inkMuted },
     numberInput: { minHeight: 48, marginTop: 6, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surface, color: palette.ink, textAlign: "center" },
     pauseCard: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
-    pauseActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, pauseButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surfaceDeep }, pauseButtonText: { ...type.label, color: palette.active },
+    pauseActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, pauseButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.surfaceDeep }, pauseButtonText: { ...type.label, color: palette.active },
   });
 }
 

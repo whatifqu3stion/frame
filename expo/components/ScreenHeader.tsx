@@ -37,7 +37,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     profileName: { ...type.label, maxWidth: 88, color: palette.inkMuted, fontSize: 12 },
     title: { ...type.title, flexShrink: 1 },
     subtitle: { ...type.bodySoft, marginTop: spacing.sm, maxWidth: 480 },
-    pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+    pressed: { opacity: 0.72 },
   });
 }
 

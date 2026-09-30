@@ -136,7 +136,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     dismissText: { ...type.label, color: palette.inkMuted },
     feedback: { ...type.bodySoft, color: palette.success, marginTop: spacing.sm, textAlign: "center" },
     feedbackError: { color: palette.danger },
-    pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.78 },
   });
 }
 

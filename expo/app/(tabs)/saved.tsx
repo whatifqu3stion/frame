@@ -174,9 +174,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
     searchField: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingLeft: spacing.md, paddingRight: spacing.xs, borderRadius: radii.control, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     searchInput: { ...type.body, flex: 1, minHeight: 50, paddingVertical: 0 },
-    clearSearch: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
+    clearSearch: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
     filters: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
-    filterChip: { minHeight: 44, flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    filterChip: { minHeight: 48, flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     filterChipSelected: { backgroundColor: palette.activeSoft, borderColor: palette.active },
     filterText: { ...type.label, color: palette.inkSoft, textAlign: "center" },
     filterTextSelected: { color: palette.active },
@@ -188,7 +188,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     createAnother: { minHeight: 48, flexDirection: "row", gap: spacing.sm, alignItems: "center", marginTop: spacing.sm },
     createSession: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: -spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     createSessionText: { ...type.label, color: palette.onDark },
-    pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.74 },
   });
 }
 

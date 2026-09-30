@@ -165,9 +165,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
   videoHeading: { paddingHorizontal: spacing.lg, marginTop: spacing.xl, marginBottom: spacing.md },
   loadingFeed: { paddingHorizontal: spacing.lg },
   premiumGate: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
-  retryButton: { minHeight: 44, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
+  retryButton: { minHeight: 48, marginHorizontal: spacing.lg, marginTop: -spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start" },
   retryText: { ...type.label, color: palette.accent },
-  pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  pressed: { opacity: 0.7 },
   });
 }
 

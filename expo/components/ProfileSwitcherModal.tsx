@@ -36,7 +36,6 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
 
   return (
     <Sheet visible={visible} onClose={close}>
-          <View style={styles.handle} />
           <View style={styles.headerRow}>
             <View><Text style={styles.eyebrow}>This device</Text><Text style={styles.heading}>Who’s watching?</Text></View>
             <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
@@ -73,11 +72,10 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     backdrop: { flex: 1, justifyContent: "flex-end", padding: spacing.md, backgroundColor: palette.overlay },
     card: { ...softShadow, padding: spacing.lg, paddingTop: spacing.md, borderRadius: radii.large, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
-    handle: { width: 36, height: 4, alignSelf: "center", marginBottom: spacing.md, borderRadius: 2, backgroundColor: palette.surfaceDeep },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     eyebrow: { ...type.caption, color: palette.accent },
     heading: { ...type.heading, fontSize: 24, marginTop: spacing.xs },
-    closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     list: { gap: spacing.sm, marginTop: spacing.lg },
     row: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
     rowActive: { borderColor: palette.active, backgroundColor: palette.activeSoft },
@@ -88,7 +86,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     role: { ...type.bodySoft, color: palette.inkMuted, marginTop: 1, fontSize: 12 },
     feedback: { ...type.label, color: palette.danger, marginTop: spacing.md },
     note: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.md, fontSize: 12 },
-    pressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.75 },
   });
 }
 

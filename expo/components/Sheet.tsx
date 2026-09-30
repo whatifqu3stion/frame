@@ -9,6 +9,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 type Props = {
   visible: boolean;
   onClose(): void;
+  onBack?(): void;
   children: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   contentKey?: string;
@@ -17,7 +18,7 @@ type Props = {
 };
 
 /** A bounded, scrollable sheet that stays reachable with the keyboard and larger text. */
-export default function Sheet({ visible, onClose, children, contentStyle, contentKey, nestedRoute = false, animateContent = true }: Props) {
+export default function Sheet({ visible, onClose, onBack, children, contentStyle, contentKey, nestedRoute = false, animateContent = true }: Props) {
   const insets = useSafeAreaInsets();
   const { palette } = useFrameTheme();
   const reduceMotion = useReducedMotion();
@@ -25,7 +26,7 @@ export default function Sheet({ visible, onClose, children, contentStyle, conten
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [contentKey, visible]);
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion || nestedRoute ? "none" : "fade"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion || nestedRoute ? "none" : "fade"} onRequestClose={onBack ?? onClose}>
       <KeyboardAvoidingView style={[styles.screen, { backgroundColor: palette.overlay }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           ref={scroll}
@@ -36,7 +37,7 @@ export default function Sheet({ visible, onClose, children, contentStyle, conten
           showsVerticalScrollIndicator
           bounces={false}
         >
-          <MotionView changeKey={contentKey} active={visible && animateContent} style={[styles.card, { backgroundColor: palette.surfaceHigh }, contentStyle]} accessibilityViewIsModal>
+          <MotionView changeKey={contentKey} active={visible && animateContent} style={[styles.card, { backgroundColor: palette.surfaceHigh }, contentStyle]} accessibilityViewIsModal onAccessibilityEscape={onBack ?? onClose}>
             {children}
           </MotionView>
         </ScrollView>

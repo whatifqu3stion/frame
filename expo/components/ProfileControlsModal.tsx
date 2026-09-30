@@ -1,6 +1,7 @@
+import { useDiscardChanges } from "@/hooks/useDiscardChanges";
 import { useFeedback } from "@/hooks/useFeedback";
 import { ArrowLeft, Check, ChevronRight, Clock3, LockKeyhole, Plus, UserRound, X } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import AllowancePicker from "@/components/AllowancePicker";
@@ -50,17 +51,30 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const [allowance, setAllowance] = useState<ViewingAllowance>({ mode: "dailyLimit", minutes: 30 });
   const [playbackTimesValid, setPlaybackTimesValid] = useState(true);
   const [playbackControls, setPlaybackControls] = useState<ManagedPlaybackControls>({ ...DEFAULT_MANAGED_PLAYBACK_CONTROLS });
+  const initialAllowance = useRef(JSON.stringify({ mode: "dailyLimit", minutes: 30 }));
+  const initialControls = useRef(JSON.stringify(DEFAULT_MANAGED_PLAYBACK_CONTROLS));
+  const dirty = Boolean(editor && (
+    (editor.kind === "rename" && value !== editor.profile.name) ||
+    (editor.kind === "createStandard" && value.length > 0) ||
+    (editor.kind === "createManaged" && (value.length > 0 || JSON.stringify(allowance) !== initialAllowance.current)) ||
+    (editor.kind === "allowance" && JSON.stringify(allowance) !== initialAllowance.current) ||
+    (editor.kind === "controls" && (!playbackTimesValid || JSON.stringify(playbackControls) !== initialControls.current)) ||
+    (editor.kind === "pin" && Boolean(value || confirmation || currentPin)) ||
+    (editor.kind === "removePin" && currentPin.length > 0)
+  ));
   const [contentOverview, setContentOverview] = useState<ManagedContentOverview | null>(null);
   const [allowanceStatus, setAllowanceStatus] = useState<Record<string, ViewingAllowanceStatus>>({});
   const [busy, setBusy] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const confirmExit = useDiscardChanges(dirty, `${activeProfileId}:${selectedProfileId}:${editor?.kind}`, visible && isOwnerAuthorized && !profileSwitching && !busy);
 
   const refreshAllowances = useCallback(async (): Promise<void> => {
     const entries = await Promise.all(profiles.map(async (profile) => [profile.id, await getPlaybackAllowance(profile.id)] as const));
     setAllowanceStatus(Object.fromEntries(entries));
   }, [getPlaybackAllowance, profiles]);
 
-  useEffect(() => { if (visible) void refreshAllowances().catch(() => setFeedback({ ok: false, message: "Allowances couldn’t load. Close this panel and try again." })); else { setSelectedProfileId(null); setEditor(null); setFeedback(null); } }, [refreshAllowances, visible]);
+  useEffect(() => { if (visible) void refreshAllowances().catch(() => setFeedback({ ok: false, message: "Allowances couldn’t load. Close this panel and try again." })); else { setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null); } }, [refreshAllowances, visible]);
   useEffect(() => { if (visible && !isOwnerAuthorized) onClose(); }, [isOwnerAuthorized, onClose, visible]);
   useEffect(() => {
     if (!visible || !hasOwnerPin) return;
@@ -70,8 +84,10 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
 
   const close = (): void => {
     if (busy || profileSwitching) return;
-    setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null);
-    relockOwnerAccess(); onClose();
+    confirmExit(() => {
+      setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null);
+      relockOwnerAccess(); onClose();
+    });
   };
 
   const begin = (next: Editor): void => {
@@ -85,8 +101,13 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
         return;
       }
       const status = allowanceStatus[next.profile.id];
-      setAllowance(status?.kind === "unlimited" ? { mode: "unlimited" } : status?.kind === "limited" || status?.kind === "complete" ? { mode: "dailyLimit", minutes: status.allowanceMinutes } : { mode: "dailyLimit", minutes: 30 });
-    } else if (next?.kind === "createManaged") setAllowance({ mode: "dailyLimit", minutes: 30 });
+      const initial: ViewingAllowance = status?.kind === "unlimited" ? { mode: "unlimited" } : status?.kind === "limited" || status?.kind === "complete" ? { mode: "dailyLimit", minutes: status.allowanceMinutes } : { mode: "dailyLimit", minutes: 30 };
+      initialAllowance.current = JSON.stringify(initial);
+      setAllowance(initial);
+    } else if (next?.kind === "createManaged") {
+      initialAllowance.current = JSON.stringify({ mode: "dailyLimit", minutes: 30 });
+      setAllowance({ mode: "dailyLimit", minutes: 30 });
+    }
   };
 
   const beginAllowanceEditor = (profile: Profile): void => {
@@ -107,7 +128,9 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     }
     setBusy(true);
     try {
-      setPlaybackControls(await getManagedPlaybackControls(profile.id));
+      const controls = await getManagedPlaybackControls(profile.id);
+      initialControls.current = JSON.stringify(controls);
+      setPlaybackControls(controls);
       begin({ kind: "controls", profile });
     } catch (error) {
       setFeedback({ ok: false, message: error instanceof Error ? error.message : "Frame couldn’t load those controls." });
@@ -259,9 +282,10 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   const editorInvalid = busy || allowanceInvalid || controlsInvalid || ((editorNeedsName || editor?.kind === "pin") && !value.trim()) || ((editor?.kind === "pin" && hasOwnerPin || editor?.kind === "removePin") && currentPin.length < 4);
 
   const back = (): void => {
-    if (busy) return;
-    if (editor) begin(null);
-    else { setSelectedProfileId(null); setFeedback(null); }
+    if (busy || profileSwitching) return;
+    if (editor) confirmExit(() => begin(null));
+    else if (selectedProfileId) { setSelectedProfileId(null); setFeedback(null); }
+    else close();
   };
   const selectedIndex = localProfiles.findIndex((profile) => profile.id === selectedProfileId);
   const detailAction = (label: string, onPress: () => void, disabled = false, destructive = false) => (
@@ -272,7 +296,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
   );
 
   return (
-    <Sheet visible={visible} onClose={close} contentKey={`${selectedProfileId ?? "profiles"}:${editor?.kind ?? "overview"}`}>
+    <Sheet visible={visible} onClose={close} onBack={back} contentKey={`${selectedProfileId ?? "profiles"}:${editor?.kind ?? "overview"}`}>
       <View style={styles.detailHeader}>
         {editor || selectedProfile ? <Pressable onPress={back} disabled={busy} style={styles.backButton} accessibilityRole="button" accessibilityLabel={editor ? "Back to profile controls" : "Back to profiles"}><ArrowLeft size={20} color={palette.ink} /><Text style={type.label}>Back</Text></Pressable> : <View />}
         <Pressable onPress={close} disabled={busy || profileSwitching} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close profiles and boundaries"><X size={20} color={palette.ink} /></Pressable>
@@ -331,7 +355,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
             {editor.kind === "content" && contentOverview ? <ManagedContentAccessEditor value={contentOverview} busy={busy} onModeChange={(mode) => { void changeContentMode(editor.profile, mode); }} onReview={(request, decision) => { void reviewRequest(editor.profile, request, decision); }} onRevoke={(kind, targetId) => { void revokeContent(editor.profile, kind, targetId); }} /> : null}
             {controlsInvalid ? <Text style={[styles.feedback, { color: palette.danger }]}>{!playbackTimesValid ? "Enter valid times before saving." : validateManagedPlaybackControls(playbackControls)}</Text> : null}
             {editor.kind === "allowance" && editor.profile.role === "owner" ? <Text style={styles.ownerDelayNote}>Setting or reducing your limit takes effect when you save. Increasing it or choosing Unlimited takes 24 hours, even with the Owner PIN.</Text> : null}
-            {editor.kind === "content" ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Done</Text></Pressable> : <View style={styles.actionRow}><Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void submitEditor(); }} disabled={editorInvalid} style={[styles.primaryButton, editorInvalid && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>}
+            {editor.kind === "content" ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Done</Text></Pressable> : <View style={styles.actionRow}><Pressable disabled={busy} accessibilityRole="button" onPress={back} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void submitEditor(); }} disabled={editorInvalid} style={[styles.primaryButton, editorInvalid && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>}
           </View> : null}
 
       {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
@@ -358,7 +382,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     profileList: { marginTop: spacing.md, gap: spacing.sm }, profileRow: { minHeight: 82, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, profileRowActive: { borderColor: palette.active, backgroundColor: palette.activeSoft },
     avatar: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: palette.surfaceHigh }, profileMain: { flex: 1, minHeight: 60, justifyContent: "center" }, profileName: { ...type.label, fontSize: 14 }, profileRole: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted, fontSize: 11 },
     rowActions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 92 }, iconButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" }, smallIcon: { width: 28, height: 32, alignItems: "center", justifyContent: "center" },
-    pendingCard: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active }, cancelPending: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.sm },
+    pendingCard: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active }, cancelPending: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.sm },
     pinLabel: { marginTop: spacing.xl, marginBottom: spacing.sm }, pinCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface }, pinIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: palette.activeSoft }, flex: { flex: 1 },
     actionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm }, secondaryButton: { minHeight: 48, minWidth: 110, flex: 1, flexDirection: "row", gap: spacing.xs, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border }, secondaryButtonText: { ...type.label, color: palette.accent, fontSize: 12 },
     primaryButton: { minHeight: 48, minWidth: 110, flexGrow: 1, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.accentDeep }, primaryButtonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },

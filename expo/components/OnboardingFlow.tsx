@@ -76,7 +76,9 @@ export default function OnboardingFlow({ replay = false }: { replay?: boolean })
       if (locked.current || sourceLock.current) return true;
       if (premiumOpen) { setPremiumOpen(false); scroll.current?.scrollTo({ y: 0, animated: false }); return true; }
       if (step > 0) { setStep(step - 1); scroll.current?.scrollTo({ y: 0, animated: false }); return true; }
-      return !replay;
+      // First-run setup must not reveal a tab underneath or mark setup complete.
+      if (!replay) { BackHandler.exitApp(); return true; }
+      return false;
     });
     return () => handler.remove();
   }, [replay, step, premiumOpen]);

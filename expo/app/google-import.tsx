@@ -1,10 +1,11 @@
+import { useHeaderHeight } from "@react-navigation/elements";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -16,6 +17,7 @@ type LoadState = "idle" | "loading" | "loadingMore";
 
 export default function GoogleImportScreen() {
   const touch = useFeedback();
+  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -105,8 +107,10 @@ export default function GoogleImportScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={headerHeight}>
     <FlatList
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       data={subscriptions.filter((source) => source.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))}
       keyExtractor={(item) => item.id}
       contentInsetAdjustmentBehavior="automatic"
@@ -161,7 +165,7 @@ export default function GoogleImportScreen() {
             {importing ? <ActivityIndicator color={palette.onDark} /> : <><Import size={17} color={palette.onDark} /><Text style={styles.primaryButtonText}>Add {selectedIds.size || "selected"} to Frame</Text></>}
           </Pressable>
     </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -173,7 +177,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     intro: { paddingBottom: spacing.md }, eyebrow: { ...type.caption, color: palette.active }, title: { ...type.heading, fontSize: 28, lineHeight: 34, marginTop: spacing.sm }, body: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.sm },
     counterRow: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md }, counter: { ...type.label, color: palette.active, fontVariant: ["tabular-nums"] }, capacity: { ...type.caption, color: palette.inkMuted, fontVariant: ["tabular-nums"] },
     feedback: { padding: spacing.md, borderRadius: radii.control, marginTop: spacing.sm, borderWidth: 1 }, feedbackGood: { backgroundColor: palette.activeSoft, borderColor: palette.active }, feedbackBad: { backgroundColor: palette.surface, borderColor: palette.danger }, feedbackText: { ...type.bodySoft, color: palette.ink },
-    row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, rowSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, rowDisabled: { opacity: 0.58 }, pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
+    row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, rowSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, rowDisabled: { opacity: 0.58 }, pressed: { opacity: 0.76 },
     avatar: { width: 48, height: 48, borderRadius: 24, overflow: "hidden", backgroundColor: palette.surfaceDeep }, avatarImage: { width: "100%", height: "100%" }, rowCopy: { flex: 1 }, sourceName: { ...type.label, fontSize: 16 }, sourceState: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 }, check: { width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 16 }, checkSelected: { backgroundColor: palette.active },
     loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm }, loadingText: { ...type.bodySoft, color: palette.inkMuted }, emptyTitle: { ...type.heading, fontSize: 20, textAlign: "center" }, emptyBody: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.sm, maxWidth: 320 },
     footer: { gap: spacing.md, paddingTop: spacing.md }, loadMore: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, loadMoreText: { ...type.label, color: palette.active }, endText: { ...type.caption, color: palette.inkMuted, textAlign: "center" },

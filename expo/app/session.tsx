@@ -1,10 +1,13 @@
+import { useHeaderHeight } from "@react-navigation/elements";
+import { usePreventRemove } from "@react-navigation/native";
+import { useDiscardChanges } from "@/hooks/useDiscardChanges";
 import PositionedRow from "@/components/motion/PositionedRow";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery } from "@tanstack/react-query";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation, type Href } from "expo-router";
 import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
@@ -20,12 +23,14 @@ import { sessionRuntime } from "@/domain/sessionFlow";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
+  const headerHeight = useHeaderHeight();
+  const navigation = useNavigation();
   const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { activeProfileId, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
   const selectedRef = useRef(selected); selectedRef.current = selected;
@@ -34,6 +39,24 @@ export default function SessionBuilder() {
   const [name, setName] = useState<string>("");
   const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const [destination, setDestination] = useState<Href | null>(null);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const canLeaveScope = hydratedProfile === activeProfileId && !profileSwitching && prefs.hasCompletedOnboarding;
+  const scope = useRef({ profile: activeProfileId, active: canLeaveScope });
+  scope.current = { profile: activeProfileId, active: canLeaveScope };
+  const dirty = Boolean(existingSession && (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",")));
+  const confirmExit = useDiscardChanges(dirty, `${activeProfileId}:${id ?? "new"}`, canLeaveScope && !isSaving && !destination);
+  usePreventRemove(canLeaveScope && !destination && (dirty || isSaving), ({ data }) => {
+    // Wait for a write to finish before honoring a user exit.
+    if (persistLock.current) return;
+    confirmExit(() => navigation.dispatch(data.action));
+  });
+  useEffect(() => {
+    // Render once with the removal guard disabled before replacing a saved editor.
+    if (destination && canLeaveScope) router.replace(destination);
+  }, [canLeaveScope, destination]);
 
   useEffect(() => {
     if (hydratedProfile === activeProfileId || sessionDraftLoading) return;
@@ -110,7 +133,7 @@ export default function SessionBuilder() {
       if (created) await clearSessionDraft();
       return created?.id ?? null;
     } catch {
-      Alert.alert("Couldn’t save session", "Your draft is still here. Try again in a moment.");
+      Alert.alert("Couldn’t save session", "Your edits are still open. Try saving again before leaving.");
       return null;
     } finally {
       persistLock.current = false;
@@ -121,17 +144,17 @@ export default function SessionBuilder() {
   const save = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
     const sessionId = await persistSession();
-    if (!sessionId) return;
+    if (!sessionId || !alive.current || !scope.current.active || scope.current.profile !== activeProfileId) return;
     done(existingSession ? "commit" : "milestone", !existingSession || existingSession.name !== name.trim() || existingSession.orderedVideoIds.join(",") !== selected.join(","));
-    router.replace({ pathname: "/session/[id]", params: { id: sessionId } });
-  }, [existingSession, feedback, name, persistSession, selected]);
+    setDestination({ pathname: "/session/[id]", params: { id: sessionId } });
+  }, [activeProfileId, existingSession, feedback, name, persistSession, selected]);
 
   const saveAndBegin = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
     const sessionId = await persistSession();
-    if (!sessionId) return;
+    if (!sessionId || !alive.current || !scope.current.active || scope.current.profile !== activeProfileId) return;
     done("commit");
-    router.replace({
+    setDestination({
       pathname: FRAME_PLAYBACK_ROUTE,
       params: { id: selected[0], savedSessionId: sessionId, sessionProfileId: activeProfileId },
     });
@@ -144,7 +167,7 @@ export default function SessionBuilder() {
   const header = (
     <View style={styles.header}>
       <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
-      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. Your draft is saved on this device.</Text>
+      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. {existingSession ? "Save your changes before leaving." : "Your draft is saved on this device."}</Text>
       <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
       <TextInput
         editable={!isSaving}
@@ -179,7 +202,7 @@ export default function SessionBuilder() {
   );
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={insets.top + 56}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={headerHeight}>
       <FlatList<Video>
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
@@ -230,6 +253,7 @@ export default function SessionBuilder() {
           </View>
           <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" accessibilityLabel="Save session" accessibilityState={{ busy: isSaving, disabled: isSaving }} testID="save-session">
             <Save size={16} color={palette.accent} strokeWidth={1.8} />
+            <Text style={styles.saveText}>Save session</Text>
           </Pressable>
           <Pressable onPress={() => { void saveAndBegin(); }} disabled={isSaving} style={({ pressed }) => [styles.beginBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" testID="begin-session">
             <Play size={16} color={palette.onDark} strokeWidth={1.8} fill={palette.onDark} />
@@ -263,18 +287,19 @@ function createStyles(palette: FramePalette, type: FrameType) {
     footer: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surfaceHigh, borderTopWidth: 1, borderTopColor: palette.border },
     summary: { width: "100%" },
     total: { ...type.heading, marginTop: 2 },
-    saveBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.activeSoft },
-    beginBtn: { flex: 1, minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
-    beginText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
+    saveBtn: { flexGrow: 1, flexBasis: 140, minHeight: 48, flexDirection: "row", gap: spacing.sm, padding: spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.activeSoft },
+    saveText: { ...type.label, color: palette.accent, flexShrink: 1 },
+    beginBtn: { flexGrow: 1, flexBasis: 140, paddingVertical: spacing.sm, minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
+    beginText: { flexShrink: 1, color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
     tray: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
     trayLabel: { ...type.caption, color: palette.accent },
     trayRow: { minHeight: 48, flexDirection: "row", flexWrap: "wrap", paddingVertical: spacing.sm, alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     trayNumber: { ...type.caption, color: palette.accent, width: 24 },
     trayTitle: { ...type.label, flexGrow: 1, flexBasis: "80%" },
-    trayControl: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    trayControl: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
     pickLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xl },
-    pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.7 },
   });
 }
 

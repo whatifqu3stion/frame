@@ -53,7 +53,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     label: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md, marginBottom: spacing.sm },
     options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    option: { minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
+    option: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
     unlimited: { minHeight: 48, width: "100%", justifyContent: "center", paddingHorizontal: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
     selected: { borderColor: palette.active, backgroundColor: palette.activeSoft },
     optionText: { ...type.label, color: palette.inkMuted, fontSize: 12 },

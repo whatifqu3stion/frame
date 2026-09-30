@@ -307,7 +307,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     page: { paddingHorizontal: spacing.page },
     flex: { flex: 1 },
     segmented: { minHeight: 48, flexDirection: "row", padding: 3, borderRadius: radii.control, backgroundColor: palette.surfaceDeep },
-    segment: { minHeight: 44, flex: 1, alignItems: "center", justifyContent: "center", borderRadius: radii.small },
+    segment: { minHeight: 48, flex: 1, alignItems: "center", justifyContent: "center", borderRadius: radii.small },
     segmentActive: { backgroundColor: palette.surfaceHigh, borderWidth: 1, borderColor: palette.borderSoft },
     segmentText: { ...type.label, color: palette.inkMuted },
     segmentTextActive: { color: palette.active },
@@ -334,7 +334,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     settingsButtonText: { ...type.label, color: palette.active },
     retryButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
     retryButtonText: { ...type.label, color: palette.active },
-    pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.72 },
   });
 }
 

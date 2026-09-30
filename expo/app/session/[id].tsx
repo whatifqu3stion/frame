@@ -151,9 +151,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     title: { ...type.title, color: palette.onProgramme },
     subtitle: { ...type.bodySoft, marginTop: spacing.sm, color: palette.onProgrammeSoft },
     actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.xl },
-    actionButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
+    actionButton: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
     actionText: { ...type.label, color: palette.accent },
-    iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
+    iconButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
     list: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
     row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
     orderMark: { minWidth: 32, alignItems: "flex-start", justifyContent: "center" },
@@ -164,14 +164,14 @@ function createStyles(palette: FramePalette, type: FrameType) {
     unavailable: { color: palette.danger },
     duration: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xs },
     rowActions: { gap: spacing.xs },
-    smallButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
+    smallButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
     disabled: { opacity: 0.22 },
     beginButton: { minHeight: 52, marginTop: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.onProgramme, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
     beginText: { ...type.label, color: palette.programme, flexShrink: 1, textAlign: "center" },
     stopNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
     secondaryButton: { minHeight: 48, marginTop: spacing.lg, alignItems: "center", justifyContent: "center" },
     secondaryText: { ...type.label, color: palette.accent },
-    pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.72 },
   });
 }
 
