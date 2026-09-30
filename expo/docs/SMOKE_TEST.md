@@ -208,3 +208,4 @@ All items below require real iOS and Android evidence; they are not signed off b
 - [ ] Demo welcome replay and beta diagnostics remain reachable through About & help when enabled. Premium is absent and a direct Premium settings link redirects to Settings while billing is disabled.
 - [ ] Cancel Owner authorization and leave during a delayed Google connection or reset authorization. The departed settings page must not navigate or reopen an obsolete dialog.
 - [ ] Verify all six index destinations and detail screens at small phone width and large text, with VoiceOver/TalkBack and a hardware keyboard. Check native swipe/Android Back as well as a direct link to a detail screen.
+- [ ] Settings refinement: verify title/summary hierarchy, pressed-row contrast, and Theme/Accent color/Touch feedback grouping in both themes. Interest and theme checks must remain visible without shifting choices; test maximum text size and reduced motion.

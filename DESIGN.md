@@ -325,3 +325,8 @@ boundaries remains a direct Owner-authorized action. Demo and beta support live
 under About & help; erasure remains under Privacy & data with the full existing
 confirmation sequence. The redundant profile card and non-interactive focus
 explanation have been removed. No setting or capability was removed.
+
+Settings row titles use the 15px body size with medium weight above 14px summaries.
+Pressed rows gain a quiet surface tint without dimming text. Theme, accent color,
+and touch feedback have separate headings. Selection uses checks and restrained
+neutral borders; reserve check space so choices do not shift when selected.
