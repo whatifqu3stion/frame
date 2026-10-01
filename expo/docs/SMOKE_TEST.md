@@ -251,3 +251,11 @@ Automated/source verification does not complete these native checks.
 - [ ] Sessions & progress switches to planning without also showing the saved collection or its empty state. Back to saved videos restores the collection. Switch profiles in both views and confirm isolated state.
 - [ ] Requests distinguish Approve video from Approve source. Source imagery is labelled as video context; declining has a clear consequence. Existing PIN authorization, limits, and error recovery still apply.
 - [ ] Each help topic opens independently and its action reaches the named screen. Inspect the three-stage flow, Saved controls, approval decisions, and help at large text on small iOS/Android phones; verify native screen-reader order. These device checks remain pending.
+
+
+## 21. Premium onboarding finish
+
+- [ ] Inspect two-column interest choices at small phone width, tablet width, and large text in both themes. Long labels wrap, checks stay visible, minimum touch height remains 52, and selected/unavailable states are distinguishable.
+- [ ] Inspect real hero media in its matte surround, readable source/interest context, smaller supporting images, and missing-image fallback. No generated or substituted recommendations appear.
+- [ ] Save a video successfully: the existing completion check and enabled haptic accompany “Kept for you” on the static textured surface. A failed save must not show it. Restart, revisit, or replay: no stale success animation and no claim this is the profile’s first-ever save.
+- [ ] Enable Reduced Motion, disable haptics, and interrupt the existing reveal/confirmation by navigating or backgrounding. Content and actions remain usable immediately; grain never moves. Verify on real iOS/Android devices before native sign-off.
