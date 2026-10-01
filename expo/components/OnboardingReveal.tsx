@@ -1,3 +1,4 @@
+import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import CompletionMark from "@/components/motion/CompletionMark";
@@ -73,32 +74,36 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
       : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>Your sources are ready. There are no new videos in today’s selection. You can browse your sources directly in Frame.</Text>{followedChannels[0] ? <View style={styles.supporting}><MediaImage source={followedChannels[0].thumbnailUrl ? { uri: followedChannels[0].thumbnailUrl } : null} style={{ width: 56, height: 56, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /><View style={styles.supportingDetails}><Text style={type.heading}>{followedChannels[0].title}</Text><Text style={type.bodySoft}>A source you chose. Open Sources to explore its videos.</Text></View></View> : null}<Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Browse my sources</Text></Pressable></>
       : <MotionView enter={animateReveal} duration={motion.reveal} distance={4} onPresented={onRevealed}>
-        <Text style={type.bodySoft}>Save a video for later. It will be waiting in Saved.</Text>
+        <Text style={type.bodySoft}>From the sources you chose. Find something to keep.</Text>
 
         <Text style={styles.summary}>{items.length} {items.length === 1 ? "video" : "videos"} · {new Set(items.map((item) => item.sourceId)).size} {new Set(items.map((item) => item.sourceId)).size === 1 ? "source" : "sources"}</Text>
         {today.data?.snapshot?.freshness !== "fresh" ? <Text style={type.caption}>Showing a previously loaded selection.</Text> : null}
         {feedback ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{feedback}</Text> : null}
         {items.map((item, index) => <View key={item.id} style={styles.video}>
           <View style={index > 0 ? styles.supporting : undefined}>
-          <View style={index > 0 ? styles.thumbnail : undefined}><MediaMount><MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" /></MediaMount></View>
+          <View style={index > 0 ? styles.thumbnail : undefined}>{index === 0 ? <MediaMount><MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" /></MediaMount> : <MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" />}</View>
           <View style={[styles.details, index > 0 && styles.supportingDetails]}><Text style={type.caption}>{item.sourceTitle} · {formatDuration(item.durationSeconds)}</Text>
-          <Text style={index === 0 ? type.heading : type.label}>{item.title}</Text></View></View>
+          <Text style={index === 0 ? styles.featuredTitle : type.label}>{item.title}</Text></View></View>
           <Pressable onPress={() => { void save(item); }} disabled={Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id))} accessibilityRole="button" accessibilityState={{ busy: busyId === item.id, disabled: Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) }} accessibilityLabel={(savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? `${item.title}, saved for later` : `Save ${item.title} for later`} style={styles.save}>
             <OutcomeIcon key={`${activeProfileId}:${item.id}`} confirmed={savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)} busy={busyId === item.id} color={palette.active} idle={<Bookmark size={18} color={palette.active} />}><Check size={18} color={palette.success} /></OutcomeIcon><Text style={styles.saveLabel}>{busyId === item.id ? "Saving…" : (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? "Saved for later" : "Save for later"}</Text>
           </Pressable>
-        {savedHere[0] === item.id ? <View style={styles.firstSave} accessibilityLiveRegion="polite"><CompletionMark color={palette.onProgramme} animate={justSaved === item.id} /><Text style={styles.firstSaveTitle}>Your library has begun.</Text><Text style={styles.firstSaveBody}>{savedHere.length} {savedHere.length === 1 ? "video is" : "videos are"} saved for another day. Ready whenever you are. Find {savedHere.length === 1 ? "it" : "them"} in Saved.</Text></View> : null}
+        {savedHere[0] === item.id ? <View style={styles.firstSave} accessibilityLiveRegion="polite">
+          <ProgrammeGrain />
+          <View style={styles.firstSaveHeading}><CompletionMark color={palette.onProgramme} animate={justSaved === item.id} /><Text style={styles.firstSaveTitle}>Kept for you.</Text></View>
+          <Text style={styles.firstSaveBody}>{savedHere.length === 1 ? "Your video is waiting in Saved. Come back whenever you like." : `${savedHere.length} videos are waiting in Saved. Come back whenever you like.`}</Text>
+        </View> : null}
         </View>)}
-        <View style={styles.ending}><Text style={type.heading}>That’s today’s selection.</Text><Text style={type.bodySoft}>You choose what plays next.</Text></View>
+        <View style={styles.ending}><Text style={styles.endingTitle}>An ending, by design.</Text><Text style={styles.endingBody}>That’s today’s selection. The rest of your time is yours.</Text></View>
       </MotionView>}
   </View>;
 }
 function createStyles(p: FramePalette, t: FrameType) {
   return StyleSheet.create({
-    firstSave: { padding: spacing.lg, borderRadius: radii.card, backgroundColor: p.programme, gap: spacing.sm }, firstSaveTitle: { ...t.heading, color: p.onProgramme }, firstSaveBody: { ...t.bodySoft, color: p.onProgrammeSoft },
+    firstSave: { padding: spacing.lg, marginTop: spacing.sm, borderRadius: radii.card, backgroundColor: p.programme, gap: spacing.md, overflow: "hidden" }, firstSaveHeading: { flexDirection: "row", alignItems: "center", gap: spacing.md }, firstSaveTitle: { ...t.heading, fontSize: 26, lineHeight: 34, color: p.onProgramme, flex: 1 }, featuredTitle: { ...t.heading, fontSize: 24, lineHeight: 32 }, firstSaveBody: { ...t.bodySoft, color: p.onProgrammeSoft },
     root: { gap: spacing.lg }, title: { ...t.title, fontSize: 36, lineHeight: 44 }, loading: { gap: spacing.md, paddingVertical: spacing.xl },
-    action: { minHeight: 48, justifyContent: "center" }, actionText: { ...t.label, color: p.active }, summary: { ...t.label },
+    action: { minHeight: 48, justifyContent: "center" }, actionText: { ...t.label, color: p.active }, summary: { ...t.caption, marginTop: spacing.sm, marginBottom: spacing.lg },
     supporting: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" }, thumbnail: { width: 96 }, details: { gap: spacing.sm, marginTop: spacing.sm }, supportingDetails: { flex: 1 },
-    video: { gap: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, image: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media },
-    save: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 48, padding: spacing.md, borderRadius: radii.control, backgroundColor: p.activeSoft }, saveLabel: { ...t.label, color: p.active, flexShrink: 1 }, ending: { gap: spacing.sm, paddingVertical: spacing.md },
+    video: { gap: spacing.sm, marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, image: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media },
+    save: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 48, padding: spacing.md, borderRadius: radii.control, backgroundColor: p.activeSoft }, saveLabel: { ...t.label, color: p.active, flexShrink: 1 }, ending: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: "center" }, endingTitle: { ...t.heading, textAlign: "center" }, endingBody: { ...t.bodySoft, textAlign: "center" },
   });
 }

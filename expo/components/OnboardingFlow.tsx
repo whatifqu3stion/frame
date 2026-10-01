@@ -1,3 +1,4 @@
+import MediaMount from "@/components/MediaMount";
 import { onboardingPreviewPage, onboardingPreviewStatus } from "@/domain/onboardingPreview";
 import { useOnboardingDraft } from "@/hooks/useOnboardingDraft";
 import { formatDuration } from "@/services/youtube";
@@ -123,10 +124,10 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
       {current === "source" ? <SourceStep key={interests.map((item) => item.id).sort().join(",")} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
       {current === "interests" ? <>
         <Text style={styles.title} accessibilityRole="header">Worth watching.{"\n"}At your pace.</Text>
-        <Text style={styles.body}>A small daily selection from creators you choose. Pick up to {ONBOARDING_INTEREST_MAX} interests to find your first source.</Text>
-        <Text style={styles.note} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected · optional · no account needed</Text>
+        <Text style={styles.body}>A daily selection, shaped by you. Choose up to {ONBOARDING_INTEREST_MAX} interests to find a few creators worth your time.</Text>
+        <Text style={styles.note} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected · optional</Text>
         {INTEREST_GROUPS.map((group) => <View key={group.label} style={styles.interestGroup}>
-          <Text style={type.label} accessibilityRole="header">{group.label}</Text>
+          <Text style={styles.interestGroupTitle} accessibilityRole="header">{group.label}</Text>
           <View style={styles.chips}>
           {INTEREST_LIBRARY.filter((item) => group.ids.includes(item.id)).map((item) => {
             const ids = interests.map((interest) => interest.id);
@@ -200,14 +201,16 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     finally { lock.current = false; if (mounted.current) { setBusy(false); onBusyChange(false); } }
   };
   return <MotionView changeKey={resolution?.source.providerSourceId ?? "source-input"}>
-    <Text style={styles.title} accessibilityRole="header">{resolution ? "A source for\nyour Frame." : "Begin with\na favorite."}</Text>
-    <Text style={styles.body}>{resolution ? "Follow this source to include eligible videos in Today." : "Start with one creator you enjoy. You can add more later."}</Text>
+    <Text style={styles.title} accessibilityRole="header">{resolution ? "A source for\nyour Frame." : suggestions.length ? "A few good places\nto begin." : "Begin with\na favorite."}</Text>
+    <Text style={styles.body}>{resolution ? "Follow this source to shape your daily selection." : "Start with one creator you enjoy. You can add more later."}</Text>
     {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.suggestions}>
       <Text style={type.heading}>Picked for your interests</Text>
       {preview.kind === "loading" ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : suggestions.length ? suggestions.map((pick, index) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}${pick.featuredMedia ? `, featuring ${pick.featuredMedia.title}` : ""}`} style={[styles.pickPreview, index > 0 && styles.supportingPreview]}>
-        {pick.featuredMedia ? <MediaImage source={pick.featuredMedia.thumbnailUrl ? { uri: pick.featuredMedia.thumbnailUrl } : null} style={index === 0 ? styles.heroImage : styles.supportingImage} contentFit="cover" cachePolicy="none" /> : <MediaImage source={pick.thumbnailUrl ? { uri: pick.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />}
-        <View style={[styles.pickCopy, index > 0 && styles.supportingCopy]}><Text style={styles.sourceMeta}>{INTEREST_LIBRARY.find((item) => item.id === pick.interestId)?.name ?? "From your interests"} · {pick.displayName}</Text>
-        <Text style={index === 0 ? type.heading : type.label}>{pick.featuredMedia?.title ?? pick.displayName}</Text>
+        {pick.featuredMedia ? index === 0 ? <MediaMount><MediaImage source={pick.featuredMedia.thumbnailUrl ? { uri: pick.featuredMedia.thumbnailUrl } : null} style={styles.heroImage} contentFit="cover" cachePolicy="none" /></MediaMount> : <MediaImage source={pick.featuredMedia.thumbnailUrl ? { uri: pick.featuredMedia.thumbnailUrl } : null} style={styles.supportingImage} contentFit="cover" cachePolicy="none" /> : <MediaImage source={pick.thumbnailUrl ? { uri: pick.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />}
+        <View style={[styles.pickCopy, index > 0 && styles.supportingCopy]}>
+        <Text style={index === 0 ? styles.featuredTitle : type.label}>{pick.featuredMedia?.title ?? pick.displayName}</Text>
+        {pick.featuredMedia ? <Text style={type.bodySoft}>{pick.displayName}</Text> : null}
+        <Text style={styles.interestMatch}>{INTEREST_LIBRARY.find((item) => item.id === pick.interestId)?.name ?? "From your interests"}</Text>
         {pick.featuredMedia ? <Text style={type.caption}>{pick.featuredMedia.durationSeconds ? formatDuration(pick.featuredMedia.durationSeconds) : "Duration unavailable"}</Text> : <Text style={type.caption}>Video preview unavailable for this source.</Text>}
         {index === 0 && pick.recommendationReason ? <Text style={type.bodySoft}>{pick.recommendationReason}</Text> : null}
         <Text style={styles.pickAction}>Review source</Text></View>
@@ -224,7 +227,7 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     <Text style={styles.sourceMeta}>Paste a supported channel or video link, an @handle, or a channel ID.</Text>
     <TextField containerStyle={styles.inputRow} leading={<Link2 size={18} color={palette.inkMuted} />} value={link} editable={!busy} onChangeText={(value) => { setLink(value); setResolution(null); setFeedback(null); }} placeholder="@creator" placeholderTextColor={palette.inkMuted} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => { void submit(); }} returnKeyType="done" accessibilityLabel="Source link or @handle" testID="onboard-source-link" />
     </> : null}
-    {resolution?.video ? <View style={styles.pickPreview}><MediaImage source={resolution.video.thumbnailUrl ? { uri: resolution.video.thumbnailUrl } : null} style={styles.heroImage} contentFit="cover" cachePolicy="none" /><Text style={type.heading}>{resolution.video.title}</Text>{resolution.video.durationSeconds ? <Text style={type.caption}>{formatDuration(resolution.video.durationSeconds)}</Text> : null}</View> : null}
+    {resolution?.video ? <View style={styles.pickPreview}><MediaMount><MediaImage source={resolution.video.thumbnailUrl ? { uri: resolution.video.thumbnailUrl } : null} style={styles.heroImage} contentFit="cover" cachePolicy="none" /></MediaMount><Text style={styles.featuredTitle}>{resolution.video.title}</Text>{resolution.video.durationSeconds ? <Text style={type.caption}>{formatDuration(resolution.video.durationSeconds)}</Text> : null}</View> : null}
     {resolution ? <View style={styles.sourcePreview} testID="onboard-source-preview">
       <MediaImage source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
       <View style={styles.flex}><Text style={type.heading}>{resolution.source.displayName}</Text><Text style={styles.sourceMeta}>{resolution.source.handle ?? "Channel"}</Text></View>
@@ -246,12 +249,12 @@ function createStyles(p: FramePalette, t: FrameType) {
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xxl }, replayNote: { ...t.caption, marginBottom: spacing.lg },
     stageLabel: { ...t.caption, width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
     previewNavigation: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md },
-    interestGroup: { marginTop: spacing.lg },
-    pickPreview: { gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, supportingPreview: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, pickCopy: { gap: spacing.xs }, supportingCopy: { flex: 1 },
+    interestGroup: { marginTop: spacing.xl }, interestGroupTitle: { ...t.heading, fontSize: 20, lineHeight: 27 }, featuredTitle: { ...t.heading, fontSize: 24, lineHeight: 32 }, interestMatch: { ...t.caption, color: p.active },
+    pickPreview: { gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, supportingPreview: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, pickCopy: { gap: spacing.sm }, supportingCopy: { flex: 1 },
     heroImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }, supportingImage: { width: 96, aspectRatio: 16 / 9, borderRadius: radii.media },
     suggestions: { gap: spacing.sm, marginTop: spacing.lg }, pickAction: { ...t.label, color: p.active, marginTop: spacing.sm }, continueLink: { minHeight: 48, flexBasis: "100%", alignItems: "center", justifyContent: "center" },
     title: { ...t.title, fontSize: 36, lineHeight: 44 }, body: { ...t.bodySoft, marginTop: spacing.md }, note: { ...t.bodySoft, marginTop: spacing.lg },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm }, chip: { minHeight: 48, maxWidth: "100%", flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: p.borderSoft, borderRadius: radii.control, backgroundColor: p.surface }, chipUnavailable: { borderStyle: "dashed" }, chipSelected: { borderColor: p.active, backgroundColor: p.activeSoft }, chipText: { ...t.label, flexShrink: 1 },
+    chips: { flexDirection: "row", flexWrap: "wrap", columnGap: spacing.md, marginTop: spacing.sm }, chip: { minHeight: 52, flexGrow: 1, flexShrink: 1, flexBasis: "45%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.md, paddingHorizontal: spacing.sm, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border, borderRadius: radii.control }, chipUnavailable: { opacity: 0.5 }, chipSelected: { backgroundColor: p.activeSoft }, chipText: { ...t.label, flexShrink: 1 },
     fieldLabel: { ...t.label, marginTop: spacing.xl }, inputRow: { marginTop: spacing.sm },
     sourceAction: { minHeight: 52, padding: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: p.accentDeep, marginTop: spacing.md }, sourcePreview: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, avatar: { width: 48, height: 48, borderRadius: radii.media }, flex: { flex: 1 }, sourceMeta: { ...t.bodySoft, marginTop: spacing.xs },
     followed: { marginTop: spacing.xl, gap: spacing.md, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, followedRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" }, followedName: { ...t.body, flex: 1 },
