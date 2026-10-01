@@ -73,7 +73,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
       : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>Your sources are ready. There are no new videos in today’s selection. You can browse your sources directly in Frame.</Text>{followedChannels[0] ? <View style={styles.supporting}><MediaImage source={followedChannels[0].thumbnailUrl ? { uri: followedChannels[0].thumbnailUrl } : null} style={{ width: 56, height: 56, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /><View style={styles.supportingDetails}><Text style={type.heading}>{followedChannels[0].title}</Text><Text style={type.bodySoft}>A source you chose. Open Sources to explore its videos.</Text></View></View> : null}<Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Browse my sources</Text></Pressable></>
       : <MotionView enter={animateReveal} duration={motion.reveal} distance={4} onPresented={onRevealed}>
-        <Text style={type.bodySoft}>The sources you chose, brought together in one manageable selection. Save a video you’d like to return to and start making this space yours.</Text>
+        <Text style={type.bodySoft}>Save a video for later. It will be waiting in Saved.</Text>
 
         <Text style={styles.summary}>{items.length} {items.length === 1 ? "video" : "videos"} · {new Set(items.map((item) => item.sourceId)).size} {new Set(items.map((item) => item.sourceId)).size === 1 ? "source" : "sources"}</Text>
         {today.data?.snapshot?.freshness !== "fresh" ? <Text style={type.caption}>Showing a previously loaded selection.</Text> : null}
@@ -88,7 +88,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
           </Pressable>
         {savedHere[0] === item.id ? <View style={styles.firstSave} accessibilityLiveRegion="polite"><CompletionMark color={palette.onProgramme} animate={justSaved === item.id} /><Text style={styles.firstSaveTitle}>Your library has begun.</Text><Text style={styles.firstSaveBody}>{savedHere.length} {savedHere.length === 1 ? "video is" : "videos are"} saved for another day. Ready whenever you are. Find {savedHere.length === 1 ? "it" : "them"} in Saved.</Text></View> : null}
         </View>)}
-        <View style={styles.ending}><Text style={type.heading}>Good videos. A clear ending.</Text><Text style={type.bodySoft}>That’s your selection for today. In a session, the next video waits for you to press play.</Text></View>
+        <View style={styles.ending}><Text style={type.heading}>That’s today’s selection.</Text><Text style={type.bodySoft}>You choose what plays next.</Text></View>
       </MotionView>}
   </View>;
 }

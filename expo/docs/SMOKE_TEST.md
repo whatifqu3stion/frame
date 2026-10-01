@@ -242,3 +242,12 @@ Automated/source verification does not complete these native checks.
 - [ ] Follow every source in a middle batch, then navigate forward and back. Controls skip batches with no remaining choices, retain the fixed publication, and never call a partially visited pool exhausted.
 - [ ] Disabled/unconfigured suggestions show setup guidance; unpublished interests invite changing topics; offline/service failure offers Retry; maintenance says paused with a later Retry. A cached publication is labelled. Missing video media shows the real source with an explicit unavailable-preview note.
 - [ ] Fail the source read during the personal reveal. It must offer loading recovery rather than asking the user to follow their first source. Retry successfully and verify the same profile’s sources and eligible selection return.
+
+
+## 20. Distilled setup, collection, and help
+
+- [ ] First launch has three stages: interests, sources, selection. Skip, Back, managed access, and optional Premium demo remain reachable. Replay returns to Settings. Test old drafts at all four prior stages; source/reveal position and saved IDs migrate correctly.
+- [ ] Saved opens with the collection, count, and quiet controls. Search & filter opens the field and radios. Clear & close search restores all saved videos. Edit Saved preserves removal confirmation.
+- [ ] Sessions & progress switches to planning without also showing the saved collection or its empty state. Back to saved videos restores the collection. Switch profiles in both views and confirm isolated state.
+- [ ] Requests distinguish Approve video from Approve source. Source imagery is labelled as video context; declining has a clear consequence. Existing PIN authorization, limits, and error recovery still apply.
+- [ ] Each help topic opens independently and its action reaches the named screen. Inspect the three-stage flow, Saved controls, approval decisions, and help at large text on small iOS/Android phones; verify native screen-reader order. These device checks remain pending.
