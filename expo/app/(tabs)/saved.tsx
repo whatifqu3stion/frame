@@ -33,6 +33,10 @@ export default function SavedScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, libraryError, refreshLibrary, requirePurchase, unsaveVideo } = useApp();
   const profileKeys = shellProfileQueryKeys(activeProfileId);
+  const [editingProfile, setEditingProfile] = useState<string | null>(null);
+  const [planningProfile, setPlanningProfile] = useState<string | null>(null);
+  const editing = editingProfile === activeProfileId;
+  const planning = planningProfile === activeProfileId;
   const [showOtherSessions, setShowOtherSessions] = useState(false);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
   const { query: searchQuery, filter: viewingFilter } = resolveSavedCriteria(criteria, activeProfileId);
@@ -68,7 +72,7 @@ export default function SavedScreen() {
       style={styles.screen}
       data={libraryLoading ? [] : filteredSaved}
       keyExtractor={(item) => item.video.id}
-      renderItem={({ item }) => <View style={styles.page}><VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} /><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.video.title} from Saved`} style={{ minHeight: 48, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md }} onPress={() => Alert.alert("Remove saved video?", `“${item.video.title}” will be removed from Saved.`, [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: () => { void unsaveVideo(item.video.id).catch(() => Alert.alert("Couldn’t remove video", "Try again when you’re ready.")); } }])}><X size={16} color={palette.inkMuted} /><Text style={[type.label, { color: palette.inkMuted }]}>Remove from Saved</Text></Pressable></View>}
+      renderItem={({ item }) => <View style={styles.page}><VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} />{editing ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.video.title} from Saved`} style={{ minHeight: 48, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md }} onPress={() => Alert.alert("Remove saved video?", `“${item.video.title}” will be removed from Saved.`, [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: () => { void unsaveVideo(item.video.id).catch(() => Alert.alert("Couldn’t remove video", "Try again when you’re ready.")); } }])}><X size={16} color={palette.inkMuted} /><Text style={[type.label, { color: palette.inkMuted }]}>Remove from Saved</Text></Pressable> : null}</View>}
       contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -76,8 +80,13 @@ export default function SavedScreen() {
       windowSize={7}
       ListHeaderComponent={(
       <View style={styles.page}>
-        <ScreenHeader eyebrow="Saved" title={"Worth coming\nback to."} subtitle="Saved videos, sessions, and a place to pick up again." />
+        <ScreenHeader eyebrow="Saved" title="Your Saved" subtitle="Your finds, ready when you are." />
 
+        <View style={styles.libraryActions}>
+          <Pressable onPress={() => setPlanningProfile(planning ? null : activeProfileId)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ expanded: planning }}><Text style={[type.label, { color: palette.active }]}>{planning ? "Hide sessions & progress" : `Sessions & progress${draft ? " · draft" : currentSession ? ` · ${sessions.length}` : ""}`}</Text></Pressable>
+          {savedVideos.length > 0 ? <Pressable onPress={() => setEditingProfile(editing ? null : activeProfileId)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ selected: editing }}><Text style={[type.label, { color: palette.active }]}>{editing ? "Done" : "Edit Saved"}</Text></Pressable> : null}
+        </View>
+        {planning ? <View style={styles.planning}>
         <SectionTitle label="Current session" styles={styles} />
         {!libraryLoading && draft ? (
           <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your session draft" testID="session-draft-card">
@@ -92,7 +101,6 @@ export default function SavedScreen() {
           }} />
         ) : (
           <View>
-            <EmptyState compact title="No current session" body="Make a short viewing plan. Frame pauses between videos and stops at the end." />
             <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
               <Plus size={16} color={palette.onDark} />
               <Text style={styles.createSessionText}>Create a session</Text>
@@ -109,15 +117,14 @@ export default function SavedScreen() {
           </Pressable>
         ))}</MotionView> : null}
 
-        <SectionTitle label="Continue watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
-        {libraryLoading ? <VideoFeedSkeleton count={2} accessibilityLabel="Loading continue watching" /> : continueWatching.length === 0 ? (
-          <Text style={type.bodySoft}>Videos you’ve started appear here.</Text>
-        ) : (
+        {continueWatching.length > 0 ? <><SectionTitle label="Continue watching" testID={`continue-${profileKeys.continueWatching.join("-")}`} styles={styles} />
+        {libraryLoading ? <VideoFeedSkeleton count={2} accessibilityLabel="Loading continue watching" /> : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
             {continueWatching.map((item) => <VideoCard key={item.video.id} video={item.video} variant="compact" progressSeconds={item.progressSeconds} />)}
           </ScrollView>
-        )}
+        )}</> : null}
 
+        </View> : null}
         <SectionTitle label="Saved videos" testID={`saved-${profileKeys.saved.join("-")}`} styles={styles} />
         <TextField
             leading={<Search size={18} color={palette.inkMuted} strokeWidth={1.8} />}
@@ -172,6 +179,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     screen: { flex: 1, backgroundColor: palette.wall },
     page: { paddingHorizontal: spacing.page },
     flex: { flex: 1 },
+    libraryActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md }, planning: { paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
     otherSessions: { minHeight: 48, justifyContent: "center", marginTop: spacing.sm },
     sectionTitle: { ...type.heading, marginTop: spacing.xl, marginBottom: spacing.md },
     horizontalList: { gap: spacing.md, paddingRight: spacing.page },
@@ -187,7 +195,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     sessionName: { ...type.heading, fontSize: 18, lineHeight: 23 },
     sessionMeta: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
     createAnother: { minHeight: 48, flexDirection: "row", gap: spacing.sm, alignItems: "center", marginTop: spacing.sm },
-    createSession: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: -spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
+    createSession: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     createSessionText: { ...type.label, color: palette.onDark },
     pressed: { opacity: 0.74 },
   });

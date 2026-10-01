@@ -11,7 +11,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "When you use online features",
-    body: "Frame sends links and video or creator identifiers only when needed to resolve or play content you explicitly request. Live YouTube search and personalized discovery are disabled. YouTube may also receive standard device and network information when its official player loads.",
+    body: "Frame sends links and video or creator identifiers when needed to resolve content, load videos from sources you follow, or play a video you choose. For interest-based source suggestions, Frame sends your selected interest identifiers to its shared recommendation service; your local profile identifier is not included in that request. Suggestions come from a finite shared publication, rather than a feed ranked by your viewing behavior. Live search is disabled. YouTube may also receive standard device and network information when its official player loads.",
   },
   {
     title: "Optional account connection",
@@ -38,7 +38,7 @@ export default function PrivacyScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={type.caption}>Frame</Text>
       <Text accessibilityRole="header" style={styles.title}>Privacy Policy</Text>
-      <Text style={styles.updated}>Effective August 30, 2026</Text>
+      <Text style={styles.updated}>Effective October 1, 2026</Text>
       <Text style={styles.intro}>Frame is built around a private, on-device library. This policy explains what stays on your device, when information is shared to provide a feature, and the controls available to you.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>

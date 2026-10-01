@@ -34,7 +34,7 @@ export default function SourcesScreen() {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, googleConfigured, googleConnected, signInWithGoogle, confirmSource, requirePurchase, getManagedContentOverview } = useApp();
+  const { activeProfileId, activeProfile, interests, followedChannels, libraryLoading, sourcesError, refreshLibrary, googleConfigured, googleConnected, signInWithGoogle, confirmSource, requirePurchase, getManagedContentOverview } = useApp();
   const [section, setSection] = useState<SourcesSection>("followed");
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const { busy: googleBusy, run: connect } = useScreenAction(activeProfileId);
@@ -186,7 +186,7 @@ export default function SourcesScreen() {
               ) : activeProfile?.role === "managed" && managedContentQuery.isError ? (
                 <EmptyState title="Approvals couldn’t load" body="Try again to see this profile’s approved sources." action={{ label: "Try again", onPress: () => { void managedContentQuery.refetch(); } }} />
               ) : sourcesError ? (
-                <EmptyState title="Sources couldn't load" body="Your sources are saved. Close and reopen Frame to try again." />
+                <EmptyState title="Sources couldn’t load" body="Try again to reload your followed sources." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Sources unavailable", "Try again in a moment.")); } }} />
               ) : activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? (
                 <EmptyState title="Selected Videos is on" body="Only individual videos approved by the Owner can play. Paste a video link to request one." />
               ) : visibleChannels.length === 0 ? (

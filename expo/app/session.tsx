@@ -1,3 +1,4 @@
+import MediaImage from "@/components/MediaImage";
 import TextField from "@/components/TextField";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { usePreventRemove } from "@react-navigation/native";
@@ -206,7 +207,7 @@ export default function SessionBuilder() {
             const video = pool.find((candidate) => candidate.id === videoId);
             return <PositionedRow transitionKey={selected.join(",")} key={videoId} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
-              <Text style={styles.trayTitle} numberOfLines={3}>{video?.title ?? "Video details unavailable"}</Text>
+              <View style={styles.trayMedia}><MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={styles.trayTitle}>{video?.title ?? "Video details unavailable"}</Text><Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable"}</Text></View></View>
               <Pressable onPress={() => move(videoId, -1)} disabled={index === 0 || isSaving} accessibilityState={{ disabled: index === 0 || isSaving }} style={[styles.trayControl, (index === 0 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} accessibilityState={{ disabled: index === selected.length - 1 || isSaving }} style={[styles.trayControl, (index === selected.length - 1 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
@@ -247,11 +248,12 @@ export default function SessionBuilder() {
               <View style={[styles.indexBox, isSelected && styles.indexBoxOn]}>
                 {isSelected ? <Text style={styles.indexText}>{order}</Text> : null}
               </View>
-              <View style={styles.flex}>
+              <MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
+              <View style={styles.videoCopy}>
                 <Text style={type.caption} numberOfLines={1}>{item.channelTitle || "Source"}</Text>
-                <Text style={[styles.rowTitle, isSelected && styles.selectedTitle]} numberOfLines={2}>{item.title}</Text>
+                <Text style={[styles.rowTitle, isSelected && styles.selectedTitle]}>{item.title}</Text>
+                <Text style={styles.duration}>{item.durationSeconds ? formatDuration(item.durationSeconds) : "Duration unavailable"}</Text>
               </View>
-              <Text style={styles.duration}>{formatDuration(item.durationSeconds)}</Text>
             </Pressable>
           );
         }}
@@ -286,6 +288,7 @@ export default function SessionBuilder() {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    thumbnail: { width: 72, aspectRatio: 16 / 9, borderRadius: radii.media }, videoCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 120 }, trayMedia: { flexGrow: 1, flexBasis: "80%", flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
     searchField: { marginTop: spacing.sm },
     screen: { flex: 1, backgroundColor: palette.wall },
     content: { flexGrow: 1, paddingHorizontal: spacing.lg },
@@ -295,7 +298,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     subtitle: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 340 },
     nameInput: { marginTop: spacing.sm },
     flex: { flex: 1 },
-    row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
+    row: { minHeight: 76, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     indexBox: { width: 34, height: 34, borderRadius: radii.control, backgroundColor: palette.surface, justifyContent: "center", alignItems: "center" },
     indexBoxOn: { backgroundColor: palette.accentDeep },
     indexText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
@@ -314,7 +317,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     trayLabel: { ...type.caption, color: palette.accent },
     trayRow: { minHeight: 48, flexDirection: "row", flexWrap: "wrap", paddingVertical: spacing.sm, alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     trayNumber: { ...type.caption, color: palette.accent, width: 24 },
-    trayTitle: { ...type.label, flexGrow: 1, flexBasis: "80%" },
+    trayTitle: { ...type.label },
     trayControl: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
     pickLabel: { ...type.label, marginTop: spacing.xl },

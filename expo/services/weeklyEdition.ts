@@ -19,6 +19,7 @@ export type WeeklyEditionResult = DiscoveryResult & {
 };
 
 export type WeeklyEditionService = {
+  preview(interestIds: readonly InterestId[]): Promise<DiscoveryResult>;
   get(profileId: string, interestIds: readonly InterestId[], followedIds: readonly string[], now?: number): Promise<WeeklyEditionResult>;
   dismiss(profileId: string, sourceId: string, result: WeeklyEditionResult, followedIds: readonly string[]): Promise<WeeklyEditionResult>;
   showMore(profileId: string, result: WeeklyEditionResult, followedIds: readonly string[]): Promise<WeeklyEditionResult>;
@@ -71,6 +72,14 @@ function display(edition: IssuedEdition, pool: WeeklyPickSourceSuggestion[], fol
 /** Keeps the public weekly pool shared while issuing and dismissing picks per profile locally. */
 export function createWeeklyEditionService(client: WeeklyPicksClient, storage: KeyValueStorage): WeeklyEditionService {
   return {
+    // Setup is provisional: changing interests must not issue or replace a weekly edition.
+    async preview(interestIds) {
+      if (!interestIds.length) return { status: "success", reason: "no_interests", items: [] };
+      const fetched = await client.getWeeklyPicks([...new Set(interestIds)]);
+      const mapped = mapWeeklyPicksClientResult(fetched);
+      if (fetched.status !== "success" || !["fresh", "cached"].includes(fetched.response.state)) return mapped;
+      return { ...mapped, items: selectWeeklyPickSuggestions({ ...fetched.response, interests: fetched.response.interests.filter((group) => interestIds.includes(group.interestId)) }, 45) };
+    },
     async get(profileId, interestIds, followedIds, now = Date.now()) {
       const periodKey = weeklyDiscoveryPeriodKey(now);
       const stored = await readEdition(storage, profileId);
@@ -119,3 +128,4 @@ export function createWeeklyEditionService(client: WeeklyPicksClient, storage: K
     },
   };
 }
+

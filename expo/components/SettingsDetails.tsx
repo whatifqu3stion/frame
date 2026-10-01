@@ -21,6 +21,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
   const insets = useSafeAreaInsets();
   const feedback = useFeedback();
   const haptics = useFeedbackPreference();
+  const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const [hapticsBusy, setHapticsBusy] = useState(false);
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -147,6 +148,10 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
 
       {section === "about" ? <>
       <Section><Text style={styles.infoText}>Frame brings together the creators you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
+      <Section label="Using Frame">{HELP_TOPICS.map((topic) => <View key={topic.title} style={styles.helpTopic}>
+        <Pressable onPress={() => setHelpOpen(helpOpen === topic.title ? null : topic.title)} style={styles.linkRow} accessibilityRole="button" accessibilityState={{ expanded: helpOpen === topic.title }}><Text style={[type.label, styles.flex]}>{topic.title}</Text><ChevronRight size={17} color={palette.inkMuted} style={{ transform: [{ rotate: helpOpen === topic.title ? "90deg" : "0deg" }] }} /></Pressable>
+        {helpOpen === topic.title ? <Text style={[type.bodySoft, { paddingBottom: spacing.md }]}>{topic.body}</Text> : null}
+      </View>)}</Section>
       {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Replay setup and try the sample checkout. No charge.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       </> : null}
@@ -154,6 +159,15 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
     </ScrollView>
   );
 }
+
+const HELP_TOPICS = [
+  { title: "How does Today choose videos?", body: "Today brings together a small, finite selection from sources you follow. Interests help you discover sources; they don’t automatically add videos to Today. Save what catches your eye, or choose a video to watch. Managed profiles also follow their Owner’s approvals." },
+  { title: "How do I find and follow sources?", body: "Open Sources to review this week’s suggestions or add a supported channel or video link, @handle, or channel ID. Following is always your choice. Open a source to browse its videos directly." },
+  { title: "When do suggestions change?", body: "Weekly Picks is a finite edition. Following or dismissing a suggestion won’t automatically replace it. If more are available, you can reveal another from the same edition. Interest changes shape the next weekly edition; the refresh date appears in Sources." },
+  { title: "Where are my saves and viewing progress?", body: "Saved holds the videos you’ve kept. Use search and viewing filters to find one. Sessions & progress opens your viewing progress and session plans. To remove a saved video, choose Edit Saved, then Remove from Saved." },
+  { title: "How do sessions work?", body: "In Saved, open Sessions & progress, then create a session. Choose up to three videos, name the session, and arrange their order. Frame pauses between videos and ends after the last one. An unfinished draft stays on this device." },
+  { title: "What stays on this device?", body: "Your profiles, saves, sources, sessions, progress, and preferences are kept locally. They don’t sync to another device. Removing the app or erasing Frame data can remove them. Video playback and new suggestions need an internet connection." },
+];
 
 function Section({ label, hint, children }: { label?: string; hint?: string; children: React.ReactNode }) {
   const { palette, type } = useFrameTheme();
@@ -174,6 +188,7 @@ function StatusRow({ title, body, loading = false }: { title: string; body: stri
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    helpTopic: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
     screen: { flex: 1, backgroundColor: palette.wall },
     flex: { flex: 1 },
     section: { paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.md },

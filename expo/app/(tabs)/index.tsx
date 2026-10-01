@@ -33,7 +33,7 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching, sourcesError } = useApp();
+  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching, sourcesError, refreshLibrary } = useApp();
   const [clock, setClock] = useState<number>(Date.now());
   const actionLock = useRef(false);
   const handledHere = useRef(false);
@@ -232,7 +232,7 @@ export default function TodayScreen() {
   let content;
   if (initialLoading) content = <VideoFeedSkeleton variant="full" count={3} accessibilityLabel="Loading today’s videos" />;
   else if (activeProfile?.role === "managed" && managedContentQuery.isError) content = <StateBlock title="Approvals couldn’t load" body="Try again to see this profile’s selection." action="Try again" onPress={() => { void managedContentQuery.refetch(); }} styles={styles} />;
-  else if (sourcesError) content = <StateBlock title="Sources couldn’t load" body="Close and reopen Frame to try again. Your selection will return when sources are available." styles={styles} />;
+  else if (sourcesError) content = <StateBlock title="Sources couldn’t load" body="Reload your sources to bring back your selection." action="Try again" onPress={() => { void refreshLibrary().catch(() => Alert.alert("Sources unavailable", "Try again in a moment.")); }} styles={styles} />;
   else if (rulesQuery.isError) content = <StateBlock title="Selection settings couldn’t load" body="Try again before viewing today’s selection." action="Try again" onPress={() => { void rulesQuery.refetch(); }} styles={styles} />;
   else if (managedOverview?.policy.mode === "selectedVideos") content = managedOverview.approvedVideos.length > 0
     ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)

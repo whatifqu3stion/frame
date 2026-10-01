@@ -7,7 +7,7 @@ export type KeyValueStorage = {
 };
 
 export type LegacyProfileStorageNamespace = "preferences" | "interests" | "recentSearches";
-export type ProfileStorageNamespace = LegacyProfileStorageNamespace | "weeklyPicks";
+export type ProfileStorageNamespace = LegacyProfileStorageNamespace | "weeklyPicks" | "onboardingDraft";
 
 export const LEGACY_PROFILE_STORAGE_KEYS: Record<LegacyProfileStorageNamespace, string> = {
   preferences: "frame.preferences.v1",
@@ -36,7 +36,7 @@ export async function readProfileStorage(
   const scopedKey = profileStorageKey(namespace, profileId);
   const scoped = await storage.getItem(scopedKey);
   if (scoped !== null || profileId !== DEFAULT_OWNER_PROFILE_ID) return scoped;
-  if (namespace === "weeklyPicks") return null;
+  if (namespace === "weeklyPicks" || namespace === "onboardingDraft") return null;
 
   const migrationKey = profileStorageMigrationKey(namespace, profileId);
   if (await storage.getItem(migrationKey)) return null;
@@ -60,7 +60,8 @@ export async function clearProfileStorage(
   storage: KeyValueStorage,
   profileId: string,
 ): Promise<void> {
-  await Promise.all(([...Object.keys(LEGACY_PROFILE_STORAGE_KEYS), "weeklyPicks"] as ProfileStorageNamespace[]).map(
+  await Promise.all(([...Object.keys(LEGACY_PROFILE_STORAGE_KEYS), "weeklyPicks", "onboardingDraft"] as ProfileStorageNamespace[]).map(
     (namespace) => storage.removeItem(profileStorageKey(namespace, profileId)),
   ));
 }
+
