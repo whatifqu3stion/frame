@@ -1,3 +1,4 @@
+import { useScreenAction } from "@/hooks/useScreenAction";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import CompletionMark from "@/components/motion/CompletionMark";
 import MotionView from "@/components/motion/MotionView";
@@ -28,8 +29,9 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
   const [justSaved, setJustSaved] = useState<string | null>(null);
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, savedVideos, saveVideo, requirePurchase } = useApp();
+  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sourcesError, refreshLibrary, savedVideos, saveVideo, requirePurchase } = useApp();
   const client = useQueryClient();
+  const { busy: retryingSources, run: retrySourceRead } = useScreenAction(activeProfileId);
   const [clock] = useState(() => Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
   const period = getTodayPeriod(clock);
   const sourceIds = followedChannels.map((source) => source.id);
   const managed = activeProfile?.role === "managed";
-  const enabled = !sourcesLoading && sourceIds.length > 0 && !managed;
+  const enabled = !sourcesError && !sourcesLoading && sourceIds.length > 0 && !managed;
   const key = ["today", activeProfileId, period.key] as const;
   const today = useQuery({ queryKey: key, networkMode: "always", queryFn: () => todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: true }), enabled, retry: false, refetchOnWindowFocus: false });
   const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], networkMode: "always", queryFn: () => listTodaySourceRules(activeProfileId), enabled, staleTime: Infinity });
@@ -66,6 +68,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
     <Text style={styles.title} accessibilityRole="header">This is your{"\n"}Frame.</Text>
     {managed ? <Text style={type.bodySoft}>Your Owner’s approvals shape what appears in Today. Your profile’s viewing limits still apply.</Text>
       : sourcesLoading || (enabled && (today.isLoading || rulesQuery.isLoading)) ? <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel="Loading your selection"><ActivityIndicator color={palette.active} /><Text style={type.bodySoft}>Bringing your sources together…</Text></View>
+      : sourcesError ? <><Text style={type.bodySoft}>Your sources couldn’t load. Try again to bring back your selection.</Text><Pressable disabled={retryingSources} accessibilityState={{ busy: retryingSources, disabled: retryingSources }} onPress={() => { void retrySourceRead(refreshLibrary, () => {}, () => {}); }} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>{retryingSources ? "Loading sources…" : "Try again"}</Text></Pressable></>
       : !sourceIds.length ? <><Text style={type.bodySoft}>Follow a source to see your first selection here. Your interests help you find one you’ll enjoy.</Text><Pressable onPress={onChooseSource} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Choose a source</Text></Pressable></>
       : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>Your sources are ready. There are no new videos in today’s selection. You can browse your sources directly in Frame.</Text>{followedChannels[0] ? <View style={styles.supporting}><MediaImage source={followedChannels[0].thumbnailUrl ? { uri: followedChannels[0].thumbnailUrl } : null} style={{ width: 56, height: 56, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /><View style={styles.supportingDetails}><Text style={type.heading}>{followedChannels[0].title}</Text><Text style={type.bodySoft}>A source you chose. Open Sources to explore its videos.</Text></View></View> : null}<Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Browse my sources</Text></Pressable></>

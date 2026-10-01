@@ -1,3 +1,4 @@
+import { onboardingPreviewPage, onboardingPreviewStatus } from "@/domain/onboardingPreview";
 import { useOnboardingDraft } from "@/hooks/useOnboardingDraft";
 import { formatDuration } from "@/services/youtube";
 import ProgressSegment from "@/components/motion/ProgressSegment";
@@ -128,7 +129,7 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
         </View>
         <Text style={styles.note}>No account needed. Your choices can change anytime.</Text>
       </> : null}
-      {current === "source" ? <SourceStep scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
+      {current === "source" ? <SourceStep key={interests.map((item) => item.id).sort().join(",")} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
       {current === "interests" ? <>
         <Text style={styles.title} accessibilityRole="header">What draws{"\n"}you in?</Text>
         <Text style={styles.body}>What would you like more of? Choose up to {ONBOARDING_INTEREST_MAX} interests, and we’ll show you a few sources to explore next.</Text>
@@ -167,21 +168,20 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const touch = useFeedback();
   const { resolveSourceInput, confirmSource, followedChannels, interests, activeProfileId, activeProfile } = useApp();
+  const interestIds = interests.map((item) => item.id).sort();
   const picks = useQuery({
-    queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), interests.map((item) => item.id).join(",")],
+    queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), interestIds.join(",")],
     networkMode: "always",
-    queryFn: () => weeklyEditionService.preview(interests.map((item) => item.id)),
+    queryFn: () => weeklyEditionService.preview(interestIds),
     enabled: FOUNDATION_CAPABILITIES.weeklyDiscovery && interests.length > 0 && activeProfile?.role !== "managed",
     retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
   });
   const [page, setPage] = useState(0);
-  const pool = picks.data?.items ?? [];
-  const suggestions = pool.slice(page * 3, page * 3 + 3).filter((pick) => !followedChannels.some((source) => source.id === pick.providerSourceId));
-  const hasMore = pool.slice(page * 3 + 3).some((pick) => !followedChannels.some((source) => source.id === pick.providerSourceId));
-  const retryable = picks.isError || picks.data?.reason === "offline" || picks.data?.reason === "backend";
-  const emptyMessage = picks.isError ? "Suggestions couldn’t load. Try again, or add a source below."
-    : pool.length ? "You’ve reached the end of this preview. Your followed sources are ready; continue to your selection or bring another favorite below."
-    : picks.data?.message ?? "No sources are published for these interests yet. Try another interest or bring a favorite below.";
+  const preview = onboardingPreviewStatus({ enabled: FOUNDATION_CAPABILITIES.weeklyDiscovery, loading: picks.isLoading, failed: picks.isError, result: picks.data });
+  const { items: suggestions, nextPage, previousPage, exhausted } = onboardingPreviewPage(preview.kind === "ready" ? picks.data?.items ?? [] : [], followedChannels.map((source) => source.id), page);
+  const emptyMessage = preview.kind !== "ready" ? preview.message : exhausted
+    ? "You follow every source in this preview. Continue to your selection, or bring another favorite below."
+    : "These sources are already in your Frame. Choose another selection below.";
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [resolution, setResolution] = useState<SourceResolution | null>(null);
@@ -213,16 +213,20 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
     <Text style={styles.body}>{resolution ? "Follow this source to include its videos in Today. You can change your sources later." : "Your sources shape your daily selection. Start with one you enjoy; you can add more whenever you like."}</Text>
     {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.suggestions}>
       <Text style={type.heading}>Picked for your interests</Text><Text style={type.bodySoft}>Choose a source to see what it offers. You’ll confirm before following.</Text>
-      {picks.isLoading ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : suggestions.length ? suggestions.map((pick, index) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}${pick.featuredMedia ? `, featuring ${pick.featuredMedia.title}` : ""}`} style={[styles.pickPreview, index > 0 && styles.supportingPreview]}>
+      {preview.kind === "loading" ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : suggestions.length ? suggestions.map((pick, index) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}${pick.featuredMedia ? `, featuring ${pick.featuredMedia.title}` : ""}`} style={[styles.pickPreview, index > 0 && styles.supportingPreview]}>
         {pick.featuredMedia ? <MediaImage source={pick.featuredMedia.thumbnailUrl ? { uri: pick.featuredMedia.thumbnailUrl } : null} style={index === 0 ? styles.heroImage : styles.supportingImage} contentFit="cover" cachePolicy="none" /> : <MediaImage source={pick.thumbnailUrl ? { uri: pick.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />}
         <View style={[styles.pickCopy, index > 0 && styles.supportingCopy]}><Text style={styles.sourceMeta}>{INTEREST_LIBRARY.find((item) => item.id === pick.interestId)?.name ?? "From your interests"} · {pick.displayName}</Text>
         <Text style={index === 0 ? type.heading : type.label}>{pick.featuredMedia?.title ?? pick.displayName}</Text>
-        {pick.featuredMedia?.durationSeconds ? <Text style={type.caption}>{formatDuration(pick.featuredMedia.durationSeconds)}</Text> : null}
+        {pick.featuredMedia ? <Text style={type.caption}>{pick.featuredMedia.durationSeconds ? formatDuration(pick.featuredMedia.durationSeconds) : "Duration unavailable"}</Text> : <Text style={type.caption}>Video preview unavailable for this source.</Text>}
         {index === 0 && pick.recommendationReason ? <Text style={type.bodySoft}>{pick.recommendationReason}</Text> : null}
         <Text style={styles.pickAction}>Review source</Text></View>
-      </Pressable>) : <Text style={type.bodySoft}>{hasMore ? "These sources are already in your Frame. See the remaining suggestions below." : emptyMessage}</Text>}
-      {hasMore ? <Pressable disabled={busy} onPress={() => setPage((value) => value + 1)} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>See another selection</Text></Pressable> : null}
-      {retryable ? <Pressable disabled={picks.isFetching || busy} onPress={() => { void picks.refetch(); }} accessibilityRole="button" accessibilityState={{ busy: picks.isFetching, disabled: picks.isFetching || busy }} style={styles.textButton}><Text style={styles.link}>{picks.isFetching ? "Trying again…" : "Try suggestions again"}</Text></Pressable> : null}
+      </Pressable>) : <Text style={type.bodySoft} accessibilityLiveRegion="polite">{emptyMessage}</Text>}
+      {preview.kind === "ready" && preview.message ? <Text style={type.caption}>{preview.message}</Text> : null}
+      <View style={styles.previewNavigation}>
+        {previousPage !== null ? <Pressable disabled={busy || picks.isFetching} onPress={() => { setPage(previousPage); scrollToSource(); }} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>Previous selection</Text></Pressable> : null}
+        {nextPage !== null ? <Pressable disabled={busy || picks.isFetching} onPress={() => { setPage(nextPage); scrollToSource(); }} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>See another selection</Text></Pressable> : null}
+      </View>
+      {preview.retry ? <Pressable disabled={picks.isFetching || busy} onPress={() => { setPage(0); void picks.refetch(); }} accessibilityRole="button" accessibilityState={{ busy: picks.isFetching, disabled: picks.isFetching || busy }} style={styles.textButton}><Text style={styles.link}>{picks.isFetching ? "Trying again…" : "Try suggestions again"}</Text></Pressable> : null}
     </View> : null}
     {!resolution ? <>
     <Text style={styles.fieldLabel}>{interests.length > 0 && activeProfile?.role !== "managed" ? "Or bring a favorite" : "Source link or @handle"}</Text>
@@ -250,6 +254,7 @@ function createStyles(p: FramePalette, t: FrameType) {
     progress: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, flexDirection: "row", gap: spacing.xs, paddingVertical: spacing.md },
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xxl }, replayNote: { ...t.caption, marginBottom: spacing.lg },
     stageLabel: { ...t.caption, width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
+    previewNavigation: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md },
     interestGroup: { marginTop: spacing.lg },
     pickPreview: { gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, supportingPreview: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, pickCopy: { gap: spacing.xs }, supportingCopy: { flex: 1 },
     heroImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }, supportingImage: { width: 96, aspectRatio: 16 / 9, borderRadius: radii.media },

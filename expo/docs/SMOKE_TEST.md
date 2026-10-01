@@ -234,3 +234,11 @@ Automated/source verification does not complete these native checks.
 - [ ] Open an approval request. The complete title, current artwork/context, and labelled decisions are together. Expired metadata shows its refresh guidance instead of stale imagery. Existing authorization applies to both decisions. Verify PIN and profile boundaries.
 - [ ] About & help reveals task guidance individually. Sources and Today recover from failed source reads with Try again.
 - [ ] On iOS and Android, inspect light/dark, small phone, large text, VoiceOver/TalkBack, keyboard, and Reduced Motion. Confirm hero/copy height, long titles, disclosure focus, and actions stay usable.
+
+
+## 19. Onboarding preview recovery
+
+- [ ] Change interests after visiting a later preview batch. The new topics start at their first batch; slow results from the previous topics do not replace them.
+- [ ] Follow every source in a middle batch, then navigate forward and back. Controls skip batches with no remaining choices, retain the fixed publication, and never call a partially visited pool exhausted.
+- [ ] Disabled/unconfigured suggestions show setup guidance; unpublished interests invite changing topics; offline/service failure offers Retry; maintenance says paused with a later Retry. A cached publication is labelled. Missing video media shows the real source with an explicit unavailable-preview note.
+- [ ] Fail the source read during the personal reveal. It must offer loading recovery rather than asking the user to follow their first source. Retry successfully and verify the same profile’s sources and eligible selection return.
