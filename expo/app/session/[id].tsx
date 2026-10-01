@@ -1,3 +1,4 @@
+import MediaImage from "@/components/MediaImage";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery } from "@tanstack/react-query";
@@ -133,9 +134,10 @@ export default function SavedSessionScreen() {
             <View key={videoId} style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
               <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
-                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Saved source"}</Text>
-                <Text style={styles.videoTitle} numberOfLines={2}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
-                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text>
+                <MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
+                <View style={styles.videoCopy}><Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Saved source"}</Text>
+                <Text style={styles.videoTitle}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
+                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text></View>
               </Pressable>
 
             </View>
@@ -163,7 +165,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
     orderMark: { minWidth: 32, alignItems: "flex-start", justifyContent: "center" },
     orderText: { ...type.heading, color: palette.inkMuted, fontSize: 24, fontVariant: ["tabular-nums"] },
-    videoMain: { flex: 1, minHeight: 76, justifyContent: "center" },
+    videoMain: { flex: 1, minHeight: 76, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm }, thumbnail: { width: 80, aspectRatio: 16 / 9, borderRadius: radii.media }, videoCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 130 },
     channel: { ...type.caption, color: palette.inkMuted },
     videoTitle: { ...type.heading, fontSize: 20, lineHeight: 27, marginTop: 2 },
     unavailable: { color: palette.danger },

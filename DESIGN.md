@@ -216,7 +216,7 @@ Frontmatter preserves the source role names and loaded family identifiers. Displ
 
 Frontmatter `px` dimensions encode the existing React Native logical layout units for portability; implement them as native numeric values, not CSS pixels. Respect native text scaling and safe-area insets.
 
-Pages use the `page` horizontal gutter. Today and Weekly Picks are vertically ordered media-and-copy compositions with divider rules, rather than stacked inset boxes. Saved uses a virtualized list, a current programme, a horizontal continue-watching strip, and search/filter controls. Actions wrap where implemented; screen headers wrap profile and title. No new responsive breakpoint system is defined.
+Pages use the `page` horizontal gutter. Today and Weekly Picks are vertically ordered media-and-copy compositions with divider rules, rather than stacked inset boxes. Saved leads with its virtualized collection and search/filter controls. Sessions & progress reveals planning and populated resume content; Edit Saved reveals labelled removal actions with confirmation. Actions wrap where implemented; screen headers wrap profile and title. No new responsive breakpoint system is defined.
 
 Featured images retain a 16:9 content area inside the matte mount; its padding sits outside that ratio. Sheets are full-width within side gutters, capped at 560 logical units, bottom-aligned, scrollable and keyboard-aware. Most primary actions have a 48-unit minimum height; Saved filters and several detail actions use 44, search uses 52, and Begin uses 52. Preserve the implemented target sizes rather than inferring fixed heights from typography.
 
@@ -282,7 +282,7 @@ Use specific actions such as “Find source,” “Request approval,” “Open 
 
 ### First-run experience and Premium demo
 
-The welcome flow has four stages: welcome, optional interests, source choice, and a personal reveal. Interest choices feed the existing weekly source picks; viewers explicitly review and follow each source. The reveal reads the same finite Today snapshot as the app and supports a real first save. It keeps that saved card visible during setup, including a return from the Premium preview. It never fills missing content with invented videos. Managed profiles retain the existing approval path; their reveal routes them to the protected app experience rather than exposing an unrestricted selection.
+The welcome flow has four stages: welcome, optional interests, source choice, and a personal reveal. Interest choices feed a provisional preview of the shared publication without issuing or altering the regular weekly edition; viewers explicitly review and follow each source. The reveal reads the same finite Today snapshot as the app and supports a real first save. One real hero thumbnail and supporting images make both source review and the final selection recognizable. It keeps the saved card visible during setup, including a return from the Premium preview. Setup stage and saved IDs resume from a profile-local draft after restart; replay does not overwrite that draft. It never fills missing content with invented videos. Managed profiles retain the existing approval path; their reveal routes them to the protected app experience rather than exposing an unrestricted selection.
 
 Use the established serif titles, warm surfaces, umber introduction, matte media mount, and ruled source rows. Keep controls reachable through scrolling, a wrapping footer, keyboard avoidance, and safe-area padding. Only the active stage is mounted. No entrance choreography, simulated progress, or new texture treatment is introduced.
 
@@ -293,7 +293,7 @@ Settings → About & help → Demo → Preview welcome & Premium replays this fl
 
 ### Conversion intent
 
-Onboarding explicitly explains the value of Frame through familiar creators, a bounded daily selection, saved finds, and sessions with an ending. Personalized source suggestions precede manual link entry. The reveal makes the first real save visually prominent; only after that persisted action does the footer promote the Premium demo. The offer uses real progress counts and describes the ongoing benefit of the library. Its checkout CTA names the sample plan and billing period, with one primary action at a time and a visible continuation without purchase. No new personalization questionnaire, artificial scarcity, or fabricated proof is introduced. See `expo/docs/ONBOARDING_CONVERSION.md` for the hypothesis, research limitations, and uninstrumented validation plan.
+Onboarding explicitly explains the value of Frame through familiar creators, a bounded daily selection, saved finds, and sessions with an ending. Personalized source suggestions precede manual link entry. The reveal makes the first real save visually prominent; after that persisted action, Open Saved is the primary continuation and the Premium demo remains a secondary invitation. The offer uses real progress counts and describes the ongoing benefit of the library. Its checkout CTA names the sample plan and billing period, with one primary action at a time and a visible continuation without purchase. No new personalization questionnaire, artificial scarcity, or fabricated proof is introduced. See `expo/docs/ONBOARDING_CONVERSION.md` for the hypothesis, research limitations, and uninstrumented validation plan.
 
 ### Frame-led brand language
 
@@ -348,3 +348,8 @@ New effects stop and settle on background, blur, unmount, or Reduce Motion. Icon
 and progress transitions use the native driver. The one 28px SVG completion mark
 uses a bounded JS-driven stroke; no loops, delays, new dependencies, or extra
 haptic events. Device smoothness and subjective timing remain unverified.
+
+
+### October 1 critique fixes
+
+Source previews distinguish unavailable, empty, and exhausted publication states. An explicit next-selection action walks a finite provisional pool; changing interests does not freeze setup suggestions for the week. Missing images retain stable, honest fallbacks. Empty Today offers a direct path to the followed sources without bypassing eligibility. Session selection, ordering, and detail rows use real retained thumbnails beside numbering and runtime. Managed requests open evidence before labelled Approve/Deny actions; expired metadata is disclosed instead of showing stale imagery; existing approval authorization remains unchanged. About & help answers concrete tasks through disclosures. Source load errors expose in-place Retry. Native visual, large-text, screen-reader, and motion checks remain open in the smoke plan.

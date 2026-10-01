@@ -1,6 +1,6 @@
 # Frame onboarding: value, activation, and conversion
 
-Status: implemented in the design-refinement branch, September 29, 2026. Conversion performance is unmeasured. Native usability testing is still required. This document records the rationale and validation plan, not a claim of conversion lift.
+Status: revised after the October 1, 2026 critique. Conversion performance is unmeasured. Native usability testing is still required. This document records the rationale and validation plan, not a claim of conversion lift.
 
 ## Intended outcome
 
@@ -11,13 +11,13 @@ A new viewer should understand why Frame is useful, make a meaningful choice, se
 | Stage | User question | Implemented answer and action |
 | --- | --- | --- |
 | Welcome | Why use Frame? | “Worth watching. At your pace.” Familiar creators, a daily selection capped by the real product limit, and sessions with a stopping point. “Build my Frame” starts customization. |
-| Interests | Will this be relevant to me? | Optional interests lead to the existing weekly source suggestions. No additional questionnaire or account is required. |
-| Sources | How much work will setup take? | Show relevant source suggestions before manual link entry. Source descriptions and interest labels help with the decision; review and follow remain separate, explicit actions. |
+| Interests | Will this be relevant to me? | Optional grouped interests lead to provisional previews from the shared weekly publication, without locking the regular edition. No additional questionnaire or account is required. |
+| Sources | How much work will setup take? | Show relevant source suggestions before manual link entry. One real hero video preview and supporting thumbnails, titles, runtimes, and interest labels help with the decision; review and follow remain separate, explicit actions. |
 | Personal reveal | What did my choices create? | The real finite Today selection, with a prominent Save action. A successful save confirms that their library has begun. |
 | Premium | Why would I keep using this? | Real followed-source and newly saved-video counts connect the offer to the user's progress. Benefits describe collecting, returning, planning, and discovering. |
 | Continue | Where do I go next? | After a first save, continue into Saved to see the result. Otherwise open Today when sources exist, or Sources when setup was skipped. Settings replay returns to Settings. |
 
-The reveal's prominent Premium CTA appears after a successful, persisted first save. Before that, Premium remains an optional inline action. The offer never opens automatically over the user's work. On the plan screen, the selected sample plan and full billing period appear in the primary checkout label; there is no competing primary app-entry action. A visible secondary action continues into Frame. After simulated checkout, the main action leads to the saved result.
+Open Saved is the primary action after a successful first save. Premium remains an optional inline invitation throughout the reveal. The offer never opens automatically over the user's work. On the plan screen, the selected sample plan and full billing period appear in the primary checkout label; there is no competing primary app-entry action. A visible secondary action continues into Frame. After simulated checkout, the main action leads to the saved result.
 
 ## Boundaries that make the pitch credible
 
@@ -50,4 +50,4 @@ Once a real offer is separately authorized, measure actual purchase conversion, 
 - RevenueCat, [Start at the finish line: why you should design your activation journey backwards](https://www.revenuecat.com/blog/growth/hard-paywall-activation-journey), September 8, 2026. Supports defining the desired value experience and connecting the promise to activation and retention. Its cross-app paywall comparisons do not establish what will work for Frame.
 - RevenueCat, [Personalised Paywalls](https://www.revenuecat.com/feature/paywalls/personalization), accessed September 29, 2026. Supports using existing context to make offers specific. This is vendor guidance, not independent causal evidence or a guaranteed result.
 
-The first-save offer placement is a Frame-specific design hypothesis based on the current product, demo constraints, and the user's request for a visible eureka moment before selling Premium.
+The first-save continuation and secondary offer placement are a Frame-specific design hypothesis based on the current product, demo constraints, and the user's request for a visible eureka moment before selling Premium.

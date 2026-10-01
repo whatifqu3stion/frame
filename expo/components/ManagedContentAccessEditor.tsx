@@ -1,6 +1,6 @@
 import MotionView from "@/components/motion/MotionView";
 import Pressable from "@/components/motion/ChoicePressable";
-import { Check, Info, ShieldCheck, Trash2, X } from "lucide-react-native";
+import { Check, ChevronDown, ShieldCheck, Trash2, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import MediaImage from "@/components/MediaImage";
@@ -33,13 +33,18 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
 
       <Text style={styles.sectionLabel}>Requests · {value.requests.length}</Text>
       {value.requests.length === 0 ? <Text style={styles.empty}>No requests to review.</Text> : value.requests.map((request) => (
-        <View key={`${request.kind}:${request.targetId}`} style={{ gap: spacing.sm }}><View style={styles.row}>
-          <View style={styles.flex}><Text style={styles.title} numberOfLines={2}>{request.title}</Text><Text style={styles.meta}>{request.kind === "video" ? `Video · ${request.sourceTitle || "Unknown source"}` : "Source"}</Text></View>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === request.targetId }} accessibilityLabel={`Review details for ${request.title}`} onPress={() => setExpanded(expanded === request.targetId ? null : request.targetId)} style={styles.iconButton}><Info size={18} color={palette.active} /></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Approve ${request.title}`}><Check size={16} color={palette.success} /></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} style={styles.iconButton} accessibilityLabel={`Deny ${request.title}`}><X size={16} color={palette.danger} /></Pressable>
-        </View>
-          {expanded === request.targetId ? <MotionView enter style={{ gap: spacing.sm, padding: spacing.md }}><Text style={type.heading}>{request.title}</Text>{isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}</MotionView> : null}
+        <View key={`${request.kind}:${request.targetId}`} style={{ gap: spacing.sm }}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === `${request.kind}:${request.targetId}` }} accessibilityLabel={`Review ${request.title}`} onPress={() => setExpanded(expanded === `${request.kind}:${request.targetId}` ? null : `${request.kind}:${request.targetId}`)} style={styles.row}>
+            <View style={styles.flex}><Text style={styles.title}>{request.title}</Text><Text style={styles.meta}>{request.kind === "video" ? `Video · ${request.sourceTitle || "Unknown source"}` : "Source"}</Text></View>
+            <Text style={styles.reviewLabel}>{expanded === `${request.kind}:${request.targetId}` ? "Hide details" : "Review request"}</Text><ChevronDown size={18} color={palette.active} />
+          </Pressable>
+          {expanded === `${request.kind}:${request.targetId}` ? <MotionView enter style={{ gap: spacing.sm, padding: spacing.md }}>
+            {isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}
+            <View style={styles.decisions}>
+              <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.title}`}><Check size={16} color={palette.success} /><Text style={type.label}>Approve</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={styles.decision} accessibilityLabel={`Deny ${request.title}`}><X size={16} color={palette.danger} /><Text style={type.label}>Deny</Text></Pressable>
+            </View>
+          </MotionView> : null}
         </View>
       ))}
 
@@ -68,6 +73,7 @@ function ApprovalRow({ title, meta, busy, onRemove, styles, danger }: { title: s
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    reviewLabel: { ...type.label, color: palette.active }, decisions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md }, decision: { minHeight: 48, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.surface },
     root: { gap: spacing.sm, marginTop: spacing.sm }, intro: { ...type.bodySoft, color: palette.inkMuted },
     modeRow: { flexDirection: "row", gap: spacing.sm }, modeButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh }, modeButtonSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, modeText: { ...type.label, color: palette.inkMuted, fontSize: 12, textAlign: "center" }, modeTextSelected: { color: palette.active },
     explanation: { ...type.bodySoft, color: palette.inkMuted }, sectionLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md }, empty: { ...type.bodySoft, color: palette.inkMuted, paddingVertical: spacing.sm },

@@ -219,3 +219,18 @@ All items below require real iOS and Android evidence; they are not signed off b
 - [ ] Change Today feedback while its bar remains visible; the new message must resolve without retaining an obsolete Undo target.
 - [ ] During motion, background the app, navigate away, change profile, or enable Reduce Motion. New effects must settle immediately and never replay an old outcome on return.
 - [ ] On iPhone and Android hardware, inspect both themes and large text. Verify glyphs are unclipped, first-save stroke remains smooth, and scrolling/session reordering remain responsive.
+
+
+## 18. October 1 critique fixes
+
+Automated/source verification does not complete these native checks.
+
+- [ ] Choose interests, inspect the real hero/supporting video previews, go Back and change topics. Previews reflect the current topics; a previously issued normal weekly edition remains unchanged.
+- [ ] Follow each suggestion in a batch, request another finite selection, and exhaust the pool. No retry loop or invented videos. Test offline, maintenance, missing configuration, no publication, and missing/failed thumbnails separately.
+- [ ] Follow a source with no eligible Today items. Browse my sources completes setup and opens Sources; eligibility and approval checks remain intact.
+- [ ] Save a first video. Open Saved stays primary; Premium demo is secondary. Saved shows the saved item before expanded planning or maintenance controls.
+- [ ] Restart during setup after interests, a source, and the first save. The stage and saved milestone resume for the correct profile. Replay must not alter the real draft. Finish and full reset remove the draft; simulate storage failure without losing the independently stored source/video.
+- [ ] Open Sessions & progress, resume a video, create/reorder a session, and inspect its detail. All video choices have real thumbnail or stable fallback, order, readable title, and honest runtime. Edit Saved exposes removals; Cancel preserves the item.
+- [ ] Open an approval request. The complete title, current artwork/context, and labelled decisions are together. Expired metadata shows its refresh guidance instead of stale imagery. Existing authorization applies to both decisions. Verify PIN and profile boundaries.
+- [ ] About & help reveals task guidance individually. Sources and Today recover from failed source reads with Try again.
+- [ ] On iOS and Android, inspect light/dark, small phone, large text, VoiceOver/TalkBack, keyboard, and Reduced Motion. Confirm hero/copy height, long titles, disclosure focus, and actions stay usable.

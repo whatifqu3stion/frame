@@ -97,3 +97,37 @@ describe("profile-local Weekly Picks edition", () => {
     expect(more.items.map((item) => item.providerSourceId)).not.toContain("replacement");
   });
 });
+
+
+describe("provisional onboarding preview", () => {
+  test("uses current interests without issuing or replacing the profile’s weekly edition", async () => {
+    const storage = new MemoryStorage();
+    const requested: string[][] = [];
+    const service = createWeeklyEditionService({ async getWeeklyPicks(ids) { requested.push([...ids]); return { status: "success", response: response() }; } }, storage);
+    const tech = await service.preview(["tech"]);
+    expect(tech.items.every((pick) => pick.interestId === "tech")).toBe(true);
+    expect(tech.items).toHaveLength(3);
+    expect(storage.values.size).toBe(0);
+    await service.get("owner", ["tech"], [], monday);
+    const original = [...storage.values.entries()];
+    const science = await service.preview(["science"]);
+    expect(requested.at(-1)).toEqual(["science"]);
+    expect(science.items.every((pick) => pick.interestId === "science")).toBe(true);
+    expect([...storage.values.entries()]).toEqual(original);
+    await service.get("owner", ["science"], [], monday);
+    expect(requested.at(-1)).toEqual(["tech"]);
+  });
+  test("separates an empty publication from offline and paused service states", async () => {
+    const storage = new MemoryStorage();
+    const offline = createWeeklyEditionService({ async getWeeklyPicks() { return { status: "network_error" }; } }, storage);
+    expect((await offline.preview(["tech"])).reason).toBe("offline");
+    expect((await offline.preview([])).reason).toBe("no_interests");
+    for (const state of ["empty", "maintenance"] as const) {
+      const service = createWeeklyEditionService({ async getWeeklyPicks() { return { status: "success", response: { state, interests: [] } }; } }, storage);
+      const preview = await service.preview(["tech"]);
+      expect(preview.items).toEqual([]);
+      expect(preview.reason).toBe(state);
+    }
+    expect(storage.values.size).toBe(0);
+  });
+});
