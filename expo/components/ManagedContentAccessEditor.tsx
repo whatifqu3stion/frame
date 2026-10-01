@@ -39,11 +39,14 @@ export default function ManagedContentAccessEditor({ value, busy, onModeChange, 
             <Text style={styles.reviewLabel}>{expanded === `${request.kind}:${request.targetId}` ? "Hide details" : "Review request"}</Text><ChevronDown size={18} color={palette.active} />
           </Pressable>
           {expanded === `${request.kind}:${request.targetId}` ? <MotionView enter style={{ gap: spacing.sm, padding: spacing.md }}>
+            <Text style={type.bodySoft}>{request.kind === "video" ? "Approve this video for this profile. Its viewing limits still apply." : "Approve videos from this source for this profile. Its viewing limits still apply."}</Text>
+            {request.kind === "source" ? <Text style={type.caption}>Context from the video used to request this source</Text> : null}
             {isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.control }} contentFit="cover" cachePolicy="none" /> : null}<Text style={type.bodySoft}>{request.description || "No description is available."}</Text>{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Open the video or source in this profile to refresh them before reviewing.</Text>}
             <View style={styles.decisions}>
-              <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.title}`}><Check size={16} color={palette.success} /><Text style={type.label}>Approve</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={styles.decision} accessibilityLabel={`Deny ${request.title}`}><X size={16} color={palette.danger} /><Text style={type.label}>Deny</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.kind}: ${request.title}`}><Check size={16} color={palette.success} /><Text style={styles.decisionText}>{request.kind === "video" ? "Approve video" : "Approve source"}</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Decline request for ${request.title}`}><X size={16} color={palette.danger} /><Text style={styles.decisionText}>Decline request</Text></Pressable>
             </View>
+            <Text style={type.caption}>Declining removes this request without adding an approval. It can be requested again.</Text>
           </MotionView> : null}
         </View>
       ))}
@@ -68,16 +71,17 @@ function ModeButton({ label, selected, disabled, onPress, styles }: { label: str
 }
 
 function ApprovalRow({ title, meta, busy, onRemove, styles, danger }: { title: string; meta: string; busy: boolean; onRemove(): void; styles: ReturnType<typeof createStyles>; danger: string }) {
-  return <View style={styles.row}><View style={styles.flex}><Text style={styles.title} numberOfLines={2}>{title}</Text><Text style={styles.meta} numberOfLines={1}>{meta}</Text></View><Pressable accessibilityRole="button" onPress={onRemove} disabled={busy} style={styles.iconButton} accessibilityLabel={`Remove ${title}`}><Trash2 size={15} color={danger} /></Pressable></View>;
+  return <View style={styles.row}><View style={styles.flex}><Text style={styles.title} numberOfLines={2}>{title}</Text><Text style={styles.meta} numberOfLines={1}>{meta}</Text></View><Pressable accessibilityRole="button" onPress={onRemove} disabled={busy} style={styles.iconButton} accessibilityLabel={`Remove approval for ${title}`}><Trash2 size={15} color={danger} /></Pressable></View>;
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    decisionText: { ...type.label, flexShrink: 1 },
     reviewLabel: { ...type.label, color: palette.active }, decisions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md }, decision: { minHeight: 48, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.surface },
     root: { gap: spacing.sm, marginTop: spacing.sm }, intro: { ...type.bodySoft, color: palette.inkMuted },
-    modeRow: { flexDirection: "row", gap: spacing.sm }, modeButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh }, modeButtonSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, modeText: { ...type.label, color: palette.inkMuted, fontSize: 12, textAlign: "center" }, modeTextSelected: { color: palette.active },
+    modeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, modeButton: { flexGrow: 1, flexBasis: 140, minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh }, modeButtonSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, modeText: { ...type.label, color: palette.inkMuted, textAlign: "center" }, modeTextSelected: { color: palette.active },
     explanation: { ...type.bodySoft, color: palette.inkMuted }, sectionLabel: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md }, empty: { ...type.bodySoft, color: palette.inkMuted, paddingVertical: spacing.sm },
-    row: { minHeight: 64, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.xs, padding: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surfaceHigh }, flex: { flexGrow: 1, flexBasis: "100%" }, title: { ...type.label, fontSize: 13 }, meta: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted, fontSize: 12 }, iconButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
+    row: { minHeight: 64, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.xs, padding: spacing.sm, borderRadius: radii.control, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surfaceHigh }, flex: { flexGrow: 1, flexBasis: "100%" }, title: { ...type.label }, meta: { ...type.bodySoft, marginTop: 2, color: palette.inkMuted }, iconButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     boundary: { flexDirection: "row", gap: spacing.sm, padding: spacing.sm, marginTop: spacing.sm, borderRadius: radii.control, backgroundColor: palette.activeSoft }, boundaryText: { ...type.bodySoft, flex: 1, color: palette.inkMuted, fontSize: 12 },
   });
 }

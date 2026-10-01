@@ -3,7 +3,7 @@ import { useScreenAction } from "@/hooks/useScreenAction";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useFeedback, useFeedbackPreference } from "@/hooks/useFeedback";
 import { setFeedbackEnabled } from "@/services/feedback";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { ActivityIndicator, Alert, Platform, Switch, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronRight, Crown, FileText, Link2, Lock, LogOut, Moon, RotateCcw, Sun, Trash2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FullResetModal from "@/components/FullResetModal";
 import { FEATURE_FLAGS, IS_CLOSED_BETA } from "@/constants/config";
 import { INTEREST_LIBRARY } from "@/constants/interests";
-import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
+import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 import { accentOptions, createPalette, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { isInterestOptionDisabled } from "@/domain/interests";
@@ -150,7 +150,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
       <Section><Text style={styles.infoText}>Frame brings together the creators you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
       <Section label="Using Frame">{HELP_TOPICS.map((topic) => <View key={topic.title} style={styles.helpTopic}>
         <Pressable onPress={() => setHelpOpen(helpOpen === topic.title ? null : topic.title)} style={styles.linkRow} accessibilityRole="button" accessibilityState={{ expanded: helpOpen === topic.title }}><Text style={[type.label, styles.flex]}>{topic.title}</Text><ChevronRight size={17} color={palette.inkMuted} style={{ transform: [{ rotate: helpOpen === topic.title ? "90deg" : "0deg" }] }} /></Pressable>
-        {helpOpen === topic.title ? <Text style={[type.bodySoft, { paddingBottom: spacing.md }]}>{topic.body}</Text> : null}
+        {helpOpen === topic.title ? <View style={{ paddingBottom: spacing.md, gap: spacing.sm }}><Text style={type.bodySoft}>{topic.body}</Text><Pressable onPress={() => router.push(topic.href)} style={styles.linkRow} accessibilityRole="button"><Text style={styles.linkText}>{topic.action}</Text><ChevronRight size={15} color={palette.active} /></Pressable></View> : null}
       </View>)}</Section>
       {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Replay setup and try the sample checkout. No charge.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
@@ -160,13 +160,14 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
   );
 }
 
-const HELP_TOPICS = [
-  { title: "How does Today choose videos?", body: "Today brings together a small, finite selection from sources you follow. Interests help you discover sources; they don’t automatically add videos to Today. Save what catches your eye, or choose a video to watch. Managed profiles also follow their Owner’s approvals." },
-  { title: "How do I find and follow sources?", body: "Open Sources to review this week’s suggestions or add a supported channel or video link, @handle, or channel ID. Following is always your choice. Open a source to browse its videos directly." },
-  { title: "When do suggestions change?", body: "Weekly Picks is a finite edition. Following or dismissing a suggestion won’t automatically replace it. If more are available, you can reveal another from the same edition. Interest changes shape the next weekly edition; the refresh date appears in Sources." },
-  { title: "Where are my saves and viewing progress?", body: "Saved holds the videos you’ve kept. Use search and viewing filters to find one. Sessions & progress opens your viewing progress and session plans. To remove a saved video, choose Edit Saved, then Remove from Saved." },
-  { title: "How do sessions work?", body: "In Saved, open Sessions & progress, then create a session. Choose up to three videos, name the session, and arrange their order. Frame pauses between videos and ends after the last one. An unfinished draft stays on this device." },
-  { title: "What stays on this device?", body: "Your profiles, saves, sources, sessions, progress, and preferences are kept locally. They don’t sync to another device. Removing the app or erasing Frame data can remove them. Video playback and new suggestions need an internet connection." },
+const HELP_TOPICS: { title: string; body: string; action: string; href: Href }[] = [
+  { title: "Find something to watch", body: `Today brings you up to ${TODAY_MAX_ITEMS} videos from sources you follow. Save one for later or choose one to watch. Interests suggest sources; following a source shapes Today. Managed profiles also follow their Owner’s approvals.`, action: "Open Today", href: "/(tabs)" },
+  { title: "Add a favorite creator", body: "In Sources, review a suggestion or enter a supported channel or video link, @handle, or channel ID. Review the source, then choose Follow source. Open any followed source to browse its videos.", action: "Open Sources", href: "/(tabs)/sources" },
+  { title: "Change your weekly suggestions", body: "Choose interests in Settings. Changes apply to the next weekly edition; Sources shows its refresh date. Following or dismissing a pick doesn’t automatically replace it. If more are available, reveal another from the same edition.", action: "Choose interests", href: "/settings/interests" },
+  { title: "Find or remove a saved video", body: "In Saved, choose Search & filter to find a title or source, or show unwatched and in-progress videos. To remove a video, choose Edit Saved, then Remove from Saved. You’ll confirm before it is removed.", action: "Open Saved", href: "/(tabs)/saved" },
+  { title: "Resume watching or plan a session", body: `In Saved, open Sessions & progress to pick up a video or create a session. Choose up to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos, name the session, and arrange their order. Frame waits for you between videos and ends after the last one. Drafts stay on this device.`, action: "Open Saved", href: "/(tabs)/saved" },
+  { title: "Review a Managed profile’s requests", body: "Open Settings → Profiles & boundaries and choose the Managed profile. Open a request to review its details. Approve video covers that video; Approve source covers videos from that creator. Viewing limits still apply. Decline request removes the request without adding an approval.", action: "Open Settings", href: "/(tabs)/settings" },
+  { title: "Understand storage and offline use", body: "Profiles, saves, sources, sessions, and progress stay on this device; they don’t sync between devices. Saved videos are links, not downloads. Playback and new suggestions need internet. Removing the app or erasing Frame data can remove your local library.", action: "Open Privacy & data", href: "/settings/privacy" },
 ];
 
 function Section({ label, hint, children }: { label?: string; hint?: string; children: React.ReactNode }) {
