@@ -5,7 +5,7 @@ import { motion } from "@/constants/motion";
 import { useFeedback } from "@/hooks/useFeedback";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
 import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, RotateCcw } from "lucide-react-native";
@@ -83,6 +83,7 @@ function playbackRemaining(status: ViewingAllowanceStatus): number | null {
 }
 
 export default function WatchScreen() {
+  const navigation = useNavigation();
   const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -604,9 +605,9 @@ export default function WatchScreen() {
     navigationLockedRef.current = true;
     leaveFullscreen();
     pauseAndPersist();
-    if (router.canGoBack()) router.back();
+    if (navigation.canGoBack()) router.back();
     else router.replace("/(tabs)");
-  }, [ leaveFullscreen, pauseAndPersist]);
+  }, [navigation, leaveFullscreen, pauseAndPersist]);
 
   const playNext = useCallback(async (): Promise<void> => {
     if (!nextSessionId) { closePlayer(); return; }
