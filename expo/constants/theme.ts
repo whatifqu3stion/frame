@@ -70,7 +70,7 @@ const accentTokens: Record<AccentMode, { light: AccentTokens; dark: AccentTokens
   },
 };
 
-export const accentOptions: ReadonlyArray<{ id: AccentMode; label: string }> = [
+export const accentOptions: readonly { id: AccentMode; label: string }[] = [
   { id: "blue", label: "Mineral blue" }, { id: "green", label: "Mineral green" }, { id: "rose", label: "Muted rose" },
 ];
 

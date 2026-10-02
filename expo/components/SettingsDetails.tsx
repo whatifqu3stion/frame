@@ -1,3 +1,4 @@
+import ChoiceOption from "@/components/ChoiceOption";
 import type { SettingsSection } from "@/constants/settings";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import Pressable from "@/components/motion/ChoicePressable";
@@ -5,16 +6,15 @@ import { useFeedback, useFeedbackPreference } from "@/hooks/useFeedback";
 import { setFeedbackEnabled } from "@/services/feedback";
 import { router, type Href } from "expo-router";
 import { ActivityIndicator, Alert, Platform, Switch, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Check, ChevronRight, Crown, FileText, Link2, Lock, LogOut, Moon, RotateCcw, Sun, Trash2 } from "lucide-react-native";
+import { ChevronRight, Crown, FileText, Link2, Lock, LogOut, Moon, RotateCcw, Sun, Trash2 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FullResetModal from "@/components/FullResetModal";
 import { FEATURE_FLAGS, IS_CLOSED_BETA } from "@/constants/config";
-import { INTEREST_LIBRARY } from "@/constants/interests";
+import { GroupedInterestChoices } from "@/components/InterestChoices";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
 import { accentOptions, createPalette, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
-import { isInterestOptionDisabled } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
 
 export default function SettingsDetails({ section }: { section: SettingsSection }) {
@@ -60,7 +60,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ width: "100%", maxWidth: 640, alignSelf: "center", paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.xl }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ width: "100%", maxWidth: 640, alignSelf: "center", paddingLeft: insets.left, paddingRight: insets.right, paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.xl }} showsVerticalScrollIndicator={false}>
       {section === "google" ? <Section hint="Choose which subscriptions to follow in Frame.">
         {googleConnected ? (
           <View style={styles.accountBlock}>
@@ -82,25 +82,13 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
 
       {section === "interests" ? <Section hint={`Choose up to ${ONBOARDING_INTEREST_MAX} interests for weekly source suggestions. This is optional.`}>
         <Text style={[type.label, { marginBottom: spacing.md }]} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected</Text>
-        <View style={styles.chipGrid} accessibilityLabel="Weekly source interests">
-          {INTEREST_LIBRARY.map((interest) => {
-            const selectedIds = interests.map((item) => item.id);
-            const selected = selectedIds.includes(interest.id);
-            const unavailable = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
-            return (
-              <Pressable key={interest.id} onPress={() => { const done = feedback.capture(); void toggleInterest(interest.id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} disabled={unavailable} style={[styles.chip, selected && styles.chipActive, unavailable && styles.chipDisabled]} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: unavailable }} accessibilityHint={unavailable ? "Remove a selected interest before choosing this one." : undefined} testID={`interest-${interest.id}`}>
-                <Check size={14} color={palette.active} style={{ opacity: selected ? 1 : 0 }} accessible={false} />
-                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <GroupedInterestChoices selectedIds={interests.map((interest) => interest.id)} onToggle={(id) => { const done = feedback.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} accessibilityLabel="Weekly source interests" limitHint="Remove a selected interest before choosing this one." testIDPrefix="interest" />
       </Section> : null}
 
       {section === "appearance" ? <><Section label="Theme" hint="The video player always uses a dark background.">
         <View style={styles.choiceRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
-          <AppearanceChoice label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} styles={styles} />
-          <AppearanceChoice label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} icon={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} styles={styles} />
+          <ChoiceOption label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
+          <ChoiceOption label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
         </View>
       </Section>
       <Section label="Accent color">
@@ -109,10 +97,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
             const selected = prefs.accent === option.id;
             const swatch = createPalette(isDark, option.id).accent;
             return (
-              <Pressable key={option.id} onPress={() => { if (prefs.accent === option.id) return; const done = feedback.capture(); void setAccent(option.id).then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} style={[styles.accentChoice, selected && styles.accentChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${option.label} accent`}>
-                <View style={[styles.swatch, { backgroundColor: swatch }]}>{selected ? <Check size={14} color={palette.onAccent} strokeWidth={2.4} /> : null}</View>
-                <Text style={styles.accentText}>{option.label}</Text>
-              </Pressable>
+              <ChoiceOption key={option.id} label={option.label} selected={selected} onPress={() => { if (prefs.accent === option.id) return; const done = feedback.capture(); void setAccent(option.id).then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} style={styles.accentChoice} accessibilityLabel={`${option.label} accent`} leading={<View style={[styles.swatch, { backgroundColor: swatch }]} />} />
             );
           })}
         </View>
@@ -152,7 +137,7 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
         <Pressable onPress={() => setHelpOpen(helpOpen === topic.title ? null : topic.title)} style={styles.linkRow} accessibilityRole="button" accessibilityState={{ expanded: helpOpen === topic.title }}><Text style={[type.label, styles.flex]}>{topic.title}</Text><ChevronRight size={17} color={palette.inkMuted} style={{ transform: [{ rotate: helpOpen === topic.title ? "90deg" : "0deg" }] }} /></Pressable>
         {helpOpen === topic.title ? <View style={{ paddingBottom: spacing.md, gap: spacing.sm }}><Text style={type.bodySoft}>{topic.body}</Text><Pressable onPress={() => router.push(topic.href)} style={styles.linkRow} accessibilityRole="button"><Text style={styles.linkText}>{topic.action}</Text><ChevronRight size={15} color={palette.active} /></Pressable></View> : null}
       </View>)}</Section>
-      {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Replay setup and try the sample checkout. No charge.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
+      {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Try setup again. Sources, interests, and saved videos change this profile. Sample checkout makes no purchase.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
       </> : null}
       <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />
@@ -164,8 +149,8 @@ const HELP_TOPICS: { title: string; body: string; action: string; href: Href }[]
   { title: "Find something to watch", body: `Today brings you up to ${TODAY_MAX_ITEMS} videos from sources you follow. Save one for later or choose one to watch. Interests suggest sources; following a source shapes Today. Managed profiles also follow their Owner’s approvals.`, action: "Open Today", href: "/(tabs)" },
   { title: "Add a favorite creator", body: "In Sources, review a suggestion or enter a supported channel or video link, @handle, or channel ID. Review the source, then choose Follow source. Open any followed source to browse its videos.", action: "Open Sources", href: "/(tabs)/sources" },
   { title: "Change your weekly suggestions", body: "Choose interests in Settings. Changes apply to the next weekly edition; Sources shows its refresh date. Following or dismissing a pick doesn’t automatically replace it. If more are available, reveal another from the same edition.", action: "Choose interests", href: "/settings/interests" },
-  { title: "Find or remove a saved video", body: "In Saved, choose Search & filter to find a title or source, or show unwatched and in-progress videos. To remove a video, choose Edit Saved, then Remove from Saved. You’ll confirm before it is removed.", action: "Open Saved", href: "/(tabs)/saved" },
-  { title: "Resume watching or plan a session", body: `In Saved, open Sessions & progress to pick up a video or create a session. Choose up to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos, name the session, and arrange their order. Frame waits for you between videos and ends after the last one. Drafts stay on this device.`, action: "Open Saved", href: "/(tabs)/saved" },
+  { title: "Find or remove a saved video", body: "In Saved, choose Search & filter to find a title or source, or show videos in progress. To remove a video, choose Edit Saved, then Remove from Saved. Use Undo in the removal message to put it back.", action: "Open Saved", href: "/(tabs)/saved" },
+  { title: "Resume watching or plan a session", body: `In Saved, Continue watching resumes your latest video. Open Sessions & progress to see all progress or create a session. Choose up to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos, name the session, and arrange their order. Frame waits for you between videos and ends after the last one. Drafts stay on this device.`, action: "Open Saved", href: "/(tabs)/saved" },
   { title: "Review a Managed profile’s requests", body: "Open Settings → Profiles & boundaries and choose the Managed profile. Open a request to review its details. Approve video covers that video; Approve source covers videos from that creator. Viewing limits still apply. Decline request removes the request without adding an approval.", action: "Open Settings", href: "/(tabs)/settings" },
   { title: "Understand storage and offline use", body: "Profiles, saves, sources, sessions, and progress stay on this device; they don’t sync between devices. Saved videos are links, not downloads. Playback and new suggestions need internet. Removing the app or erasing Frame data can remove your local library.", action: "Open Privacy & data", href: "/settings/privacy" },
 ];
@@ -174,11 +159,6 @@ function Section({ label, hint, children }: { label?: string; hint?: string; chi
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return <View style={styles.section}>{label ? <Text style={type.heading} accessibilityRole="header">{label}</Text> : null}{hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}<View style={styles.sectionContent}>{children}</View></View>;
-}
-
-function AppearanceChoice({ label, selected, onPress, icon, styles }: { label: string; selected: boolean; onPress: () => void; icon: React.ReactNode; styles: ReturnType<typeof createStyles> }) {
-  const { palette } = useFrameTheme();
-  return <Pressable onPress={onPress} style={[styles.appearanceChoice, selected && styles.appearanceChoiceActive]} accessibilityRole="radio" accessibilityState={{ checked: selected }}>{icon}<Text style={[styles.appearanceText, selected && styles.appearanceTextActive]}>{label}</Text><Check size={16} color={palette.active} style={{ opacity: selected ? 1 : 0 }} accessible={false} /></Pressable>;
 }
 
 function StatusRow({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
@@ -199,22 +179,11 @@ function createStyles(palette: FramePalette, type: FrameType) {
     accountBlock: { gap: spacing.sm },
     googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
     googleText: { ...type.label, flex: 1, color: palette.onDark },
-    chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    chip: { minHeight: 48, maxWidth: "100%", paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: 13, borderRadius: radii.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    chipActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
-    chipDisabled: { opacity: 0.48 },
-    chipText: { ...type.label, flexShrink: 1 },
-    chipTextActive: { color: palette.active },
     choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    appearanceChoice: { minHeight: 56, flexGrow: 1, flexBasis: 180, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    appearanceChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
-    appearanceText: { ...type.label, color: palette.ink, flex: 1 },
-    appearanceTextActive: { color: palette.active },
+    appearanceChoice: { flexGrow: 1, flexBasis: 220 },
     accentRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    accentChoice: { minHeight: 82, flexGrow: 1, flexBasis: 90, alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.xs, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    accentChoiceActive: { backgroundColor: palette.activeSoft, borderColor: palette.border },
-    swatch: { width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 16 },
-    accentText: { ...type.label, color: palette.inkMuted, fontSize: 12, textAlign: "center" },
+    accentChoice: { flexGrow: 1, flexBasis: 150 },
+    swatch: { width: 24, height: 24, borderRadius: 12 },
     infoCard: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.borderSoft },
     infoText: { ...type.bodySoft, color: palette.inkMuted },
     premiumCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.card, backgroundColor: palette.accentDeep },

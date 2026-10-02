@@ -445,9 +445,10 @@ export async function getResume(profileId: string, videoId: string): Promise<Res
   return (await db.getFirstAsync<ResumeRow>("SELECT * FROM resume_positions WHERE profileId = ? AND videoId = ?", [profileId, videoId])) ?? null;
 }
 
-export async function upsertResume(profileId: string, video: Video, timestampSeconds: number): Promise<void> {
+export async function upsertResume(profileId: string, video: Video, timestampSeconds: number, sessionId: string | null = null): Promise<void> {
   video = expireVideo(video, Date.now());
   const row: ResumeRow = {
+    sessionId,
     videoId: video.id,
     fetchedAt: video.fetchedAt ?? null,
     timestampSeconds: Math.floor(timestampSeconds),
@@ -463,10 +464,10 @@ export async function upsertResume(profileId: string, video: Video, timestampSec
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO resume_positions (profileId,videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds,fetchedAt)
-     VALUES (?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,videoId) DO UPDATE SET timestampSeconds=excluded.timestampSeconds,updatedAt=excluded.updatedAt,title=excluded.title,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,durationSeconds=excluded.durationSeconds,fetchedAt=excluded.fetchedAt`,
-    [profileId, row.videoId, row.timestampSeconds, row.updatedAt, row.title ?? null, row.channelTitle ?? null, row.thumbnailUrl ?? null, row.durationSeconds ?? null, row.fetchedAt ?? null],
+    `INSERT INTO resume_positions (profileId,videoId,timestampSeconds,updatedAt,title,channelTitle,thumbnailUrl,durationSeconds,fetchedAt,sessionId)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,videoId) DO UPDATE SET timestampSeconds=excluded.timestampSeconds,updatedAt=excluded.updatedAt,title=excluded.title,channelTitle=excluded.channelTitle,thumbnailUrl=excluded.thumbnailUrl,durationSeconds=excluded.durationSeconds,fetchedAt=excluded.fetchedAt,sessionId=excluded.sessionId`,
+    [profileId, row.videoId, row.timestampSeconds, row.updatedAt, row.title ?? null, row.channelTitle ?? null, row.thumbnailUrl ?? null, row.durationSeconds ?? null, row.fetchedAt ?? null, row.sessionId ?? null],
   );
 }
 
@@ -657,6 +658,9 @@ export async function refreshStoredLibraryMetadata(profileId: string, videos: re
   if (Platform.OS === "web") {
     for (const video of fresh) {
       const key = profileEntityKey(profileId, video.id);
+      for (const [snapshotKey, snapshot] of webStore.todaySnapshots) {
+        if (snapshot.profileId === profileId) webStore.todaySnapshots.set(snapshotKey, { ...snapshot, items: snapshot.items.map((item) => item.id === video.id && item.fetchedAt <= (video.fetchedAt ?? 0) ? { ...item, ...video, sourceId: video.channelId, sourceTitle: video.channelTitle, fetchedAt: video.fetchedAt ?? 0 } : item) });
+      }
       const saved = webStore.saved.get(key);
       if (saved && (saved.fetchedAt ?? 0) <= (video.fetchedAt ?? 0)) webStore.saved.set(key, { ...saved, ...video, savedAt: saved.savedAt });
       const resume = webStore.resume.get(key);
@@ -675,6 +679,7 @@ export async function refreshStoredLibraryMetadata(profileId: string, videos: re
       for (const table of ["saved_videos", "watch_later"]) {
         await db.runAsync(`UPDATE ${table} SET title=?,channelTitle=?,thumbnailUrl=?,publishedAt=?,durationSeconds=?,description=?,fetchedAt=? WHERE profileId=? AND id=? AND (fetchedAt IS NULL OR fetchedAt<=?)`, [video.title,video.channelTitle,video.thumbnailUrl,video.publishedAt,video.durationSeconds,video.description ?? "",video.fetchedAt ?? null,profileId,video.id,video.fetchedAt ?? 0]);
       }
+      await db.runAsync("UPDATE today_snapshot_items SET title=?,sourceTitle=?,thumbnailUrl=?,publishedAt=?,durationSeconds=?,description=?,fetchedAt=? WHERE profileId=? AND mediaId=? AND fetchedAt<=?", [video.title,video.channelTitle,video.thumbnailUrl,video.publishedAt,video.durationSeconds,video.description ?? "",video.fetchedAt ?? 0,profileId,video.id,video.fetchedAt ?? 0]);
       await db.runAsync("UPDATE resume_positions SET title=?,channelTitle=?,thumbnailUrl=?,durationSeconds=?,fetchedAt=? WHERE profileId=? AND videoId=? AND (fetchedAt IS NULL OR fetchedAt<=?)", [video.title,video.channelTitle,video.thumbnailUrl,video.durationSeconds,video.fetchedAt ?? null,profileId,video.id,video.fetchedAt ?? 0]);
     }
     if (freshChannel) await db.runAsync("UPDATE followed_channels SET title=?,description=?,thumbnailUrl=?,fetchedAt=? WHERE profileId=? AND id=? AND (fetchedAt IS NULL OR fetchedAt<=?)", [freshChannel.title,freshChannel.description ?? "",freshChannel.thumbnailUrl,freshChannel.fetchedAt ?? null,profileId,freshChannel.id,freshChannel.fetchedAt ?? 0]);
@@ -877,3 +882,4 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     await db.runAsync("INSERT INTO profiles (id,name,role,sortOrder,createdAt,updatedAt) VALUES (?,?,?,?,?,?)", [webOwner.id, webOwner.name, webOwner.role, webOwner.sortOrder, webOwner.createdAt, webOwner.updatedAt]);
   });
 }
+

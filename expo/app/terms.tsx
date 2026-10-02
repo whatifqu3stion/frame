@@ -56,7 +56,8 @@ export default function TermsScreen() {
         <Text accessibilityRole="header" style={styles.heading}>Service and subscription help</Text>
         {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => Alert.alert("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
       </View>
-      <Link href="/(tabs)/settings" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open data and account controls</Text></Pressable></Link>
+      <Link href="/settings/privacy" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open device data controls</Text></Pressable></Link>
+      <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Manage Google connection</Text></Pressable></Link>
     </ScrollView>
   );
 }

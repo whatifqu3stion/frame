@@ -1,3 +1,4 @@
+import { boundedCollection } from "@/constants/layout";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
@@ -23,6 +24,7 @@ export default function ChannelScreen() {
   const touch = useFeedback();
   const followLock = useRef(false);
   const [followBusy, setFollowBusy] = useState(false);
+  const [expandedDescriptionId, setExpandedDescriptionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -81,9 +83,20 @@ export default function ChannelScreen() {
             />
         </View>
         <Text style={type.caption}>Source</Text>
-        <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? "—"}</Text>
+        <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? (videosQuery.isLoading && canUseLibrary ? "Loading source…" : "Source details unavailable")}</Text>
         {channel?.description ? (
-          <Text style={styles.description} numberOfLines={4}>{channel.description}</Text>
+          <View>
+            <Text style={styles.description} numberOfLines={expandedDescriptionId === id ? undefined : 4}>{channel.description}</Text>
+            <Pressable
+              onPress={() => setExpandedDescriptionId(expandedDescriptionId === id ? null : id)}
+              accessibilityRole="button"
+              accessibilityLabel={expandedDescriptionId === id ? "Show less description" : "Read full description"}
+              accessibilityState={{ expanded: expandedDescriptionId === id }}
+              style={({ pressed }) => [styles.descriptionToggle, pressed && styles.pressed]}
+            >
+              <Text style={styles.retryText}>{expandedDescriptionId === id ? "Show less description" : "Read full description"}</Text>
+            </Pressable>
+          </View>
         ) : null}
 
         {channel ? (
@@ -137,7 +150,7 @@ export default function ChannelScreen() {
       renderItem={({ item }) => <View style={{ paddingHorizontal: spacing.lg }}><VideoCard video={item} variant="wide" /></View>}
       ListHeaderComponent={header}
       ListEmptyComponent={empty}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}
+      contentContainerStyle={[styles.content, boundedCollection, { paddingLeft: insets.left, paddingRight: insets.right, paddingBottom: insets.bottom + spacing.xxl }]}
       showsVerticalScrollIndicator={false}
       initialNumToRender={6}
       maxToRenderPerBatch={6}
@@ -160,6 +173,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   avatarImage: { width: "100%", height: "100%" },
   channelName: { marginTop: spacing.sm },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 360 },
+  descriptionToggle: { minHeight: 48, justifyContent: "center", alignSelf: "flex-start" },
   followBtn: { minHeight: 48, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
   followBtnActive: { backgroundColor: palette.activeSoft, borderWidth: 1, borderColor: palette.active },
   followText: { fontFamily: fonts.sansSemibold, fontSize: 14 },

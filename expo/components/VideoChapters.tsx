@@ -1,7 +1,7 @@
 import Pressable from "@/components/motion/ChoicePressable";
 import { ListVideo } from "lucide-react-native";
 import { memo, useMemo } from "react";
-import {  StyleSheet, Text, View } from "react-native";
+import {  StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { formatDuration, type VideoChapter } from "@/services/youtube";
 
@@ -17,6 +17,8 @@ type VideoChaptersProps = {
 };
 
 function VideoChapters({ chapters, currentSeconds, onJump, disabled = false }: VideoChaptersProps) {
+  const { fontScale } = useWindowDimensions();
+  const stack = fontScale > 1.3;
   const activeStart = useMemo<number>(() => {
     let active = chapters[0]?.startSeconds ?? 0;
     for (const chapter of chapters) {
@@ -44,14 +46,14 @@ function VideoChapters({ chapters, currentSeconds, onJump, disabled = false }: V
               key={`${chapter.startSeconds}-${chapter.title}`}
               onPress={() => onJump(chapter)}
               disabled={disabled}
-              style={({ pressed }) => [styles.row, isActive && styles.activeRow, (pressed || disabled) && styles.pressed]}
+              style={({ pressed }) => [styles.row, stack && styles.stackedRow, isActive && styles.activeRow, (pressed || disabled) && styles.pressed]}
               accessibilityRole="button"
               accessibilityLabel={`Jump to ${time}, ${chapter.title}`}
               accessibilityState={{ selected: isActive, disabled }}
               testID={`chapter-${chapter.startSeconds}`}
             >
               <Text style={[styles.time, isActive && styles.activeTime]}>{time}</Text>
-              <Text style={[styles.title, isActive && styles.activeTitle]} numberOfLines={2}>{chapter.title}</Text>
+              <Text style={[styles.title, stack && { flex: 0, width: "100%" }, isActive && styles.activeTitle]}>{chapter.title}</Text>
             </Pressable>
           );
         })}
@@ -70,7 +72,8 @@ const styles = StyleSheet.create({
   list: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: "rgba(250,249,246,0.22)" },
   row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 12, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: "rgba(250,249,246,0.18)" },
   activeRow: { backgroundColor: watchPalette.glow, borderRadius: radii.small },
-  time: { width: 48, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
+  stackedRow: { flexDirection: "column", alignItems: "flex-start", gap: spacing.xs },
+  time: { minWidth: 48, flexShrink: 0, color: palette.accentSoft, fontSize: 12, fontWeight: "700" as const, fontVariant: ["tabular-nums"] },
   activeTime: { color: watchPalette.accentSoft },
   title: { ...type.label, flex: 1, color: "rgba(250,249,246,0.82)" },
   activeTitle: { color: palette.wall },

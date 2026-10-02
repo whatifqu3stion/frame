@@ -1,3 +1,4 @@
+import { parseSourceInput } from "@/domain/sourceInput";
 import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -14,51 +15,61 @@ import { useApp } from "@/providers/AppProvider";
 import { resolutionVideoToVideo } from "@/services/youtube";
 import type { SourceResolution } from "@/types";
 
-type Props = { visible: boolean; onClose: () => void };
+type Props = { requestVideo?: boolean; visible: boolean; onClose: () => void };
 type Feedback = { ok: boolean; message: string };
 
 /** Resolves a shared source first, then requires an explicit profile-local follow. */
-export default function AddChannelModal({ visible, onClose }: Props) {
+export default function AddChannelModal({ visible, onClose, requestVideo = false }: Props) {
   const touch = useFeedback();
-  const { resolveSourceInput, confirmSource, requirePurchase, saveVideo, activeProfileId } = useApp();
+  const { resolveSourceInput, confirmSource, requirePurchase, saveVideo, activeProfileId, requestManagedContentAccess } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const requestId = useRef(0);
   const locked = useRef(false);
+  const lookup = useRef<AbortController | null>(null);
   const profileRef = useRef(activeProfileId);
   profileRef.current = activeProfileId;
-  useEffect(() => () => { requestId.current += 1; }, []);
+  useEffect(() => () => { requestId.current += 1; lookup.current?.abort(); }, []);
   const [value, setValue] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [resolution, setResolution] = useState<SourceResolution | null>(null);
   const [resolutionProfileId, setResolutionProfileId] = useState<string | null>(null);
+  const [followedSourceId, setFollowedSourceId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
+  useEffect(() => { requestId.current += 1; lookup.current?.abort(); lookup.current = null; locked.current = false; setBusy(false); setValue(""); setResolution(null); setFeedback(null); setFollowedSourceId(null); }, [activeProfileId]);
+
   const close = (): void => {
-    if (locked.current) return;
+    if (locked.current && !lookup.current) return;
+    lookup.current?.abort(); lookup.current = null; locked.current = false;
     requestId.current += 1;
-    setValue("");
     setBusy(false);
     setResolution(null);
     setResolutionProfileId(null);
+    setFollowedSourceId(null);
     setFeedback(null);
     onClose();
   };
 
   const submit = async (): Promise<void> => {
-    if (!value.trim() || locked.current || !requirePurchase("creators")) return;
+    if (!value.trim() || locked.current || (!requestVideo && !requirePurchase("creators"))) return;
+    if (requestVideo && parseSourceInput(value).kind !== "video") { setFeedback({ ok: false, message: "Paste an individual video link so the Owner can review it." }); return; }
+    setFollowedSourceId(null);
     const request = ++requestId.current;
     const expectedProfile = activeProfileId;
+    const controller = new AbortController(); lookup.current = controller;
     locked.current = true; setBusy(true); setResolution(null); setFeedback(null);
     try {
-      const result = await resolveSourceInput(value.trim());
+      const result = await resolveSourceInput(value.trim(), controller.signal);
       if (requestId.current !== request || profileRef.current !== expectedProfile) return;
-      if (result.status === "success") {
+      if (result.status === "success" && requestVideo && !result.data.video) {
+        setFeedback({ ok: false, message: "No video details were found. Check the individual video link and try again." });
+      } else if (result.status === "success") {
         setResolutionProfileId(expectedProfile); setResolution(result.data);
-        setFeedback({ ok: true, message: "Source found. Check the details, then choose Follow source." });
+        setFeedback({ ok: true, message: requestVideo ? "Video found. Check the details, then request approval from the Owner on this device." : "Source found. Check the details, then choose Follow source." });
       } else setFeedback({ ok: false, message: result.message ?? "That source could not be verified." });
     } catch { if (requestId.current === request) setFeedback({ ok: false, message: "Couldn’t check this source. Check your connection and try again." }); }
-    finally { if (requestId.current === request) { locked.current = false; setBusy(false); } }
+    finally { if (requestId.current === request) { lookup.current = null; locked.current = false; setBusy(false); } }
   };
 
   const follow = async (): Promise<void> => {
@@ -67,9 +78,26 @@ export default function AddChannelModal({ visible, onClose }: Props) {
     const done = touch.capture();
     try {
       const result = await confirmSource(resolution); setFeedback(result);
-      if (result.ok) { done("commit"); setResolution(null); setValue(""); }
+      if (result.ok) { done("commit"); setFollowedSourceId(resolution.source.providerSourceId); setResolution(null); setValue(""); }
     } catch { setFeedback({ ok: false, message: "Couldn’t follow this source. Try again." }); }
     finally { locked.current = false; setBusy(false); }
+  };
+
+  const requestApproval = async (): Promise<void> => {
+    if (!resolution || resolutionProfileId !== activeProfileId || locked.current) return;
+    const video = resolutionVideoToVideo(resolution);
+    if (!video) { setFeedback({ ok: false, message: "No video was found. Paste an individual video link." }); return; }
+    locked.current = true; setBusy(true);
+    const request = ++requestId.current;
+    const expectedProfile = activeProfileId;
+    const done = touch.capture();
+    try {
+      const result = await requestManagedContentAccess(video);
+      if (requestId.current !== request || profileRef.current !== expectedProfile) return;
+      setFeedback(result);
+      if (result.ok) { done("commit"); setFollowedSourceId(resolution.source.providerSourceId); setResolution(null); setValue(""); }
+    } catch { if (requestId.current === request) setFeedback({ ok: false, message: "The request couldn’t be saved. Try again." }); }
+    finally { if (requestId.current === request) { lookup.current = null; locked.current = false; setBusy(false); } }
   };
 
   const watch = (): void => {
@@ -113,20 +141,20 @@ export default function AddChannelModal({ visible, onClose }: Props) {
   return (
     <Sheet visible={visible} onClose={close}>
           <View style={styles.headerRow}>
-            <Text style={styles.eyebrow}>Add a source</Text>
-            <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+            <View />
+            <Pressable disabled={busy && !lookup.current} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Find a source</Text>
-          <Text style={styles.body}>Use a channel or video link, an @handle, or a channel ID. Check the result before following.</Text>
-          <Text style={[type.label, { marginTop: spacing.md }]}>Source or video link</Text>
+          <Text style={styles.heading} accessibilityRole="header">{requestVideo ? "Request a video" : "Find a source"}</Text>
+          <Text style={styles.body}>{requestVideo ? "Paste a video link. The Owner can review your request on this device before it can play. In Approved Sources mode, the request covers its source." : "Use a channel or video link, an @handle, or a channel ID. Check the result before following."}</Text>
+          <Text style={[type.label, { marginTop: spacing.md }]}>{requestVideo ? "Video link" : "Source or video link"}</Text>
           <TextField
               containerStyle={styles.inputRow}
               leading={<Link2 size={17} color={palette.inkMuted} strokeWidth={1.6} />}
               value={value}
               onChangeText={(text) => { setValue(text); setResolution(null); setResolutionProfileId(null); setFeedback(null); }}
-              placeholder="@creator"
+              placeholder={requestVideo ? "Paste a video link" : "@creator"}
               placeholderTextColor={palette.inkMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -134,11 +162,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
               onSubmitEditing={() => { void submit(); }}
               returnKeyType="done"
               editable={!busy}
-              accessibilityLabel="Source or video link"
+              accessibilityLabel={requestVideo ? "Video link" : "Source or video link"}
               testID="add-channel-input"
             />
           {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
 
+          {followedSourceId ? <Pressable accessibilityRole="button" style={styles.secondaryButton} onPress={() => { close(); router.push({ pathname: "/channel/[id]", params: { id: followedSourceId } }); }}><Text style={styles.secondaryText}>Browse source now</Text></Pressable> : null}
           {resolution ? (
             <MotionView enter style={styles.preview} testID="resolved-source-preview">
               <Image source={resolution.source.thumbnailUrl ? { uri: resolution.source.thumbnailUrl } : null} style={styles.avatar} contentFit="cover" cachePolicy="none" />
@@ -150,7 +179,7 @@ export default function AddChannelModal({ visible, onClose }: Props) {
             </MotionView>
           ) : null}
 
-          {resolution?.video ? (
+          {resolution?.video && !requestVideo ? (
             <View style={styles.actionRow}>
               <Pressable disabled={busy} onPress={watch} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} accessibilityRole="button" testID="watch-resolved-video">
                 <Play size={16} color={palette.accent} fill={palette.accent} />
@@ -164,12 +193,12 @@ export default function AddChannelModal({ visible, onClose }: Props) {
           ) : null}
 
           {resolution ? (
-            <Pressable onPress={() => { void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
-              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <View style={styles.buttonContent}><UserPlus size={17} color={palette.onDark} /><Text style={styles.buttonText}>Follow source</Text></View>}
+            <Pressable onPress={() => { if (requestVideo) void requestApproval(); else void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <View style={styles.buttonContent}><UserPlus size={17} color={palette.onDark} /><Text style={styles.buttonText}>{requestVideo ? "Request approval" : "Follow source"}</Text></View>}
             </Pressable>
           ) : (
             <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
-              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>Find source</Text>}
+              {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>{requestVideo ? "Find video" : "Find source"}</Text>}
             </Pressable>
           )}
     </Sheet>

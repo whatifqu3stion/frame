@@ -1,4 +1,6 @@
+import { takePendingWatch } from "@/storage/pendingWatchStorage";
 import MediaMount from "@/components/MediaMount";
+import { GroupedInterestChoices } from "@/components/InterestChoices";
 import { onboardingPreviewPage, onboardingPreviewStatus } from "@/domain/onboardingPreview";
 import { useOnboardingDraft } from "@/hooks/useOnboardingDraft";
 import { formatDuration } from "@/services/youtube";
@@ -10,7 +12,7 @@ import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Check, Link2 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Alert, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import OnboardingReveal from "@/components/OnboardingReveal";
@@ -23,18 +25,13 @@ import { ONBOARDING_STEPS } from "@/constants/navigation";
 import { FOUNDATION_CAPABILITIES, ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
-import { isInterestOptionDisabled, toggleInterestId } from "@/domain/interests";
+import { toggleInterestId } from "@/domain/interests";
 import { onboardingDestination } from "@/domain/onboarding";
 import { useApp } from "@/providers/AppProvider";
 import type { SourceResolution } from "@/types";
 
 const showDemo = FOUNDATION_CAPABILITIES.demoPaywall && !FOUNDATION_CAPABILITIES.paidAccess;
 const steps = ONBOARDING_STEPS;
-const INTEREST_GROUPS = [
-  { label: "Ideas & discovery", ids: ["tech", "science", "history", "learning", "business"] },
-  { label: "Arts & culture", ids: ["design", "film", "music", "gaming"] },
-  { label: "Everyday & beyond", ids: ["health", "cooking", "travel", "making", "sports", "life"] },
-];
 
 export default function OnboardingFlow({ replay = false }: { replay?: boolean }) {
   const { activeProfileId } = useApp();
@@ -50,7 +47,9 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
   const revealed = useRef(false);
   const setup = useOnboardingDraft(activeProfileId, replay);
   const { step, savedIds: savedDuringSetup } = setup.draft;
-  const setStep = (next: number) => setup.setDraft((draft) => ({ ...draft, step: next }));
+  const setDraft = setup.setDraft;
+  const setStep = useCallback((next: number) => setDraft((draft) => ({ ...draft, step: next })), [setDraft]);
+  const [sourceInput, setSourceInput] = useState("");
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [demoCompleted, setDemoCompleted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,7 +73,7 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
   const finish = async (target = destination) => {
     if (locked.current || sourceLock.current) return;
     locked.current = true; setBusy(true); Keyboard.dismiss();
-    try { if (!replay) { await finishOnboarding(); await setup.clear().catch(() => {}); } router.replace(target); }
+    try { if (!replay) { await finishOnboarding(); await setup.clear().catch(() => {}); } const pending = replay ? null : await takePendingWatch(activeProfileId).catch(() => null); router.replace(pending ? { pathname: "/watch/[id]", params: { id: pending } } : target); }
     catch { Alert.alert("Couldn’t finish setup", "Your choices are still here. Try again."); }
     finally { locked.current = false; setBusy(false); }
   };
@@ -97,7 +96,7 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
       return false;
     });
     return () => handler.remove();
-  }, [replay, step, premiumOpen]);
+  }, [replay, step, premiumOpen, setStep]);
   const selectInterest = async (id: string) => {
     if (locked.current) return;
     locked.current = true; setBusy(true);
@@ -120,23 +119,15 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <MotionView changeKey={current} active={current !== "your-frame"} distance={6}>
       {setup.error ? <Text style={styles.note} accessibilityLiveRegion="polite">Your setup position couldn’t be saved. Your followed sources and saved videos are kept separately.</Text> : null}
-      {replay ? <Text style={styles.replayNote}>Welcome preview · source and interest changes are saved to this profile.</Text> : null}
-      {current === "source" ? <SourceStep key={interests.map((item) => item.id).sort().join(",")} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
+      {replay ? <Text style={styles.replayNote}>Welcome preview · sources, interests, and saved videos change this profile.</Text> : null}
+      {current === "source" ? <SourceStep link={sourceInput} setLink={setSourceInput} key={interests.map((item) => item.id).sort().join(",")} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} /> : null}
       {current === "interests" ? <>
         <Text style={styles.title} accessibilityRole="header">Worth watching.{"\n"}At your pace.</Text>
         <Text style={styles.body}>A daily selection, shaped by you. Choose up to {ONBOARDING_INTEREST_MAX} interests to find a few creators worth your time.</Text>
         <Text style={styles.note} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected · optional</Text>
-        {INTEREST_GROUPS.map((group) => <View key={group.label} style={styles.interestGroup}>
-          <Text style={styles.interestGroupTitle} accessibilityRole="header">{group.label}</Text>
-          <View style={styles.chips}>
-          {INTEREST_LIBRARY.filter((item) => group.ids.includes(item.id)).map((item) => {
-            const ids = interests.map((interest) => interest.id);
-            const selected = ids.includes(item.id);
-            const atLimit = isInterestOptionDisabled(ids, item.id, ONBOARDING_INTEREST_MAX);
-            return <Pressable key={item.id} onPress={() => { void selectInterest(item.id); }} disabled={busy || atLimit} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: busy || atLimit }} accessibilityHint={atLimit ? "Remove an interest before choosing another." : undefined} style={[styles.chip, atLimit && styles.chipUnavailable, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && { color: palette.active }]}>{item.name}</Text><View style={{ width: 16, height: 16 }}>{selected ? <Check size={16} color={palette.active} /> : null}</View></Pressable>;
-          })}
-          </View>
-        </View>)}
+        <View style={styles.interestGroup}>
+          <GroupedInterestChoices selectedIds={interests.map((interest) => interest.id)} onToggle={(id) => { void selectInterest(id); }} busy={busy} />
+        </View>
       </> : null}
       {current === "your-frame" ? <>
         <OnboardingReveal onBrowseSources={() => { void finish("/(tabs)/sources"); }} animateReveal={!revealed.current} onRevealed={() => { revealed.current = true; }} savedHere={savedDuringSetup} onSaved={(id) => setup.setDraft((draft) => ({ ...draft, savedIds: [...new Set([...draft.savedIds, id])] }))} onChooseSource={() => goTo(1)} onBusyChange={(value) => { sourceLock.current = value; setBusy(value); }} />
@@ -155,7 +146,7 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
   </KeyboardAvoidingView>;
 }
 
-function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: boolean): void; scrollToSource(): void }) {
+function SourceStep({ onBusyChange, scrollToSource, link, setLink }: { link: string; setLink(value: string): void; onBusyChange(value: boolean): void; scrollToSource(): void }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const touch = useFeedback();
@@ -174,35 +165,36 @@ function SourceStep({ onBusyChange, scrollToSource }: { onBusyChange(value: bool
   const emptyMessage = preview.kind !== "ready" ? preview.message : exhausted
     ? "You follow every source in this preview. Continue to your selection, or bring another favorite below."
     : "These sources are already in your Frame. Choose another selection below.";
-  const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [resolution, setResolution] = useState<SourceResolution | null>(null);
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
   const lock = useRef(false);
+  const lookup = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; lookup.current?.abort(); }; }, []);
   const submit = async () => {
     if (lock.current || (!resolution && !link.trim())) return;
-    lock.current = true; setBusy(true); onBusyChange(true); setFeedback(null);
+    lock.current = true; setBusy(true); onBusyChange(Boolean(resolution)); setFeedback(null);
     const done = touch.capture();
     try {
       if (resolution) {
         const result = await confirmSource(resolution);
         if (!mounted.current) return;
-        setFeedback(result.ok ? { ok: true, message: `${resolution.source.displayName} is now in your sources.` } : result);
+        setFeedback(result.ok ? { ok: true, message: `${resolution.source.displayName} is followed. It can appear in your next daily selection.` } : result);
         if (result.ok) { done("commit"); setResolution(null); setLink(""); Keyboard.dismiss(); }
       } else {
-        const result = await resolveSourceInput(link.trim());
+        const controller = new AbortController(); lookup.current = controller;
+        const result = await resolveSourceInput(link.trim(), controller.signal);
         if (!mounted.current) return;
         if (result.status === "success") setResolution(result.data);
         else setFeedback({ ok: false, message: result.message ?? "Source not found. Check the link or @handle and try again." });
       }
     } catch { if (mounted.current) setFeedback({ ok: false, message: "Couldn’t add this source. Check your connection and try again." }); }
-    finally { lock.current = false; if (mounted.current) { setBusy(false); onBusyChange(false); } }
+    finally { lookup.current = null; lock.current = false; if (mounted.current) { setBusy(false); onBusyChange(false); } }
   };
   return <MotionView changeKey={resolution?.source.providerSourceId ?? "source-input"}>
     <Text style={styles.title} accessibilityRole="header">{resolution ? "A source for\nyour Frame." : suggestions.length ? "A few good places\nto begin." : "Begin with\na favorite."}</Text>
-    <Text style={styles.body}>{resolution ? "Follow this source to shape your daily selection." : "Start with one creator you enjoy. You can add more later."}</Text>
+    <Text style={styles.body}>{resolution ? "Follow this source to shape future daily selections. You can browse it immediately." : "Start with one creator you enjoy. You can add more later."}</Text>
     {activeProfile?.role !== "managed" && interests.length > 0 && !resolution ? <View style={styles.suggestions}>
       <Text style={type.heading}>Picked for your interests</Text>
       {preview.kind === "loading" ? <ActivityIndicator color={palette.active} accessibilityLabel="Loading source suggestions" /> : suggestions.length ? suggestions.map((pick, index) => <Pressable key={pick.providerSourceId} disabled={busy} onPress={() => { setResolution(weeklyPickToSourceResolution(pick)); setFeedback(null); scrollToSource(); }} accessibilityRole="button" accessibilityLabel={`Review ${pick.displayName}${pick.featuredMedia ? `, featuring ${pick.featuredMedia.title}` : ""}`} style={[styles.pickPreview, index > 0 && styles.supportingPreview]}>
@@ -249,12 +241,11 @@ function createStyles(p: FramePalette, t: FrameType) {
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xxl }, replayNote: { ...t.caption, marginBottom: spacing.lg },
     stageLabel: { ...t.caption, width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
     previewNavigation: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md },
-    interestGroup: { marginTop: spacing.xl }, interestGroupTitle: { ...t.heading, fontSize: 20, lineHeight: 27 }, featuredTitle: { ...t.heading, fontSize: 24, lineHeight: 32 }, interestMatch: { ...t.caption, color: p.active },
+    interestGroup: { marginTop: spacing.xl }, featuredTitle: { ...t.heading, fontSize: 24, lineHeight: 32 }, interestMatch: { ...t.caption, color: p.active },
     pickPreview: { gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, supportingPreview: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, pickCopy: { gap: spacing.sm }, supportingCopy: { flex: 1 },
     heroImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }, supportingImage: { width: 96, aspectRatio: 16 / 9, borderRadius: radii.media },
     suggestions: { gap: spacing.sm, marginTop: spacing.lg }, pickAction: { ...t.label, color: p.active, marginTop: spacing.sm }, continueLink: { minHeight: 48, flexBasis: "100%", alignItems: "center", justifyContent: "center" },
     title: { ...t.title, fontSize: 36, lineHeight: 44 }, body: { ...t.bodySoft, marginTop: spacing.md }, note: { ...t.bodySoft, marginTop: spacing.lg },
-    chips: { flexDirection: "row", flexWrap: "wrap", columnGap: spacing.md, marginTop: spacing.sm }, chip: { minHeight: 52, flexGrow: 1, flexShrink: 1, flexBasis: "45%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.md, paddingHorizontal: spacing.sm, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border, borderRadius: radii.control }, chipUnavailable: { opacity: 0.5 }, chipSelected: { backgroundColor: p.activeSoft }, chipText: { ...t.label, flexShrink: 1 },
     fieldLabel: { ...t.label, marginTop: spacing.xl }, inputRow: { marginTop: spacing.sm },
     sourceAction: { minHeight: 52, padding: spacing.md, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: p.accentDeep, marginTop: spacing.md }, sourcePreview: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, avatar: { width: 48, height: 48, borderRadius: radii.media }, flex: { flex: 1 }, sourceMeta: { ...t.bodySoft, marginTop: spacing.xs },
     followed: { marginTop: spacing.xl, gap: spacing.md, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.border }, followedRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" }, followedName: { ...t.body, flex: 1 },

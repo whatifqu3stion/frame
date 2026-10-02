@@ -18,7 +18,7 @@ export async function checkSourceCapacity(
 ): Promise<{ allowed: boolean; alreadyFollowed: boolean; message?: string }> {
   const existing = await followedSources.listForProfile(profileId);
   if (existing.some((source) => source.id === sourceId)) return { allowed: true, alreadyFollowed: true };
-  if (existing.length >= maxSources) return { allowed: false, alreadyFollowed: false, message: `This profile can follow up to ${maxSources} sources.` };
+  if (existing.length >= maxSources) return { allowed: false, alreadyFollowed: false, message: `This profile can follow up to ${maxSources} sources. Unfollow a source in Sources to make room. Your saved videos stay kept.` };
   return { allowed: true, alreadyFollowed: false };
 }
 
@@ -43,5 +43,6 @@ export async function confirmSourceFollow(
     fetchedAt: resolution.fetchedAt ?? null,
   });
   dependencies.reconcile();
-  return { ok: true, message: `Following ${resolution.source.displayName}.` };
+  return { ok: true, message: `Following ${resolution.source.displayName}. It can appear in your next daily selection.` };
 }
+

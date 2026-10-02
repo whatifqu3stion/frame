@@ -46,10 +46,11 @@ export type TodayPeriod = {
   endsAt: number;
 };
 
-export type TodayLoadState = "ready" | "empty" | "no_sources" | "no_cache" | "network_error" | "unavailable";
+export type TodayLoadState = "ready" | "empty" | "no_sources" | "source_limit" | "no_cache" | "network_error" | "unavailable";
 
 export type TodayLoadResult = {
   state: TodayLoadState;
   snapshot: TodaySnapshot | null;
   message?: string;
 };
+

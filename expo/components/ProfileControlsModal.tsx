@@ -1,3 +1,4 @@
+import { useApprovalRequestCounts } from "@/hooks/useApprovalRequestCounts";
 import TextField from "@/components/TextField";
 import { useDiscardChanges } from "@/hooks/useDiscardChanges";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -39,10 +40,14 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     profiles, activeProfileId, profileSwitching, isOwnerAuthorized, ownerPinAvailability, hasOwnerPin,
     createStandardProfile, createManagedProfile, renameLocalProfile, reorderLocalProfile, deleteLocalProfile,
     setProfileViewingAllowance, getManagedPlaybackControls, setManagedPlaybackControls, cancelPendingOwnerAllowance, getPlaybackAllowance, switchProfile, saveOwnerPin, clearOwnerPin, relockOwnerAccess,
-    getManagedContentOverview, setManagedContentMode, reviewManagedApprovalRequest, revokeManagedContent,
+    requestOwnerAuthorization, inspectManagedApprovalRequest, getManagedContentOverview, setManagedContentMode, reviewManagedApprovalRequest, revokeManagedContent,
   } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
+  const requestCounts = useApprovalRequestCounts(visible);
+  const reviewReturn = useRef(false);
+  const [unlockingReview, setUnlockingReview] = useState(false);
+  const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor>(null);
   const [value, setValue] = useState<string>("");
   const [confirmation, setConfirmation] = useState<string>("");
@@ -75,23 +80,32 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     setAllowanceStatus(Object.fromEntries(entries));
   }, [getPlaybackAllowance, profiles]);
 
-  useEffect(() => { if (visible) void refreshAllowances().catch(() => setFeedback({ ok: false, message: "Allowances couldn’t load. Close this panel and try again." })); else { setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null); } }, [refreshAllowances, visible]);
-  useEffect(() => { if (visible && !isOwnerAuthorized) onClose(); }, [isOwnerAuthorized, onClose, visible]);
+  useEffect(() => { if (visible) void refreshAllowances().catch(() => setFeedback({ ok: false, message: "Allowances couldn’t load. Close this panel and try again." })); else { reviewReturn.current = false; setExpandedRequest(null); setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null); } }, [refreshAllowances, visible]);
   useEffect(() => {
-    if (!visible || !hasOwnerPin) return;
-    const timer = setTimeout(() => { relockOwnerAccess(); onClose(); }, OWNER_AUTHORIZATION_MS);
+    if (visible && !isOwnerAuthorized) { setCurrentPin(""); setConfirmation(""); if (editor?.kind === "pin" || editor?.kind === "removePin") setValue(""); }
+  }, [editor?.kind, isOwnerAuthorized, visible]);
+  useEffect(() => {
+    if (!visible || !hasOwnerPin || !isOwnerAuthorized) return;
+    const timer = setTimeout(() => { relockOwnerAccess(); }, OWNER_AUTHORIZATION_MS);
     return () => clearTimeout(timer);
-  }, [hasOwnerPin, onClose, relockOwnerAccess, visible]);
+  }, [hasOwnerPin, isOwnerAuthorized, relockOwnerAccess, visible]);
 
   const close = (): void => {
     if (busy || profileSwitching) return;
+    if (!isOwnerAuthorized) {
+      if (dirty) Alert.alert("Discard unfinished changes?", "Your saved settings will stay as they are.", [{ text: "Keep editing", style: "cancel" }, { text: "Discard changes", style: "destructive", onPress: onClose }]);
+      else onClose();
+      return;
+    }
     confirmExit(() => {
+      reviewReturn.current = false;
       setSelectedProfileId(null); setEditor(null); setValue(""); setConfirmation(""); setCurrentPin(""); setFeedback(null);
       relockOwnerAccess(); onClose();
     });
   };
 
   const begin = (next: Editor): void => {
+    setExpandedRequest(null);
     setPlaybackTimesValid(true);
     setEditor(next);
     setValue(next?.kind === "rename" ? next.profile.name : "");
@@ -175,6 +189,18 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     done("commit", result.ok && decision === "approve");
     if (result.ok) setContentOverview(await getManagedContentOverview(profile.id));
     } catch { setFeedback({ ok: false, message: "That change couldn’t finish. Check the current settings before trying again." }); }
+    finally { setBusy(false); }
+  };
+
+  const inspectRequest = async (profile: Profile, request: ManagedApprovalRequest, action: "preview" | "refresh"): Promise<void> => {
+    if (busy) return;
+    if (action === "preview") reviewReturn.current = true;
+    setBusy(true);
+    try {
+      const result = await inspectManagedApprovalRequest(profile.id, request, action);
+      setFeedback(result);
+      if (result.ok && action === "refresh") setContentOverview(await getManagedContentOverview(profile.id));
+    } catch { setFeedback({ ok: false, message: "Review could not finish. This request remains available here." }); }
     finally { setBusy(false); }
   };
 
@@ -296,6 +322,16 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
     </Pressable>
   );
 
+  if (visible && !isOwnerAuthorized) return <Sheet visible={!unlockingReview} onClose={close}>
+    <Text style={type.heading} accessibilityRole="header">Unlock to continue</Text>
+    <Text style={[type.bodySoft, { marginTop: spacing.sm }]}>Your place and unfinished settings are kept. Unlock Owner access to continue. PIN fields need to be entered again.</Text>
+    <Pressable accessibilityRole="button" disabled={unlockingReview || busy} style={styles.secondaryButton} onPress={() => {
+      setUnlockingReview(true);
+      void requestOwnerAuthorization().catch(() => {}).finally(() => setUnlockingReview(false));
+    }}><Text style={styles.secondaryButtonText}>Unlock Owner access</Text></Pressable>
+    <Pressable accessibilityRole="button" style={styles.secondaryButton} onPress={close}><Text style={styles.secondaryButtonText}>Close controls</Text></Pressable>
+  </Sheet>;
+
   return (
     <Sheet visible={visible} onClose={close} onBack={back} contentKey={`${selectedProfileId ?? "profiles"}:${editor?.kind ?? "overview"}`}>
       <View style={styles.detailHeader}>
@@ -307,9 +343,9 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
         <Text style={styles.boundaryText}>Manage profiles, viewing limits, and approvals. These settings apply only in Frame.</Text>
         <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>Profiles · {profiles.length} of {PRODUCT_LIMITS.futureProfilesPerHousehold}</Text></View>
         <View style={styles.profileList}>{profiles.map((profile) => (
-          <Pressable key={profile.id} onPress={() => { setSelectedProfileId(profile.id); setFeedback(null); }} style={styles.profileRow} accessibilityRole="button" accessibilityLabel={`Manage ${profile.name}. ${statusLabel(profile)}${profile.id === activeProfileId ? ". Current profile" : ""}`}>
+          <Pressable key={profile.id} onPress={() => { setSelectedProfileId(profile.id); setFeedback(null); }} style={styles.profileRow} accessibilityRole="button" accessibilityLabel={`Manage ${profile.name}. ${statusLabel(profile)}${(requestCounts.data?.[profile.id] ?? 0) > 0 ? `. ${requestCounts.data?.[profile.id]} ${requestCounts.data?.[profile.id] === 1 ? "request" : "requests"} to review` : ""}${profile.id === activeProfileId ? ". Current profile" : ""}`}>
             <View style={styles.avatar}><UserRound size={20} color={palette.active} /></View>
-            <View style={styles.flex}><Text style={styles.profileName}>{profile.name}</Text><Text style={styles.profileRole}>{statusLabel(profile)}</Text>{profile.id === activeProfileId ? <Text style={styles.profileRole}>Watching now</Text> : null}</View>
+            <View style={styles.flex}><Text style={styles.profileName}>{profile.name}</Text><Text style={styles.profileRole}>{statusLabel(profile)}</Text>{(requestCounts.data?.[profile.id] ?? 0) > 0 ? <Text style={styles.profileRole}>{requestCounts.data![profile.id]} {requestCounts.data![profile.id] === 1 ? "request" : "requests"} to review</Text> : null}{profile.id === activeProfileId ? <Text style={styles.profileRole}>Watching now</Text> : null}</View>
             <ChevronRight size={20} color={palette.inkMuted} />
           </Pressable>
         ))}</View>
@@ -336,7 +372,7 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
         {detailAction("Daily viewing allowance", () => beginAllowanceEditor(selectedProfile))}
         {selectedProfile.role === "managed" ? <>
           {detailAction("Schedule and Pause Frame", () => { void beginControlsEditor(selectedProfile); })}
-          {detailAction("Content access and requests", () => { void beginContentEditor(selectedProfile); })}
+          {detailAction(`Content access and requests${requestCounts.data?.[selectedProfile.id] ? ` · ${requestCounts.data[selectedProfile.id]}` : ""}`, () => { void beginContentEditor(selectedProfile); })}
         </> : null}
         {selectedProfile.role !== "owner" ? <>
           <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Profile</Text>
@@ -350,10 +386,10 @@ export default function ProfileControlsModal({ visible, onClose }: Props) {
             <Text style={styles.editorTitle}>{editor.kind === "createStandard" ? "New Standard profile" : editor.kind === "createManaged" ? "New Managed profile" : editor.kind === "rename" ? `Rename ${editor.profile.name}` : editor.kind === "allowance" ? `${editor.profile.name} · Daily viewing allowance` : editor.kind === "controls" ? `${editor.profile.name} · Playback schedule` : editor.kind === "content" ? `${editor.profile.name} · Content access` : editor.kind === "removePin" ? "Remove Owner PIN" : hasOwnerPin ? "Change Owner PIN" : "Add Owner PIN"}</Text>
             {(editor.kind === "pin" && hasOwnerPin || editor.kind === "removePin") ? <><Text style={[type.label, { marginTop: spacing.md }]}>Current Owner PIN</Text><TextField editable={!busy} value={currentPin} onChangeText={(text) => setCurrentPin(text.replace(/\D/g, "").slice(0, 6))} placeholder="Current Owner PIN" placeholderTextColor={palette.inkMuted} containerStyle={styles.input} style={styles.pinInput} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus accessibilityLabel="Current Owner PIN" /></> : null}
             {editorNeedsName || editor.kind === "pin" ? <><Text style={[type.label, { marginTop: spacing.md }]}>{editor.kind === "pin" ? "New Owner PIN" : "Profile name"}</Text><TextField editable={!busy} value={value} onChangeText={(text) => { setValue(editor.kind === "pin" ? text.replace(/\D/g, "").slice(0, 6) : text); setFeedback(null); }} placeholder={editor.kind === "pin" ? "4–6 digit PIN" : "Profile name"} placeholderTextColor={palette.inkMuted} containerStyle={styles.input} style={editor.kind === "pin" && styles.pinInput} keyboardType={editor.kind === "pin" ? "number-pad" : "default"} secureTextEntry={editor.kind === "pin"} maxLength={editor.kind === "pin" ? 6 : 32} autoFocus={!hasOwnerPin || editor.kind !== "pin"} accessibilityLabel={editor.kind === "pin" ? "New Owner PIN" : "Profile name"} /></> : null}
-            {editor.kind === "pin" ? <><Text style={[type.label, { marginTop: spacing.md }]}>Repeat new Owner PIN</Text><TextField editable={!busy} value={confirmation} onChangeText={(text) => { setConfirmation(text.replace(/\D/g, "").slice(0, 6)); setFeedback(null); }} placeholder="Repeat PIN" placeholderTextColor={palette.inkMuted} containerStyle={styles.input} style={styles.pinInput} keyboardType="number-pad" secureTextEntry maxLength={6} accessibilityLabel="Repeat new Owner PIN" /></> : null}
+            {editor.kind === "pin" ? <><Text style={[type.bodySoft, { marginTop: spacing.md }]}>Keep this PIN somewhere safe. If you forget it, recovery requires erasing all Frame data on this device.</Text><Text style={[type.label, { marginTop: spacing.md }]}>Repeat new Owner PIN</Text><TextField editable={!busy} value={confirmation} onChangeText={(text) => { setConfirmation(text.replace(/\D/g, "").slice(0, 6)); setFeedback(null); }} placeholder="Repeat PIN" placeholderTextColor={palette.inkMuted} containerStyle={styles.input} style={styles.pinInput} keyboardType="number-pad" secureTextEntry maxLength={6} accessibilityLabel="Repeat new Owner PIN" /></> : null}
             {editor.kind === "createManaged" || editor.kind === "allowance" ? <AllowancePicker value={allowance} onChange={setAllowance} /> : null}
             {editor.kind === "controls" ? <ManagedPlaybackControlsEditor value={playbackControls} onChange={(next) => { setPlaybackControls(next); setFeedback(null); }} onValidityChange={setPlaybackTimesValid} /> : null}
-            {editor.kind === "content" && contentOverview ? <ManagedContentAccessEditor value={contentOverview} busy={busy} onModeChange={(mode) => { void changeContentMode(editor.profile, mode); }} onReview={(request, decision) => { void reviewRequest(editor.profile, request, decision); }} onRevoke={(kind, targetId) => { void revokeContent(editor.profile, kind, targetId); }} /> : null}
+            {editor.kind === "content" && contentOverview ? <ManagedContentAccessEditor expanded={expandedRequest} onExpand={setExpandedRequest} value={contentOverview} busy={busy} onModeChange={(mode) => { void changeContentMode(editor.profile, mode); }} onInspect={(request, action) => { void inspectRequest(editor.profile, request, action); }} onReview={(request, decision) => { void reviewRequest(editor.profile, request, decision); }} onRevoke={(kind, targetId) => { void revokeContent(editor.profile, kind, targetId); }} /> : null}
             {controlsInvalid ? <Text style={[styles.feedback, { color: palette.danger }]}>{!playbackTimesValid ? "Enter valid times before saving." : validateManagedPlaybackControls(playbackControls)}</Text> : null}
             {editor.kind === "allowance" && editor.profile.role === "owner" ? <Text style={styles.ownerDelayNote}>Setting or reducing your limit takes effect when you save. Increasing it or choosing Unlimited takes 24 hours, even with the Owner PIN.</Text> : null}
             {editor.kind === "content" ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => begin(null)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Done</Text></Pressable> : <View style={styles.actionRow}><Pressable disabled={busy} accessibilityRole="button" onPress={back} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void submitEditor(); }} disabled={editorInvalid} style={[styles.primaryButton, editorInvalid && styles.disabled]}>{busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.primaryButtonText}>{editor.kind === "removePin" ? "Remove PIN" : "Save"}</Text>}</Pressable></View>}

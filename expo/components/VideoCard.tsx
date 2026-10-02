@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
@@ -9,22 +11,26 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { ThumbnailSkeleton } from "@/components/VideoSkeleton";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
-import { expireVideo } from "@/domain/metadataRetention";
+import { expireVideo, isMetadataCurrent } from "@/domain/metadataRetention";
 import type { Video } from "@/types";
 
-type Props = { video: Video; variant?: "full" | "compact" | "wide"; progressSeconds?: number };
+type Props = { video: Video; variant?: "full" | "compact" | "wide"; progressSeconds?: number; sessionId?: string; sessionLabel?: string };
 
-function VideoCard({ video, variant = "full", progressSeconds }: Props) {
+function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessionLabel }: Props) {
   const { width, fontScale } = useWindowDimensions();
   const stackWide = width < 360 || fontScale > 1.3;
-  video = expireVideo(video, Date.now());
+
   const { palette, type } = useFrameTheme();
-  const { requirePurchase } = useApp();
+  const { requirePurchase, activeProfileId } = useApp();
+  const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, video.id], enabled: false });
+  video = expireVideo(recovered.data && (recovered.data.fetchedAt ?? 0) > (video.fetchedAt ?? 0) ? recovered.data : video, Date.now());
+  const expired = !isMetadataCurrent(video.fetchedAt, Date.now());
+  const recovery = expired ? <VideoDetailsRecovery key={`${activeProfileId}:${video.id}`} videoId={video.id} /> : null;
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const navigationLocked = useRef<boolean>(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
   const progressFraction = progressSeconds && video.durationSeconds ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds)) : 0;
-  const accessibilityLabel = `${progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
+  const accessibilityLabel = `${sessionLabel ? `${sessionLabel}. ` : ""}${progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
   const dateLabel = formatRelativeDate(video.publishedAt);
 
   useEffect(() => {
@@ -34,9 +40,9 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   const onPress = useCallback((): void => {
     if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
-    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } });
+    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { ...(sessionId ? { savedSessionId: sessionId, sessionProfileId: activeProfileId } : {}), id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
-  }, [requirePurchase, video]);
+  }, [activeProfileId, requirePurchase, sessionId, video]);
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
     <View style={wrapStyle}>
@@ -58,6 +64,7 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
   );
 
   if (variant === "compact") return (
+    <View style={{ width: 264, marginRight: spacing.lg }}>
     <Pressable onPress={onPress} style={({ pressed }) => [styles.compactRoot, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
       {thumbnail(styles.compactThumbWrap, styles.thumb)}
       <View style={styles.compactMeta}>
@@ -66,9 +73,12 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
+    {recovery}
+    </View>
   );
 
   if (variant === "wide") return (
+    <View>
     <Pressable onPress={onPress} style={({ pressed }) => [styles.wideRoot, stackWide && { flexDirection: "column" }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
       {thumbnail([styles.wideThumbWrap, stackWide && { width: "100%" }], styles.thumb)}
       <View style={[styles.wideMeta, stackWide && { flex: 0, width: "100%" }]}>
@@ -77,9 +87,12 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
+    {recovery}
+    </View>
   );
 
   return (
+    <View>
     <Pressable onPress={onPress} style={({ pressed }) => [styles.fullRoot, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={`video-card-${video.id}`}>
       <MediaMount>{thumbnail(styles.fullThumbWrap, styles.thumb)}</MediaMount>
       <View style={styles.fullMeta}>
@@ -88,6 +101,8 @@ function VideoCard({ video, variant = "full", progressSeconds }: Props) {
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
+    {recovery}
+    </View>
   );
 }
 
@@ -97,7 +112,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     fullThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.media, position: "relative" },
     fullMeta: { marginTop: spacing.md, paddingHorizontal: spacing.xs },
     fullTitle: { ...type.heading, marginTop: spacing.xs, fontSize: 22, lineHeight: 29 },
-    compactRoot: { width: 264, marginRight: spacing.lg },
+    compactRoot: { width: 264 },
     compactThumbWrap: { width: "100%", aspectRatio: 16 / 9, backgroundColor: palette.surfaceDeep, overflow: "hidden", borderRadius: radii.media, position: "relative" },
     compactMeta: { marginTop: spacing.md, paddingHorizontal: spacing.xs },
     compactTitle: { ...type.heading, fontSize: 16, lineHeight: 21, marginTop: spacing.xs },

@@ -1,3 +1,4 @@
+import { boundedCollection } from "@/constants/layout";
 import MediaImage from "@/components/MediaImage";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -7,6 +8,7 @@ import { Copy, Pencil, Play, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -15,7 +17,7 @@ import { radii, spacing, type FramePalette, type FrameType } from "@/constants/t
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { todayRepository } from "@/repositories/todayRepository";
-import { expireVideo } from "@/domain/metadataRetention";
+import { expireVideo, isMetadataCurrent } from "@/domain/metadataRetention";
 import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
@@ -34,11 +36,14 @@ export default function SavedSessionScreen() {
     queryFn: async () => Promise.all((session?.orderedVideoIds ?? []).map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
     enabled: Boolean(session),
   });
+  const recovered = useQuery<Record<string, Video>>({ queryKey: ["recovered-library", activeProfileId], enabled: false });
   const videoMap = useMemo<Map<string, Video>>(() => {
     const map = new Map<string, Video>();
-    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
+    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos, ...Object.values(recovered.data ?? {})].forEach((video) => {
+      if ((video.fetchedAt ?? 0) >= (map.get(video.id)?.fetchedAt ?? 0)) map.set(video.id, expireVideo(video, Date.now()));
+    });
     return map;
-  }, [savedVideos, todayVideosQuery.data]);
+  }, [savedVideos, todayVideosQuery.data, recovered.data]);
   const position = session ? sessionPosition(session) : 0;
   const runtime = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()]);
   const remaining = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()], position);
@@ -80,7 +85,7 @@ export default function SavedSessionScreen() {
   const confirmDelete = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
     const isCurrent = capture();
-    Alert.alert("Delete session?", `“${session.name}” will be removed.`, [
+    Alert.alert("Delete session?", `“${session.name}” will be removed. Your saved videos will remain in Saved.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => { if (isCurrent()) void run(() => removeSession(session.id), () => router.back(), () => Alert.alert("Couldn’t delete session", "Check your sessions in Saved before trying again.")); } },
     ]);
@@ -98,7 +103,7 @@ export default function SavedSessionScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.screen} contentContainerStyle={[boundedCollection, { padding: spacing.page, paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: insets.bottom + spacing.xxl }]} showsVerticalScrollIndicator={false}>
       <View style={styles.programme}>
       <ProgrammeGrain />
       <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
@@ -131,7 +136,7 @@ export default function SavedSessionScreen() {
         ) : session.orderedVideoIds.map((videoId, index) => {
           const video = videoMap.get(videoId);
           return (
-            <View key={videoId} style={styles.row}>
+            <View key={videoId}><View style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
               <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
                 <MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
@@ -140,6 +145,8 @@ export default function SavedSessionScreen() {
                 <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text></View>
               </Pressable>
 
+            </View>
+            {!isMetadataCurrent(video?.fetchedAt, Date.now()) ? <VideoDetailsRecovery key={`${activeProfileId}:${videoId}`} videoId={videoId} /> : null}
             </View>
           );
         })}

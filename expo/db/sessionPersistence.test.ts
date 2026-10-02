@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { buildVersion1MigrationPlan, buildVersion2MigrationPlan, buildVersion3MigrationPlan, buildVersion4MigrationPlan, buildVersion5MigrationPlan, buildVersion6MigrationPlan, buildVersion7MigrationPlan, executeMigrationTransaction, migrateDatabase, type MigrationExecutor } from "./migrations";
+import { DATABASE_SCHEMA_VERSION, buildVersion1MigrationPlan, buildVersion2MigrationPlan, buildVersion3MigrationPlan, buildVersion4MigrationPlan, buildVersion5MigrationPlan, buildVersion6MigrationPlan, buildVersion7MigrationPlan, buildVersion8MigrationPlan, buildVersion9MigrationPlan, executeMigrationTransaction, migrateDatabase, type MigrationExecutor } from "./migrations";
 
 function adapter(db: Database): MigrationExecutor {
   return {
@@ -22,7 +22,7 @@ describe("version 7 Session persistence", () => {
     try {
       version6(db);
       await migrateDatabase(adapter(db));
-      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 9 });
+      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: DATABASE_SCHEMA_VERSION });
       for (const profile of ["owner-default", "standard"]) {
         expect(db.query("SELECT name,orderedVideoIds,updatedAt,currentIndex FROM queues WHERE profileId=?").get(profile)).toEqual({ name: "Evening", orderedVideoIds: '["video000001","video000002"]', updatedAt: 77, currentIndex: 0 });
       }
@@ -49,4 +49,19 @@ describe("version 7 Session persistence", () => {
       expect(db.query("SELECT count(*) AS count FROM queues").get()).toEqual({ count: 2 });
     } finally { db.close(); }
   });
+});
+
+test("version 9 upgrade preserves legacy resumes and persists explicit session provenance", async () => {
+  const db = new Database(":memory:");
+  try {
+    version6(db);
+    for (const plan of [buildVersion7MigrationPlan(), buildVersion8MigrationPlan(), buildVersion9MigrationPlan()]) for (const sql of plan) db.exec(sql);
+    db.exec("INSERT INTO resume_positions(profileId,videoId,timestampSeconds,updatedAt) VALUES ('owner-default','video000001',42,77),('standard','video000001',18,66)");
+    await migrateDatabase(adapter(db));
+    expect(db.query("SELECT timestampSeconds,updatedAt,sessionId FROM resume_positions WHERE profileId='owner-default'").get()).toEqual({ timestampSeconds: 42, updatedAt: 77, sessionId: null });
+    db.exec("UPDATE resume_positions SET sessionId='same' WHERE profileId='owner-default'");
+    await migrateDatabase(adapter(db));
+    expect(db.query("SELECT sessionId FROM resume_positions WHERE profileId='owner-default'").get()).toEqual({ sessionId: "same" });
+    expect(db.query("SELECT timestampSeconds,sessionId FROM resume_positions WHERE profileId='standard'").get()).toEqual({ timestampSeconds: 18, sessionId: null });
+  } finally { db.close(); }
 });

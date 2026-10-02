@@ -76,3 +76,18 @@ describe("Today snapshot service", () => {
     expect((await service.load({ profileId: "other", followedSourceIds: [], now })).snapshot).toBeNull();
   });
 });
+
+ test("legacy profiles over 25 sources keep their snapshot and receive actionable recovery without a feed request", async () => {
+  const repository = new MemoryTodayRepository();
+  const period = getTodayPeriod(now);
+  const snapshot: TodaySnapshot = { profileId: "owner", periodKey: period.key, createdAt: now, cacheFetchedAt: now, freshness: "fresh", items: [] };
+  repository.snapshots.set(`owner:${period.key}`, snapshot);
+  let calls = 0;
+  const reader = successReader();
+  const service = createTodayService(repository, { getCachedFeeds: async (...args) => { calls++; return reader.getCachedFeeds(...args); } });
+  const ids = Array.from({ length: 26 }, (_, i) => `UC${String(i).padStart(22, "0")}`);
+  const blocked = await service.load({ profileId: "owner", followedSourceIds: ids, now, refreshExisting: true });
+  expect(blocked.state).toBe("source_limit"); expect(blocked.snapshot).toBe(snapshot); expect(calls).toBe(0);
+  expect((await service.load({ profileId: "owner", followedSourceIds: ids.slice(0, 25), now, refreshExisting: true })).state).not.toBe("source_limit");
+  expect(calls).toBe(1);
+});

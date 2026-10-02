@@ -54,11 +54,12 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
       <View style={styles.pauseCard}>
         <PauseCircle size={19} color={palette.active} /><View style={styles.flex}><Text style={styles.title}>Pause Frame</Text><Text style={styles.body}>{pauseLabel}</Text></View>
       </View>
+      <Text style={styles.body}>Choose a pause below, then Save to apply it. Resuming also takes effect when you Save.</Text>
       <View style={styles.pauseActions}>
         <PauseButton label="1 hour" onPress={() => { onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 }); touch.selection(); }} styles={styles} />
         <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); if (value.pausedUntil !== tomorrow.getTime()) { onChange({ ...value, pausedUntil: tomorrow.getTime() }); touch.selection(); } }} styles={styles} />
         <PauseButton label="Until resumed" onPress={() => { if (value.pausedUntil === INDEFINITE_PAUSE) return; onChange({ ...value, pausedUntil: INDEFINITE_PAUSE }); touch.selection(); }} styles={styles} />
-        {value.pausedUntil !== null ? <PauseButton label="Resume now" onPress={() => { onChange({ ...value, pausedUntil: null }); touch.selection(); }} styles={styles} /> : null}
+        {value.pausedUntil !== null ? <PauseButton label="Resume when saved" onPress={() => { onChange({ ...value, pausedUntil: null }); touch.selection(); }} styles={styles} /> : null}
       </View>
     </View>
   );

@@ -137,6 +137,7 @@ export type GoogleImportResult = AddChannelResult & {
 };
 
 export type ResumePosition = {
+  sessionId?: string | null;
   videoId: string;
   timestampSeconds: number;
   updatedAt: number;
@@ -200,3 +201,4 @@ export type AddChannelResult = {
   ok: boolean;
   message: string;
 };
+

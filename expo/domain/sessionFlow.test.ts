@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { nextSessionStep, normalizeSessionIds, positionAfterEdit, sessionPosition, sessionRuntime } from "./sessionFlow";
+import { defaultSessionName, nextSessionStep, normalizeSessionIds, positionAfterEdit, sessionPosition, sessionRuntime } from "./sessionFlow";
 import type { VideoQueue, Video } from "../types";
 
 const ids = ["video000001", "video000002", "video000003"];
@@ -30,4 +30,10 @@ describe("finite Session position and estimates", () => {
     expect(sessionRuntime(ids, [video(ids[0], 90), video(ids[1], 120)], 1)).toEqual({ seconds: 120, unknown: 1 });
     expect(sessionRuntime(ids, [], 3)).toEqual({ seconds: 0, unknown: 0 });
   });
+});
+
+test("default session names avoid collisions after deletion and renaming", () => {
+  expect(defaultSessionName([])).toBe("Session 1");
+  expect(defaultSessionName([{ name: "Session 1" }, { name: "Session 3" }, { name: "Evening" }])).toBe("Session 2");
+  expect(defaultSessionName([{ name: " Session 1 " }, { name: "Session 2" }])).toBe("Session 3");
 });

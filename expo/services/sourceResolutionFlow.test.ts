@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { PRODUCT_LIMITS } from "../constants/productConfig";
+import { planSelectiveGoogleImport } from "./googleImportPolicy";
 import { parseSourceInput } from "../domain/sourceInput";
 import { confirmSourceFollow } from "./sourceResolutionFlow";
 import type { FollowedChannel, SourceResolution } from "../types";
@@ -68,4 +70,15 @@ describe("manual shared-source mobile flow", () => {
     expect(duplicate.ok).toBe(true);
     expect(writes).toBe(0);
   });
+});
+
+test("the product ceiling is 25 for both manual follow and import, preserving all existing follows", async () => {
+  const existing = Array.from({ length: 25 }, (_, i) => ({ id: `source-${i}` } as FollowedChannel));
+  let writes = 0;
+  const result = await confirmSourceFollow("owner", resolution, { followedSources: { async listForProfile() { return existing; }, async follow() { writes++; } }, reconcile() {} });
+  expect(PRODUCT_LIMITS.futureSourcesPerProfile).toBe(25);
+  expect(PRODUCT_LIMITS.sourceFeedMaxSources).toBe(25);
+  expect(result.ok).toBeFalse(); expect(writes).toBe(0); expect(existing.length).toBe(25);
+  const imported = planSelectiveGoogleImport([{ id: "new" } as FollowedChannel], new Set(existing.map((item) => item.id)), PRODUCT_LIMITS.futureSourcesPerProfile);
+  expect(imported.channels).toEqual([]); expect(imported.overflowCount).toBe(1);
 });

@@ -2,7 +2,7 @@ export const PRODUCT_LIMITS = {
   todayMaxItems: 12,
   maxItemsPerSource: 2,
   discoveryCadenceDays: 7,
-  futureSourcesPerProfile: 100,
+  futureSourcesPerProfile: 25,
   futureProfilesPerHousehold: 6,
   sessionDraftMaxItems: 3,
   onboardingInterestMax: 5,

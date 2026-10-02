@@ -1,6 +1,6 @@
 import type { ResumePosition, Video } from "../types";
 
-export type SavedViewingFilter = "all" | "unwatched" | "inProgress";
+export type SavedViewingFilter = "all" | "inProgress";
 
 export type SavedLibraryItem = {
   video: Video;
@@ -46,7 +46,6 @@ export function filterSavedLibrary(
   return videos.flatMap((video) => {
     const progressSeconds = progressByVideoId.get(video.id) ?? 0;
     const isInProgress = progressSeconds > MEANINGFUL_PROGRESS_SECONDS;
-    if (filter === "unwatched" && isInProgress) return [];
     if (filter === "inProgress" && !isInProgress) return [];
 
     const searchable = normalizeSearchText(`${video.title} ${video.channelTitle}`);
@@ -54,3 +53,4 @@ export function filterSavedLibrary(
     return [{ video, progressSeconds }];
   });
 }
+

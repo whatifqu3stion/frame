@@ -1,3 +1,5 @@
+import { boundedRequest } from "@/services/boundedRequest";
+import { validRecoveredVideo } from "@/domain/videoRecovery";
 import { APP_ENV, FEATURE_FLAGS } from "@/constants/config";
 import { parseSourceInput, type ParsedSourceInput } from "@/domain/sourceInput";
 import { unavailableSearchResult } from "@/services/searchPolicy";
@@ -69,7 +71,7 @@ type SourceResolutionEnvelope = {
 export const parseYouTubeLink = parseSourceInput;
 
 /** Resolves and registers one shared source through Frame's bounded Supabase boundary. */
-export async function resolveSourceFromInput(input: string): Promise<ServiceResult<SourceResolution>> {
+export async function resolveSourceFromInput(input: string, signal?: AbortSignal): Promise<ServiceResult<SourceResolution>> {
   const parsed = parseYouTubeLink(input);
   if (parsed.kind === "unknown") {
     return { status: "invalid_request", message: "Use a channel ID, @handle, channel URL, or individual supported video URL." };
@@ -84,12 +86,15 @@ export async function resolveSourceFromInput(input: string): Promise<ServiceResu
 
   try {
     const installationToken = await installationIdentityStore.getOrCreate();
-    const response = await fetch(`${supabaseUrl}/functions/v1/resolve-source`, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json", apikey: publishableKey },
-      body: JSON.stringify({ ...parsed, installationToken }),
-    });
-    const envelope = await response.json().catch(() => null) as SourceResolutionEnvelope | null;
+    const envelope = await boundedRequest(async (requestSignal) => {
+      const response = await fetch(`${supabaseUrl}/functions/v1/resolve-source`, {
+        method: "POST",
+        signal: requestSignal,
+        headers: { Accept: "application/json", "Content-Type": "application/json", apikey: publishableKey },
+        body: JSON.stringify({ ...parsed, installationToken }),
+      });
+      return await response.json().catch(() => null) as SourceResolutionEnvelope | null;
+    }, 12_000, signal);
     if (!envelope || !isResolutionOutcome(envelope.outcome)) {
       return { status: "temporarily_unavailable", message: "Source verification returned an unreadable response." };
     }
@@ -103,7 +108,7 @@ export async function resolveSourceFromInput(input: string): Promise<ServiceResu
     }
     return { status: "success", data: { source, ...(video ? { video } : {}), provenance: envelope.provenance, fetchedAt: typeof envelope.metadataFetchedAt === "string" && Number.isFinite(Date.parse(envelope.metadataFetchedAt)) ? Date.parse(envelope.metadataFetchedAt) : null } };
   } catch {
-    return { status: "network_error", message: "Frame is offline. Check your connection and try again." };
+    return { status: "network_error", message: signal?.aborted ? "Lookup cancelled. Your link is still here." : "The lookup couldn’t finish. Check your connection and try again." };
   }
 }
 
@@ -257,3 +262,14 @@ export function formatRelativeDate(iso: string): string {
   }
 }
 
+
+/** Explicit bounded resolution; does not follow a source or grant playback approval. */
+export async function resolveVideoDetails(id: string, signal?: AbortSignal): Promise<ServiceResult<Video | null>> {
+  if (!VIDEO_ID_PATTERN.test(id)) return failure("invalid_request", "This video link is invalid.");
+  const result = await resolveSourceFromInput(`https://www.youtube.com/watch?v=${id}`, signal);
+  if (result.status === "empty" || result.status === "partial") return failure("unavailable", result.message || "Current video details are unavailable.");
+  if (result.status !== "success") return { status: result.status, message: result.message };
+  const video = resolutionVideoToVideo(result.data);
+  return validRecoveredVideo(id, video, Date.now()) ? { status: "success", data: video }
+    : failure("unavailable", "Current details aren’t available for this video. Your saved link is kept.");
+}

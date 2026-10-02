@@ -1,3 +1,4 @@
+import { boundedCollection } from "@/constants/layout";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import MotionView from "@/components/motion/MotionView";
 import PositionedRow from "@/components/motion/PositionedRow";
@@ -5,7 +6,7 @@ import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "@/components/MediaImage";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, Import, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -31,6 +32,8 @@ type SourcesSection = "followed" | "discover";
 
 export default function SourcesScreen() {
   const touch = useFeedback();
+  const params = useLocalSearchParams<{ requestVideo?: string; showFollowed?: string }>();
+  const [requestVideo, setRequestVideo] = useState(false);
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -40,6 +43,7 @@ export default function SourcesScreen() {
   const { busy: googleBusy, run: connect } = useScreenAction(activeProfileId);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const [editionBusy, setEditionBusy] = useState(false);
+  const [lastFollow, setLastFollow] = useState<{ id: string; message: string } | null>(null);
   const [followFeedback, setFollowFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
   const activeProfileRef = useRef(activeProfileId);
   const interestIds = interests.map((interest) => interest.id);
@@ -77,12 +81,24 @@ export default function SourcesScreen() {
     activeProfileRef.current = activeProfileId;
     setFollowBusyId(null);
     setEditionBusy(false);
-    setFollowFeedback({});
+    setFollowFeedback({}); setLastFollow(null);
   }, [activeProfileId]);
 
   useEffect(() => { if (activeProfile?.role === "managed") setSection("followed"); }, [activeProfile?.role]);
 
+  useEffect(() => {
+    if (params.requestVideo === "1" && activeProfile?.role === "managed") {
+      setRequestVideo(true); setSection("followed"); setAddOpen(true);
+      router.setParams({ requestVideo: undefined });
+    }
+  }, [activeProfile?.role, params.requestVideo]);
+
+  useEffect(() => {
+    if (params.showFollowed === "1") { setSection("followed"); router.setParams({ showFollowed: undefined }); }
+  }, [params.showFollowed]);
+
   const openAddSource = (): void => {
+    setRequestVideo(activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos");
     setAddOpen(true);
   };
 
@@ -110,6 +126,7 @@ export default function SourcesScreen() {
       if (activeProfileRef.current !== requestProfileId) return;
       done("commit", result.ok);
       setFollowFeedback((current) => ({ ...current, [sourceId]: result }));
+      if (result.ok) setLastFollow({ id: sourceId, message: result.message });
     } catch {
       if (activeProfileRef.current !== requestProfileId) return;
       setFollowFeedback((current) => ({ ...current, [sourceId]: { ok: false, message: "Frame couldn’t add this source. Try again." } }));
@@ -140,7 +157,7 @@ export default function SourcesScreen() {
     <>
       <ScrollView
         style={styles.screen}
-        contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
+        contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.page}>
@@ -169,7 +186,7 @@ export default function SourcesScreen() {
               <Pressable onPress={openAddSource} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]} accessibilityRole="button" testID="sources-add-source">
                 <View style={styles.addIcon}><Plus size={17} color={palette.active} strokeWidth={2} /></View>
                 <View style={styles.flex}>
-                  <Text style={type.label}>Add a source</Text>
+                  <Text style={type.label}>{activeProfile?.role === "managed" && managedOverview?.policy.mode === "selectedVideos" ? "Request a video" : "Add a source"}</Text>
                   <Text style={styles.supporting}>Use a supported channel link or @handle.</Text>
                 </View>
                 <ArrowRight size={17} color={palette.inkMuted} />
@@ -217,6 +234,7 @@ export default function SourcesScreen() {
             </View>
           ) : (
             <View style={styles.section}>
+              {lastFollow ? <View style={{ marginBottom: spacing.lg }}><Text style={type.bodySoft} accessibilityLiveRegion="polite">{lastFollow.message}</Text><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: lastFollow.id } })}><Text style={[type.label, { color: palette.active }]}>Browse source now</Text></Pressable></View> : null}
               <View style={styles.weeklyHeader}>
                 <Text style={type.caption}>Weekly picks</Text>
                 <Text style={styles.limitLabel}>A few at a time</Text>
@@ -231,18 +249,18 @@ export default function SourcesScreen() {
                 <VideoFeedSkeleton variant="full" count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
               ) : discoverQuery.data?.reason === "offline" ? (
                 <View>
-                  <EmptyState title="Discover is offline" body="Connect to the internet to load this week’s picks. Your sources and preferences are saved." />
+                  <EmptyState title="Discover is offline" body="Connect to the internet to load this week’s picks. Your sources and preferences are saved." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data?.reason === "configuration" ? (
-                <EmptyState title="Weekly picks aren’t available" body="You can still add a source you know, or try weekly picks again later." />
+                <EmptyState title="Weekly picks aren’t available" body="You can still add a source you know, or try weekly picks again later." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
               ) : discoverQuery.data?.reason === "maintenance" ? (
-                <EmptyState title="Weekly picks are paused" body="Please try again later. Your followed sources are still available." />
+                <EmptyState title="Weekly picks are paused" body="Please try again later. Your followed sources are still available." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
               ) : discoverQuery.data?.reason === "empty" ? (
-                <EmptyState title="No picks this week" body="There are no new suggestions for your interests this week. You can still open a source you follow." />
+                <EmptyState title="No picks this week" body="There are no new suggestions for your interests this week. You can still open a source you follow." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
               ) : discoverQuery.isError || discoverQuery.data?.reason === "backend" || discoverQuery.data?.status === "temporarily_unavailable" ? (
                 <View>
-                  <EmptyState title="Discover couldn't load" body="Try again, or open a source you follow." />
+                  <EmptyState title="Discover couldn't load" body="Try again, or open a source you follow." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
                   <RetryButton busy={discoverQuery.isFetching} onPress={retryDiscover} styles={styles} />
                 </View>
               ) : discoverQuery.data && (discoverQuery.data.items.length > 0 || discoverQuery.data.canShowMore) ? (
@@ -273,7 +291,7 @@ export default function SourcesScreen() {
                   ) : null}
                 </View>
               ) : (
-                <EmptyState title="You're caught up" body="You’ve reached the end of this week’s selection. You can still browse sources you follow." />
+                <EmptyState title="You're caught up" body="You’ve reached the end of this week’s selection. You can still browse sources you follow." action={{ label: "Open followed sources", onPress: () => setSection("followed") }} />
               )}
               {discoverQuery.data && ["success", "cached_success"].includes(discoverQuery.data.status) && !discoverQuery.data.canShowMore ? <View style={styles.endState} accessible accessibilityLabel="End of weekly picks">
                 <View style={styles.endLine} />
@@ -286,7 +304,7 @@ export default function SourcesScreen() {
           </MotionView>
         </View>
       </ScrollView>
-      <AddChannelModal visible={addOpen} onClose={() => setAddOpen(false)} />
+      <AddChannelModal requestVideo={requestVideo} visible={addOpen} onClose={() => setAddOpen(false)} />
     </>
   );
 }
@@ -303,7 +321,7 @@ function RetryButton({ busy, onPress, styles }: { busy: boolean; onPress(): void
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: palette.wall },
-    page: { paddingHorizontal: spacing.page },
+    page: { ...boundedCollection, paddingHorizontal: spacing.page },
     flex: { flex: 1 },
     segmented: { minHeight: 48, flexDirection: "row", padding: 3, borderRadius: radii.control, backgroundColor: palette.surfaceDeep },
     segment: { minHeight: 48, flex: 1, alignItems: "center", justifyContent: "center", borderRadius: radii.small },

@@ -31,7 +31,7 @@ export default function Sheet({ visible, onClose, onBack, children, contentStyle
         <ScrollView
           ref={scroll}
           style={styles.screen}
-          contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, spacing.md) }]}
+          contentContainerStyle={[styles.container, { paddingLeft: Math.max(insets.left, spacing.md), paddingRight: Math.max(insets.right, spacing.md), paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, spacing.md) }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator

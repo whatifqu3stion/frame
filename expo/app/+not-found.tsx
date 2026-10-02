@@ -11,10 +11,9 @@ export default function NotFoundScreen() {
     <>
       <Stack.Screen options={{ title: "" }} />
       <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={styles.container}>
-        <Text style={type.caption}>404</Text>
-        <Text style={[type.title, { marginTop: spacing.sm }]}>Page not found</Text>
+        <Text style={[type.title, { marginTop: spacing.sm }]} accessibilityRole="header">This screen isn’t available</Text>
         <Text style={[type.bodySoft, { marginTop: spacing.md, maxWidth: 280 }]}>
-          This page isn’t available. Return to Today to continue.
+          Return to Today to choose a video or open another part of Frame.
         </Text>
         <Link href="/" asChild><Pressable style={styles.link} accessibilityRole="button">
           <Text style={[type.caption, { color: palette.accent }]}>Back to Today</Text>

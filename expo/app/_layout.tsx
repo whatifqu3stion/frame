@@ -1,3 +1,4 @@
+import { keepPendingWatch, takePendingWatch } from "@/storage/pendingWatchStorage";
 import { feedbackGate, loadFeedbackPreference } from "@/services/feedback";
 import { HankenGrotesk_400Regular, HankenGrotesk_500Medium, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
 import { LibreCaslonText_400Regular, LibreCaslonText_700Bold } from "@expo-google-fonts/libre-caslon-text";
@@ -25,7 +26,8 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { ready, prefs } = useApp();
+  const { ready, prefs, activeProfileId } = useApp();
+  const entryPath = usePathname();
   const { palette } = useFrameTheme();
   const router = useRouter();
   const segments = useSegments();
@@ -36,16 +38,18 @@ function AppContent() {
     return () => { void clearOrientationRequest("app"); };
   }, []);
 
+  const mounted = React.useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!ready || hasNavigated.current) return;
     hasNavigated.current = true;
     const first = segments[0];
     if (!prefs.hasCompletedOnboarding && first !== "onboarding") {
-      router.replace("/onboarding");
+      void keepPendingWatch(activeProfileId, entryPath).catch(() => {}).finally(() => { if (mounted.current) router.replace("/onboarding"); });
     } else if (prefs.hasCompletedOnboarding && first === "onboarding") {
-      router.replace("/(tabs)");
+      void takePendingWatch(activeProfileId).catch(() => null).then((id) => { if (mounted.current) router.replace(id ? { pathname: "/watch/[id]", params: { id } } : "/(tabs)"); });
     }
-  }, [ready, prefs.hasCompletedOnboarding, segments, router]);
+  }, [activeProfileId, entryPath, ready, prefs.hasCompletedOnboarding, segments, router]);
 
   return (
     <Stack

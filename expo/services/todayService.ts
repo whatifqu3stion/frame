@@ -1,3 +1,4 @@
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { getTodayPeriod, selectTodayItems } from "@/domain/today";
 import type { TodayLoadResult, TodaySnapshot, TodaySourceRule } from "@/models/today";
 import type { TodayRepository } from "@/repositories/todayRepository";
@@ -18,6 +19,7 @@ export function createTodayService(repository: TodayRepository, feedReader: Toda
       const now = options.now ?? Date.now();
       const period = getTodayPeriod(now);
       const existing = await repository.readSnapshot(options.profileId, period.key);
+      if (new Set(options.followedSourceIds).size > PRODUCT_LIMITS.futureSourcesPerProfile) return { state: "source_limit", snapshot: existing, message: `Today supports up to ${PRODUCT_LIMITS.futureSourcesPerProfile} sources. Unfollow a few sources to continue. Your saved videos stay in Saved.` };
       if (existing && !options.refreshExisting) return { state: existing.items.length > 0 ? "ready" : "empty", snapshot: existing };
       if (options.followedSourceIds.length === 0) return { state: "no_sources", snapshot: existing };
 
@@ -77,4 +79,5 @@ export function createTodayService(repository: TodayRepository, feedReader: Toda
     },
   };
 }
+
 

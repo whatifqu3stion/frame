@@ -1,3 +1,4 @@
+import { boundedCollection } from "@/constants/layout";
 import MediaImage from "@/components/MediaImage";
 import TextField from "@/components/TextField";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -21,7 +22,7 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { formatDuration } from "@/services/youtube";
-import { sessionRuntime } from "@/domain/sessionFlow";
+import { defaultSessionName, sessionRuntime } from "@/domain/sessionFlow";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
@@ -33,6 +34,7 @@ export default function SessionBuilder() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, libraryError, refreshLibrary, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const defaultName = defaultSessionName(sessions);
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
   const selectedRef = useRef(selected); selectedRef.current = selected;
@@ -121,10 +123,7 @@ export default function SessionBuilder() {
 
   const persistSession = useCallback(async (): Promise<string | null> => {
     if (persistLock.current || !requirePurchase("sessions")) return null;
-    if (!name.trim()) {
-      Alert.alert("Name this session", "Choose a name you’ll recognize later.");
-      return null;
-    }
+    const sessionName = name.trim() || existingSession?.name || defaultName;
     if (selected.length === 0) {
       Alert.alert("Choose a video", "A session needs at least one video.");
       return null;
@@ -134,12 +133,12 @@ export default function SessionBuilder() {
     setIsSaving(true);
     try {
       if (existingSession) {
-        await renameSession(existingSession.id, name);
+        await renameSession(existingSession.id, sessionName);
         await updateSessionVideos(existingSession.id, selected);
         return existingSession.id;
       }
-      await saveSessionDraft({ name, orderedVideoIds: selected });
-      const created = await createSession(name, selected);
+      await saveSessionDraft({ name: sessionName, orderedVideoIds: selected });
+      const created = await createSession(sessionName, selected);
       if (created) {
         savedDraft.current = true;
         try { await clearSessionDraft(); }
@@ -153,7 +152,7 @@ export default function SessionBuilder() {
       persistLock.current = false;
       setIsSaving(false);
     }
-  }, [clearSessionDraft, createSession, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos]);
+  }, [clearSessionDraft, createSession, defaultName, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos]);
 
   const save = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
@@ -174,6 +173,11 @@ export default function SessionBuilder() {
     });
   }, [activeProfileId, feedback, persistSession, selected]);
 
+  const openToday = useCallback((): void => {
+    if (persistLock.current) return;
+    confirmExit(() => setDestination("/(tabs)"));
+  }, [confirmExit]);
+
   if (libraryError) return <View style={styles.screen}><EmptyState title="Your library couldn’t load" body="Try again before editing this session." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} /></View>;
 
   if (hydratedProfile !== activeProfileId || (id && !existingSession)) {
@@ -188,12 +192,12 @@ export default function SessionBuilder() {
         <Text style={[type.bodySoft, { marginTop: spacing.sm, color: draftState === "error" ? palette.danger : palette.inkMuted }]}>{draftState !== "error" && savedRevision !== draftRevision ? "Saving draft…" : draftState === "error" ? "Draft couldn’t save. Try again before leaving." : "Draft saved on this device"}</Text>
         {draftState === "error" ? <Pressable accessibilityRole="button" onPress={() => setDraftAttempt((value) => value + 1)} style={{ minHeight: 48, justifyContent: "center" }}><Text style={type.label}>Retry saving draft</Text></Pressable> : null}
       </View> : null}
-      <Text style={[type.label, { marginTop: spacing.lg }]}>Session name</Text>
+      <Text style={[type.label, { marginTop: spacing.lg }]}>Session name · optional</Text>
       <TextField
         editable={!isSaving}
         value={name}
         onChangeText={setName}
-        placeholder="Evening at home"
+        placeholder={existingSession?.name || defaultName}
         placeholderTextColor={palette.inkMuted}
         containerStyle={styles.nameInput}
         returnKeyType="done"
@@ -230,7 +234,7 @@ export default function SessionBuilder() {
         data={hydratedProfile === activeProfileId ? filteredPool : []}
         keyExtractor={(video) => video.id}
         ListHeaderComponent={header}
-        ListEmptyComponent={<EmptyState title={search.trim() ? "No matching videos" : "No videos to choose yet"} body={search.trim() ? "Try another title or source." : "Save a few videos, then build a session from them."} />}
+        ListEmptyComponent={<EmptyState title={search.trim() ? "No matching videos" : "No videos to choose yet"} body={search.trim() ? "Try another title or source." : "Save a few videos from Today, then build a session from them."} action={search.trim() ? undefined : { label: "Open Today", onPress: openToday }} />}
         renderItem={({ item }) => {
           const isSelected = selected.includes(item.id);
           const order = selected.indexOf(item.id) + 1;
@@ -257,7 +261,7 @@ export default function SessionBuilder() {
             </Pressable>
           );
         }}
-        contentContainerStyle={[styles.content, { paddingBottom: spacing.lg }]}
+        contentContainerStyle={[styles.content, boundedCollection, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: spacing.lg }]}
         showsVerticalScrollIndicator={false}
         initialNumToRender={8}
         maxToRenderPerBatch={8}
@@ -267,7 +271,7 @@ export default function SessionBuilder() {
       />
 
       {hydratedProfile === activeProfileId && selected.length > 0 ? (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+        <View style={[styles.footer, boundedCollection, { paddingLeft: spacing.lg + insets.left, paddingRight: spacing.lg + insets.right, paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.summary}>
             <Text style={type.caption}>{selected.length} video{selected.length === 1 ? "" : "s"}</Text>
             <Text style={styles.total}>{durationSummary}</Text>

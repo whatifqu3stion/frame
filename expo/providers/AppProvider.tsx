@@ -7,8 +7,8 @@ import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clearLegacyThumbnailCaches } from "@/services/thumbnailRetention";
-import { expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
-import { Alert, AppState } from "react-native";
+import { isMetadataCurrent, expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
+import { Alert, AppState, Linking } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, GoogleImportResult, GoogleSubscriptionPage, InterestId, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue, SessionDraft } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
@@ -43,6 +43,7 @@ import { followedSourceRepository } from "@/repositories/followedSourceRepositor
 import { profileRepository } from "@/repositories/profileRepository";
 import { viewingAllowanceService } from "@/services/viewingAllowanceService";
 import { playbackControlsService } from "@/services/playbackControlsService";
+import { managedReviewUrl, refreshedManagedRequest } from "@/domain/managedReview";
 import { managedContentAccessService } from "@/services/managedContentAccessService";
 import { createSourceLeaseClient } from "@/services/sourceLeaseClient";
 import { createSourceLeaseCoordinator, createSourceLeaseStateStore, type SourceLeaseReconciliationReason } from "@/services/sourceLeaseCoordinator";
@@ -56,8 +57,9 @@ import {
   subscribeToRevenueCatCustomerInfo,
 } from "@/services/revenueCat";
 
-WebBrowser.maybeCompleteAuthSession();
 import {
+  listManagedApprovalRequests,
+  upsertManagedApprovalRequest,
   expireLocalTodayMetadata,
   clearAllData,
   clearResume,
@@ -77,6 +79,8 @@ import {
   upsertQueue,
   upsertResume,
 } from "@/db/database";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const MAX_RECENT_SEARCHES = 8;
 const sourceLeaseClient = createSourceLeaseClient({
@@ -296,7 +300,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
   // whole session and safe to gate the hook on.
   let promptGoogle: ReturnType<typeof Google.useAuthRequest>[2] | null = null;
   if (isGooglePlatformConfigured()) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [request, , prompt] = Google.useAuthRequest({
       iosClientId: GOOGLE_CONFIG.iosClientId,
       androidClientId: GOOGLE_CONFIG.androidClientId,
@@ -584,6 +587,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await profileRepository.deleteLocal(profileId);
       setProfiles(await profileRepository.list());
       queryClient.removeQueries({ queryKey: ["library", profileId] });
+      queryClient.removeQueries({ queryKey: ["google-import-draft", profileId] });
       queryClient.removeQueries({ queryKey: ["weekly-picks", profileId] });
       const cleanupSucceeded = await Promise.all([
         clearProfileStorage(AsyncStorage, profileId),
@@ -636,6 +640,41 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return managedContentAccessService.getOverview(profile);
   }, [profiles]);
 
+  const getManagedRequestCounts = useCallback(async (): Promise<Record<string, number>> => {
+    const current = profiles.find((profile) => profile.id === activeProfileIdRef.current);
+    const canSeeHousehold = current?.role === "owner" || authorizationSessionRef.current.isAuthorized();
+    const visibleProfiles = profiles.filter((profile) => profile.role === "managed" && (canSeeHousehold || profile.id === current?.id));
+    return Object.fromEntries(await Promise.all(visibleProfiles.map(async (profile) => [profile.id, (await listManagedApprovalRequests(profile.id)).length] as const)));
+  }, [profiles]);
+
+  const inspectManagedApprovalRequest = useCallback(async (profileId: string, request: ManagedApprovalRequest, action: "preview" | "refresh"): Promise<AddChannelResult> => {
+    const activeId = activeProfileIdRef.current;
+    if (!await authorizeProtectedAction(activeId) || !hasOwnerPin) return { ok: false, message: "Owner authorization is required to review this request." };
+    try {
+      const profile = profiles.find((candidate) => candidate.id === profileId && candidate.role === "managed");
+      if (!profile || request.profileId !== profileId) throw new Error("This Managed profile is no longer available.");
+      const current = (await managedContentAccessService.getOverview(profile)).requests.find((item) => item.kind === request.kind && item.targetId === request.targetId && item.requestedAt === request.requestedAt);
+      if (!current) throw new Error("This request changed. Reopen content requests to check its status.");
+      const url = managedReviewUrl(current);
+      if (action === "preview") {
+        if (activeProfileIdRef.current !== activeId || !authorizationSessionRef.current.isAuthorized()) throw new Error("Unlock Owner access to continue.");
+        await Linking.openURL(url);
+        return { ok: true, message: "Preview opened outside Frame. No approval has been added." };
+      }
+      const result = await resolveSourceFromInput(url);
+      if (result.status !== "success") return { ok: false, message: result.message ?? "Details could not refresh. The request is still pending." };
+      const updated = refreshedManagedRequest(current, result.data);
+      if (activeProfileIdRef.current !== activeId || !authorizationSessionRef.current.isAuthorized()) throw new Error("Owner access expired. Unlock and refresh again.");
+      const latest = await managedContentAccessService.getOverview(profile);
+      const expectedKind = latest.policy.mode === "selectedVideos" ? "video" : "source";
+      if (expectedKind !== current.kind || !latest.requests.some((item) => item.kind === current.kind && item.targetId === current.targetId && item.requestedAt === current.requestedAt)) throw new Error("This request changed. Reopen content requests to check its status.");
+      if (activeProfileIdRef.current !== activeId || !authorizationSessionRef.current.isAuthorized()) throw new Error("Owner access expired. Unlock and refresh again.");
+      await upsertManagedApprovalRequest(updated);
+      await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] });
+      return { ok: true, message: "Details refreshed. Review them before approving." };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Review could not open. Your request is still pending." }; }
+  }, [authorizeProtectedAction, hasOwnerPin, profiles, queryClient]);
+
   const setManagedContentMode = useCallback(async (profileId: string, mode: ManagedContentMode): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required to change Managed content access." };
     if (!hasOwnerPin) return { ok: false, message: "Create an Owner PIN before changing Managed content access." };
@@ -644,6 +683,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await managedContentAccessService.setMode(profile, mode);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["managed-request-counts"] }),
         queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }),
         queryClient.invalidateQueries({ queryKey: ["today", profileId] }),
       ]);
@@ -669,6 +709,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       const request = await managedContentAccessService.request(profile, video);
       await queryClient.invalidateQueries({ queryKey: ["managed-content", profile.id] });
+      await queryClient.invalidateQueries({ queryKey: ["managed-request-counts"] });
       return { ok: true, message: request.kind === "video" ? "Video request sent to the Owner on this device." : "Source request sent to the Owner on this device." };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t save that request." };
@@ -688,6 +729,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         queueSourceLeaseReconciliation("local_change");
       }
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["managed-request-counts"] }),
         queryClient.invalidateQueries({ queryKey: ["managed-content", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["library", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["today", profile.id] }),
@@ -704,16 +746,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const profile = profiles.find((candidate) => candidate.id === profileId);
     if (!profile || profile.role !== "managed") return { ok: false, message: "Managed profile unavailable." };
     try {
+      const current = (await managedContentAccessService.getOverview(profile)).requests.find((item) => item.kind === request.kind && item.targetId === request.targetId && item.requestedAt === request.requestedAt);
+      if (!current) return { ok: false, message: "This request changed. Reopen content requests to check its status." };
+      if (decision === "approve" && !isMetadataCurrent(current.fetchedAt, Date.now())) return { ok: false, message: "Refresh this request’s details before approving. It remains pending." };
       if (decision === "approve") {
-        const approvedSource = await managedContentAccessService.approveRequest(profile, request);
+        const approvedSource = await managedContentAccessService.approveRequest(profile, current);
         if (approvedSource) {
           await followedSourceRepository.follow(profile.id, approvedSource);
           queueSourceLeaseReconciliation("local_change");
         }
       } else {
-        await managedContentAccessService.rejectRequest(profile, request);
+        await managedContentAccessService.rejectRequest(profile, current);
       }
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["managed-request-counts"] }),
         queryClient.invalidateQueries({ queryKey: ["managed-content", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["library", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["today", profile.id] }),
@@ -733,6 +779,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (kind === "video") await managedContentAccessService.revokeVideo(profile, targetId);
       else await managedContentAccessService.revokeSource(profile, targetId);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["managed-request-counts"] }),
         queryClient.invalidateQueries({ queryKey: ["managed-content", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["today", profile.id] }),
       ]);
@@ -817,7 +864,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setHasOwnerPin(true);
       setOwnerPinProtectionError(false);
       return { ok: true, message: hasOwnerPin ? "Owner PIN changed." : "Owner PIN added." };
-    } catch (error) {
+    } catch {
       return { ok: false, message: "Frame couldn’t save the PIN. Check the new PIN and try again." };
     }
   }, [hasOwnerPin, ownerPinAvailability, authorizeProtectedAction, verifyCurrentPinForChange, relockOwnerAccess]);
@@ -1009,9 +1056,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
     enabled: ready,
   });
 
-  const recordResume = useCallback(async (video: Video, timestampSeconds: number): Promise<void> => {
+  const recordResume = useCallback(async (video: Video, timestampSeconds: number, sessionId: string | null = null): Promise<void> => {
     if (FEATURE_FLAGS.paidAccess && premiumAccessState !== "active") return;
-    await upsertResume(activeProfileId, video, timestampSeconds);
+    await upsertResume(activeProfileId, video, timestampSeconds, sessionId);
     await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "resume"] });
   }, [activeProfileId, premiumAccessState, queryClient]);
 
@@ -1099,7 +1146,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await upsertQueue(activeProfileId, { ...existing, orderedVideoIds: uniqueIds, currentIndex: positionAfterEdit(existing, uniqueIds), updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
+    [activeProfileId, invalidateLibrary, requirePurchase],
   );
 
   const renameSession = useCallback(
@@ -1110,7 +1157,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await upsertQueue(activeProfileId, { ...existing, name: name.trim() || existing.name, updatedAt: Date.now() });
       await invalidateLibrary();
     },
-    [activeProfileId, queuesQuery.data, invalidateLibrary, requirePurchase],
+    [activeProfileId, invalidateLibrary, requirePurchase],
   );
 
   const followMutation = useMutation({
@@ -1293,14 +1340,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const result = await revokeGoogleAccess(googleCredential.accessToken);
       if (result.status !== "success") return { ok: false, message: result.message ?? "Google couldn't revoke access. Try again." };
     }
+    queryClient.removeQueries({ queryKey: ["google-import-draft", activeProfileId] });
     setGoogleCredential(null);
     await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
     await updatePrefs({ googleEmail: null, googleConnectedAt: null });
     return { ok: true, message: "Google access was revoked. Imported creators remain on this device." };
-  }, [activeProfileId, googleCredential, updatePrefs]);
+  }, [activeProfileId, googleCredential, queryClient, updatePrefs]);
 
   const resolveSourceInput = useCallback(
-    async (input: string): Promise<ServiceResult<SourceResolution>> => resolveSourceFromInput(input),
+    async (input: string, signal?: AbortSignal): Promise<ServiceResult<SourceResolution>> => resolveSourceFromInput(input, signal),
     [],
   );
 
@@ -1339,6 +1387,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current]);
     await draftWritesRef.current.get(activeProfileId)?.catch(() => {});
     await clearAllData(activeProfileId);
+    queryClient.removeQueries({ queryKey: ["google-import-draft", activeProfileId] });
     queueSourceLeaseReconciliation("local_change");
     await clearProfileStorage(AsyncStorage, activeProfileId);
     queryClient.removeQueries({ queryKey: ["weekly-picks", activeProfileId] });
@@ -1410,6 +1459,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setProfileViewingAllowance,
       getManagedPlaybackControls,
       setManagedPlaybackControls,
+      getManagedRequestCounts,
+      inspectManagedApprovalRequest,
       getManagedContentOverview,
       setManagedContentMode,
       getManagedContentAccess,
@@ -1521,6 +1572,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setProfileViewingAllowance,
       getManagedPlaybackControls,
       setManagedPlaybackControls,
+      getManagedRequestCounts,
+      inspectManagedApprovalRequest,
       getManagedContentOverview,
       setManagedContentMode,
       getManagedContentAccess,

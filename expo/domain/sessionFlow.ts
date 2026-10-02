@@ -34,3 +34,12 @@ export function sessionRuntime(ids: readonly string[], videos: readonly Video[],
 export function nextSessionStep(ids: readonly string[], index: number): number {
   return Math.min(ids.length, Math.max(0, index + 1));
 }
+
+
+/** Shared editable fallback for quick creation and the full builder. */
+export function defaultSessionName(sessions: readonly Pick<VideoQueue, "name">[]): string {
+  const names = new Set(sessions.map((session) => session.name.trim()));
+  let number = 1;
+  while (names.has(`Session ${number}`)) number += 1;
+  return `Session ${number}`;
+}

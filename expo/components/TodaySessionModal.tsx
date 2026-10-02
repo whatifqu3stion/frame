@@ -1,3 +1,4 @@
+import { defaultSessionName } from "@/domain/sessionFlow";
 import TextField from "@/components/TextField";
 import { Plus, Rows3, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +15,7 @@ export default function TodaySessionModal({ visible, title, videoId, busy, sessi
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [name, setName] = useState("");
   useEffect(() => { if (!visible) setName(""); }, [visible]);
-  const defaultName = `Session ${sessions.length + 1}`;
+  const defaultName = defaultSessionName(sessions);
   return (
     <Sheet nestedRoute={nestedRoute} visible={visible} onClose={() => { if (!busy) onClose(); }} contentStyle={styles.content}>
       <View style={styles.header}>
@@ -27,7 +28,7 @@ export default function TodaySessionModal({ visible, title, videoId, busy, sessi
         const disabled = busy || full || included;
         return <Pressable key={session.id} disabled={disabled} onPress={() => onPick(session.id)} style={[styles.row, disabled && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled }}><Rows3 size={18} color={palette.accent} /><View style={styles.flex}><Text style={type.label}>{session.name}</Text><Text style={styles.meta}>{included ? "Already in this session" : full ? "Full · choose another session" : `${session.orderedVideoIds.length} of ${PRODUCT_LIMITS.sessionDraftMaxItems} videos`}</Text></View></Pressable>;
       })}
-      <Text style={styles.label}>New session name</Text>
+      <Text style={styles.label}>New session name · optional</Text>
       <TextField value={name} onChangeText={setName} editable={!busy} placeholder={defaultName} placeholderTextColor={palette.inkMuted} maxLength={64} returnKeyType="done" accessibilityLabel="New session name" />
       <Pressable disabled={busy} onPress={() => onCreate(name.trim() || defaultName)} style={[styles.create, busy && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}>
         {busy ? <ActivityIndicator color={palette.onDark} /> : <Plus size={18} color={palette.onDark} />}<Text style={styles.createText}>{busy ? "Adding…" : "Create and add video"}</Text>

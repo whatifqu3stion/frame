@@ -1,3 +1,6 @@
+import { boundedReading } from "@/constants/layout";
+import { useQueryClient } from "@tanstack/react-query";
+import { currentImportDraft, pendingImportIds, type GoogleImportDraft } from "@/domain/googleImportDraft";
 import TextField from "@/components/TextField";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -17,30 +20,50 @@ import type { FollowedChannel } from "@/types";
 type LoadState = "idle" | "loading" | "loadingMore";
 
 export default function GoogleImportScreen() {
+  const { activeProfileId, prefs } = useApp();
+  return <GoogleImportContent key={`${activeProfileId}:${prefs.googleConnectedAt ?? "disconnected"}`} />;
+}
+
+function GoogleImportContent() {
   const touch = useFeedback();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
-    activeProfile,
+    activeProfile, activeProfileId, prefs,
     googleConnected,
     followedChannels,
     importing,
     loadGoogleSubscriptions,
     importGoogleSubscriptions,
   } = useApp();
+  const queryClient = useQueryClient();
+  const draftKey = useMemo(() => ["google-import-draft", activeProfileId, prefs.googleConnectedAt] as const, [activeProfileId, prefs.googleConnectedAt]);
+  const [restored] = useState(() => currentImportDraft(queryClient.getQueryData<GoogleImportDraft>(draftKey)));
   const loadLock = useRef(false);
   const importLock = useRef(false);
-  const [query, setQuery] = useState("");
-  const [subscriptions, setSubscriptions] = useState<FollowedChannel[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
-  const [totalResults, setTotalResults] = useState<number | null>(null);
+  const [query, setQuery] = useState(restored?.query ?? "");
+  const [subscriptions, setSubscriptions] = useState<FollowedChannel[]>(restored?.subscriptions ?? []);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => pendingImportIds(restored?.selectedIds ?? [], new Set(followedChannels.map((source) => source.id)), Math.max(0, PRODUCT_LIMITS.futureSourcesPerProfile - followedChannels.length)));
+  const [nextPageToken, setNextPageToken] = useState<string | null>(restored?.nextPageToken ?? null);
+  const [totalResults, setTotalResults] = useState<number | null>(restored?.totalResults ?? null);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
   const followedIds = useMemo(() => new Set(followedChannels.map((source) => source.id)), [followedChannels]);
   const availableSlots = Math.max(0, PRODUCT_LIMITS.futureSourcesPerProfile - followedIds.size);
+
+  const [importComplete, setImportComplete] = useState(false);
+  useEffect(() => {
+    if (!googleConnected) return;
+    queryClient.setQueryData<GoogleImportDraft>(draftKey, { query, subscriptions, selectedIds: [...selectedIds], nextPageToken, totalResults, updatedAt: Date.now() });
+  }, [draftKey, googleConnected, nextPageToken, query, queryClient, selectedIds, subscriptions, totalResults]);
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const next = pendingImportIds([...current], followedIds, availableSlots);
+      return [...next].join(",") === [...current].join(",") ? current : next;
+    });
+  }, [availableSlots, followedIds]);
 
   const loadPage = useCallback(async (pageToken?: string): Promise<void> => {
     if (!googleConnected || loadLock.current) return;
@@ -75,6 +98,7 @@ export default function GoogleImportScreen() {
     if (importing || followedIds.has(sourceId)) return;
     if (!selectedIds.has(sourceId) && selectedIds.size >= availableSlots) return;
     touch.selection();
+    setImportComplete(false);
     setFeedback(null);
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -92,7 +116,7 @@ export default function GoogleImportScreen() {
     try {
       const result = await importGoogleSubscriptions(selected);
       setFeedback({ ok: result.ok, message: result.message });
-      if (result.ok) { done("milestone"); setSelectedIds(new Set()); }
+      if (result.ok) { done("milestone"); setSelectedIds(new Set()); setImportComplete(true); }
     } catch { setFeedback({ ok: false, message: "Import couldn’t finish. Check your sources before trying again." }); }
     finally { importLock.current = false; }
   };
@@ -108,7 +132,7 @@ export default function GoogleImportScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={headerHeight}>
+    <KeyboardAvoidingView style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={headerHeight}>
     <FlatList
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -119,9 +143,9 @@ export default function GoogleImportScreen() {
       contentContainerStyle={styles.content}
       ListHeaderComponent={(
         <View style={styles.intro}>
-          <Text style={styles.eyebrow}>Optional setup</Text>
           <Text style={styles.title}>Bring your sources along.</Text>
           <Text style={styles.body}>Choose the subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
+          <Text style={[styles.body, { marginTop: spacing.sm }]}>Selections are kept for a short time while Frame is open, so you can leave and come back.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
           <TextField value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" containerStyle={{ marginTop: spacing.sm }} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
           <View style={styles.counterRow}>
@@ -162,9 +186,10 @@ export default function GoogleImportScreen() {
     />
     <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><Text style={styles.counter} accessibilityLiveRegion="polite">{selectedIds.size} selected · {availableSlots} spaces available</Text>
           {feedback ? <View accessibilityLiveRegion="polite" style={[styles.feedback, feedback.ok ? styles.feedbackGood : styles.feedbackBad]}><Text style={styles.feedbackText}>{feedback.message}</Text></View> : null}
+          {importComplete ? <Pressable onPress={() => router.replace({ pathname: "/(tabs)/sources", params: { showFollowed: "1" } })} style={styles.primaryButton} accessibilityRole="button"><Text style={styles.primaryButtonText}>Open followed sources</Text></Pressable> :
           <Pressable onPress={() => { void importSelected(); }} disabled={selectedIds.size === 0 || importing} style={[styles.primaryButton, (selectedIds.size === 0 || importing) && styles.primaryButtonDisabled]} accessibilityRole="button" testID="google-import-confirm">
             {importing ? <ActivityIndicator color={palette.onDark} /> : <><Import size={17} color={palette.onDark} /><Text style={styles.primaryButtonText}>Add {selectedIds.size || "selected"} to Frame</Text></>}
-          </Pressable>
+          </Pressable>}
     </View>
     </KeyboardAvoidingView>
   );
@@ -173,9 +198,9 @@ export default function GoogleImportScreen() {
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: palette.wall },
-    dock: { gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surfaceHigh },
-    content: { padding: spacing.page, gap: spacing.sm, paddingBottom: spacing.xxl },
-    intro: { paddingBottom: spacing.md }, eyebrow: { ...type.caption, color: palette.active }, title: { ...type.heading, fontSize: 28, lineHeight: 34, marginTop: spacing.sm }, body: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.sm },
+    dock: { ...boundedReading, gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surfaceHigh },
+    content: { ...boundedReading, padding: spacing.page, gap: spacing.sm, paddingBottom: spacing.xxl },
+    intro: { paddingBottom: spacing.md }, title: { ...type.heading, fontSize: 28, lineHeight: 34, marginTop: spacing.sm }, body: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.sm },
     counterRow: { minHeight: 42, flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center", justifyContent: "space-between", marginTop: spacing.md }, counter: { ...type.label, color: palette.active, fontVariant: ["tabular-nums"] }, capacity: { ...type.caption, color: palette.inkMuted, fontVariant: ["tabular-nums"] },
     feedback: { padding: spacing.md, borderRadius: radii.control, marginTop: spacing.sm, borderWidth: 1 }, feedbackGood: { backgroundColor: palette.activeSoft, borderColor: palette.active }, feedbackBad: { backgroundColor: palette.surface, borderColor: palette.danger }, feedbackText: { ...type.bodySoft, color: palette.ink },
     row: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface }, rowSelected: { borderColor: palette.active, backgroundColor: palette.activeSoft }, rowDisabled: { opacity: 0.58 }, pressed: { opacity: 0.76 },

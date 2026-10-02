@@ -1,3 +1,5 @@
+import { boundedReading } from "@/constants/layout";
+import { useApprovalRequestCounts } from "@/hooks/useApprovalRequestCounts";
 import { router } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useState } from "react";
@@ -5,7 +7,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ProfileControlsModal from "@/components/ProfileControlsModal";
 import ScreenHeader from "@/components/ScreenHeader";
-import { FEATURE_FLAGS, IS_CLOSED_BETA } from "@/constants/config";
+import { FEATURE_FLAGS } from "@/constants/config";
 import { SETTINGS_TITLES, type SettingsSection } from "@/constants/settings";
 import { accentOptions, fonts, spacing } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -16,6 +18,8 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { palette } = useFrameTheme();
   const { activeProfileId, interests, prefs, googleConnected, googleConfigured, requestOwnerAuthorization, isPremium } = useApp();
+  const requestCounts = useApprovalRequestCounts();
+  const pendingCount = Object.values(requestCounts.data ?? {}).reduce((total, count) => total + count, 0);
   const [profileControlsOpen, setProfileControlsOpen] = useState(false);
   const { busy, run } = useScreenAction(activeProfileId);
   const openProfiles = () => {
@@ -29,17 +33,17 @@ export default function SettingsScreen() {
     : "Choose topics for weekly source picks";
   const appearanceSummary = `${prefs.theme === "ink" ? "Dark" : "Light"} · ${accentOptions.find((option) => option.id === prefs.accent)?.label ?? "Default accent"}`;
 
-  return <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl }}>
+  return <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl }}>
     <View style={styles.page}>
       <ScreenHeader title="Settings" />
-      <SettingsRow title="Profiles & boundaries" summary="Viewing limits, approvals & Owner PIN" onPress={openProfiles} busy={busy} testID="open-profile-controls" />
+      <SettingsRow title="Profiles & boundaries" summary={pendingCount ? `${pendingCount} ${pendingCount === 1 ? "request" : "requests"} to review · Viewing limits & Owner PIN` : "Viewing limits, approvals & Owner PIN"} onPress={openProfiles} busy={busy} testID="open-profile-controls" />
       <SettingsRow title={SETTINGS_TITLES.interests} summary={interestSummary} onPress={() => open("interests")} testID="settings-interests" />
       <SettingsRow title={SETTINGS_TITLES.appearance} summary={appearanceSummary} onPress={() => open("appearance")} testID="settings-appearance" />
       <SettingsRow title={SETTINGS_TITLES.google} summary={googleConnected ? "Connected · Manage subscriptions" : googleConfigured ? "Import subscriptions · Optional" : "Unavailable in this build"} onPress={() => open("google")} testID="settings-google" />
       {FEATURE_FLAGS.paidAccess ? <SettingsRow title={SETTINGS_TITLES.premium} summary={isPremium ? "Active · Plans & restore" : "Plans & restore purchases"} onPress={() => open("premium")} testID="settings-premium" /> : null}
       <View style={styles.secondary}>
         <SettingsRow title={SETTINGS_TITLES.privacy} summary="Policies & device data" onPress={() => open("privacy")} testID="settings-privacy" />
-        <SettingsRow title={SETTINGS_TITLES.about} summary={[FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? "Welcome preview" : null, IS_CLOSED_BETA ? "beta support" : null].filter(Boolean).join(" · ") || "About Frame"} onPress={() => open("about")} testID="settings-about" />
+        <SettingsRow title={SETTINGS_TITLES.about} summary="Using Frame, storage & support" onPress={() => open("about")} testID="settings-about" />
       </View>
     </View>
     <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
@@ -55,7 +59,7 @@ function SettingsRow({ title, summary, onPress, busy = false, testID }: { title:
 }
 
 const styles = StyleSheet.create({
-  page: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page },
+  page: { ...boundedReading, paddingHorizontal: spacing.page },
   row: { minHeight: 76, paddingVertical: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
   copy: { flex: 1, minWidth: 0 },
   rowTitle: { fontFamily: fonts.sansMedium },

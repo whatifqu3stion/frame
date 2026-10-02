@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 9;
+export const DATABASE_SCHEMA_VERSION = 10;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -467,5 +467,12 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   }
   if (currentVersion < 9) {
     await executeMigrationTransaction(db, buildVersion9MigrationPlan());
+    currentVersion = 9;
   }
+  if (currentVersion < 10) await executeMigrationTransaction(db, buildVersion10MigrationPlan());
+}
+
+
+export function buildVersion10MigrationPlan(): string[] {
+  return ["ALTER TABLE resume_positions ADD COLUMN sessionId TEXT", "PRAGMA user_version = 10"];
 }

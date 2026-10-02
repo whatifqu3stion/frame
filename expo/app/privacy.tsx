@@ -46,7 +46,8 @@ export default function PrivacyScreen() {
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}
-      <Link href="/(tabs)/settings" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open data and account controls</Text></Pressable></Link>
+      <Link href="/settings/privacy" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open device data controls</Text></Pressable></Link>
+      <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Manage Google connection</Text></Pressable></Link>
     </ScrollView>
   );
 }

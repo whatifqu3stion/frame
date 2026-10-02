@@ -230,7 +230,7 @@ Automated/source verification does not complete these native checks.
 - [ ] Follow a source with no eligible Today items. Browse my sources completes setup and opens Sources; eligibility and approval checks remain intact.
 - [ ] Save a first video. Open Saved stays primary; Premium demo is secondary. Saved shows the saved item before expanded planning or maintenance controls.
 - [ ] Restart during setup after interests, a source, and the first save. The stage and saved milestone resume for the correct profile. Replay must not alter the real draft. Finish and full reset remove the draft; simulate storage failure without losing the independently stored source/video.
-- [ ] Open Sessions & progress, resume a video, create/reorder a session, and inspect its detail. All video choices have real thumbnail or stable fallback, order, readable title, and honest runtime. Edit Saved exposes removals; Cancel preserves the item.
+- [ ] Open Sessions & progress, resume a video, create/reorder a session, and inspect its detail. All video choices have real thumbnail or stable fallback, order, readable title, and honest runtime. Edit Saved exposes removals; Undo restores the named item.
 - [ ] Open an approval request. The complete title, current artwork/context, and labelled decisions are together. Expired metadata shows its refresh guidance instead of stale imagery. Existing authorization applies to both decisions. Verify PIN and profile boundaries.
 - [ ] About & help reveals task guidance individually. Sources and Today recover from failed source reads with Try again.
 - [ ] On iOS and Android, inspect light/dark, small phone, large text, VoiceOver/TalkBack, keyboard, and Reduced Motion. Confirm hero/copy height, long titles, disclosure focus, and actions stay usable.
@@ -247,7 +247,7 @@ Automated/source verification does not complete these native checks.
 ## 20. Distilled setup, collection, and help
 
 - [ ] First launch has three stages: interests, sources, selection. Skip, Back, managed access, and optional Premium demo remain reachable. Replay returns to Settings. Test old drafts at all four prior stages; source/reveal position and saved IDs migrate correctly.
-- [ ] Saved opens with the collection, count, and quiet controls. Search & filter opens the field and radios. Clear & close search restores all saved videos. Edit Saved preserves removal confirmation.
+- [ ] Saved opens with the collection, count, and quiet controls. Search & filter opens the field and radios. Clear & close search restores all saved videos. Edit Saved offers reversible removal with named Undo feedback.
 - [ ] Sessions & progress switches to planning without also showing the saved collection or its empty state. Back to saved videos restores the collection. Switch profiles in both views and confirm isolated state.
 - [ ] Requests distinguish Approve video from Approve source. Source imagery is labelled as video context; declining has a clear consequence. Existing PIN authorization, limits, and error recovery still apply.
 - [ ] Each help topic opens independently and its action reaches the named screen. Inspect the three-stage flow, Saved controls, approval decisions, and help at large text on small iOS/Android phones; verify native screen-reader order. These device checks remain pending.
@@ -259,3 +259,61 @@ Automated/source verification does not complete these native checks.
 - [ ] Inspect real hero media in its matte surround, readable source/interest context, smaller supporting images, and missing-image fallback. No generated or substituted recommendations appear.
 - [ ] Save a video successfully: the existing completion check and enabled haptic accompany “Kept for you” on the static textured surface. A failed save must not show it. Restart, revisit, or replay: no stale success animation and no claim this is the profile’s first-ever save.
 - [ ] Enable Reduced Motion, disable haptics, and interrupt the existing reveal/confirmation by navigating or backgrounding. Content and actions remain usable immediately; grain never moves. Verify on real iOS/Android devices before native sign-off.
+
+
+## 22. Critique handoff fixes (native acceptance pending)
+
+- Empty Managed Selected Videos Today → Request a video opens a video-link form. Resolve a real video → Request approval. Confirm no playback/approval occurs and request count appears for Owner Settings and profile summary.
+- Review a video and source request. Preview original requires Owner authorization and opens the canonical provider destination. Return, unlock if required, and confirm the same profile and request are expanded; no automatic approval. Cancel unlocking, retry, and close review safely.
+- Expired evidence: Approve disabled, Refresh details available. Offline, unavailable, mismatched and still-expired responses preserve the pending request. Successful refresh preserves scope and request ordering. Decline still works without fresh evidence.
+- Interrupt an unsaved video after more than five seconds. Saved exposes one Continue watching row above the collection even with no saved videos; search/edit/session planning remain focused.
+- Dismiss A then save B: feedback is Video saved / View Saved. Add/create a session: Open session goes to that exact session, never an earlier Undo target.
+- First-save confirmation explains local link/internet use. How Saved works expands in Saved; welcome replay entry and flow disclose all real changes.
+- Create sessions from Today and the full builder with blank/edited names; both use the same unused Session N fallback. Test gaps in numbering after deletion.
+- Verify narrow phone, large text, keyboard, VoiceOver/TalkBack and Reduced Motion for new request, return-unlock, continuation and disclosure states.
+
+
+## 23. Consistent controls and recovery (native acceptance pending)
+
+- [ ] Compare interest groups in setup, Discover, and Settings on narrow phones and large text in both themes. Labels wrap, checks remain visible, and selection limits are enforced consistently.
+- [ ] Show stale Today details, refresh successfully, and fail refresh offline and with a service error. Refresh is explicit; ordinary refresh does not use the offline icon. Discover recovery opens followed sources.
+- [ ] Load a source slowly and fail its load. The heading names the state. Expand and collapse long source and player descriptions; View source stays discoverable. Finish playback and verify the deliberate ending is unchanged.
+- [ ] Remove a saved video in Saved and in both player presentations. Verify the named Undo restores the same link, dismiss works, repeated taps run once, failures retain recovery, and profile/route changes never restore into another profile.
+- [ ] Open an empty session builder and choose Today; existing draft exit behavior remains intact. Delete a session containing saved videos and verify those videos remain in Saved.
+- [ ] Edit Pause Frame and Resume: neither applies before Save; Cancel preserves prior settings. Read PIN recovery beside creation. Return from an external approval preview with expired authorization, then close the locked review safely.
+- [ ] Select Google subscriptions, search, load another page, leave accidentally, and return while Frame remains open. Selections and loaded pages return for the same connection; followed items and changed capacity reconcile. Reconnect or switch profiles and confirm isolation. Import successfully, then Open followed sources reaches the followed tab.
+- [ ] Follow device-data and Google links from Privacy and Terms. Verify the useful About & help summary and plain-language unavailable screen. Check keyboard, VoiceOver/TalkBack, safe areas, and Reduced Motion on iOS/Android.
+
+Source/automated checks: 247 tests pass; TypeScript passes; scoped lint has no errors and one pre-existing onboarding dependency warning; static Impeccable detection has no findings. These checks do not substitute for the device acceptance above.
+
+
+## 24. Adaptive layout and choice consistency (native acceptance pending)
+
+Source audit and implementation are complete for this scope. All 247 existing tests, TypeScript, and lint on changed source files pass. No new animations, field-intensity changes, or iPad support were added. Native rendering and platform conformance remain unscored until the checks below run on devices.
+
+- [ ] Inspect Today, Saved, Sources, and Google import in compact and expanded windows, light/dark, portrait/landscape, and Android multi-window. Headers, media, empty/error states, and import actions share their bounded content width. Existing virtualized Saved/import lists remain scrollable.
+- [ ] Around the 1000-unit navigation threshold, resize without losing the selected tab, scroll state, search, or import choices. Wide windows show the navigator's sidebar; narrow windows show four labelled bottom tabs. Larger text increases the threshold and available label space. All destinations retain accessible names and selected state.
+- [ ] At font scale 1.0, 1.3, 2.0, and the supported system maximum, inspect interests, allowance presets/custom input, Theme, Accent color, and Saved filters. Text wraps, checks stay visible, disabled limits still apply, and every choice can be reached. Large-text interests use one column.
+- [ ] Open chapters with long titles and hour-long timestamps. Full titles remain readable, timestamps do not squeeze them, larger text stacks rows, and jumping still seeks to the intended time.
+- [ ] Show Today action feedback and Saved Undo with long titles and large text. Feedback stays within the collection width; the final list item can scroll above it. Rotate while the notice is visible and verify its reserved space updates.
+- [ ] In landscape with display cutouts, open profile, approval, PIN, and session sheets with/without the keyboard. Safe-area gutters protect controls. Native Back/escape and existing unsaved-change guards still work.
+- [ ] With VoiceOver/TalkBack, exercise nested profile/PIN/approval sheets, return from external preview, close each sheet, and confirm focus reaches the active content and returns sensibly. Existing modal semantics are source-verified; actual focus order and restoration are not.
+- [ ] Verify Reduce Motion and touch-feedback preferences through choices, confirmed saves, session ordering, and ending. No additional motion should appear. Assess smoothness on hardware.
+
+Shipping context: iOS remains phone-only in app.json. Test iPhone and Android phones; use an Android tablet/expanded emulator for wide-window coverage. Any later iPad enablement needs a separate native acceptance pass.
+
+## 25. Final recovery and continuity pass (native acceptance pending)
+
+Run on iPhone and Android, including a narrow phone and Android expanded window, with large text, reduced motion, and a screen reader. These are acceptance cases, not completed device checks.
+
+- Start with a saved/resume/session item whose metadata is over 30 days old. Refresh details explicitly, then check Saved search, session rows, and the player. Title/image recovery must keep save time, resume seconds, session order, and Today action state. A deleted/private video, mismatched response, offline response, or timeout must keep the link and offer honest retry; no background polling.
+- Interrupt a saved session, restart, then use Continue watching in Saved. Confirm it returns to the named session and correct next item. Delete/reorder/advance that session and confirm stale provenance cannot attach to another session containing the same video. A migrated standalone resume stays standalone.
+- At 25 sources, manual follow and import must refuse a 26th source. A legacy profile with 26+ sources retains all follows and saved videos, receives Manage sources in Today, and recovers after choosing what to unfollow.
+- Begin an Owner settings edit, wait for authorization expiry, then unlock. Ordinary fields and the selected profile/request remain; current/new/confirmation PIN fields are blank. Close with unfinished changes and verify the discard decision. Repeat after an external approval preview and after backgrounding.
+- In Managed Approved Sources, open an unfamiliar real video. Verify source identity through the bounded resolver; an approved source may proceed only after the existing access and allowance checks. Unapproved, unavailable, quota-limited, and offline responses stay blocked. Retry verification must never grant approval.
+- Start a slow source lookup in the Add source sheet and setup. Close/Back/Skip must remain available during the read, cancel its result, and retain pasted input. Explicit follow writes remain guarded. Change profiles during lookup and confirm no stale result appears.
+- Open a valid watch deep link before first setup. Complete or skip optional setup and return to that exact video through normal playback authorization. Query-supplied source/title/session claims are discarded. Profile deletion/full reset clear the retained intent.
+- Follow from Add source or Discover: confirmation describes future selection and Browse source now opens the right source. Today shows the next selection time and refreshing does not refill the current day's membership.
+- Use Today’s named Continue session entry and Saved’s named Sessions & progress entry. At each deliberate ending, verify the next title/duration when available, an honest unavailable label otherwise, and no autoplay.
+- Check source detail, session creation/detail, and Settings details at large text and expanded widths. Content stays bounded with safe-area gutters; keyboard and dock do not cover fields or actions.
+- Recheck the earlier final-pass fixes: blocked players do not show a false loading timeout; Retry and Play again create a fresh eligible player attempt; Saved's Not finished filter includes interrupted viewing; Today notices keep each action and target together.
