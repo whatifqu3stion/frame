@@ -406,3 +406,9 @@ Resume records now retain their originating saved session. Continue watching ope
 Source lookup can be cancelled by leaving its sheet or setup step, retains the pasted input, and bounds the complete network response to 12 seconds. First-run watch links retain only their validated video ID through setup, scoped to the active profile and cleared with profile data. Owner authorization expiry keeps ordinary form drafts behind an unlock gate, while clearing PIN fields. Source detail, session builder/detail, and Settings details reuse bounded widths and horizontal safe-area gutters.
 
 No additional motion was added. Automated validation covers provenance/migration, recovery identity/expiry, request cancellation/timeouts, source ceilings, and profile-scoped intent cleanup. Native visual, focus, keyboard, orientation, and player acceptance remain pending; see the smoke plan.
+
+### Motion finishing — October 2, 2026
+
+The personalized preview now owns the onboarding reveal. Its matte remains stationary; a subtle tonal veil clears over the real image and source context settles within 400 ms. Supporting content and actions stay available. Follow confirmations and Saved notices use the shared nonspatial state transition. Successful metadata recovery keeps a readable, focusable confirmation so removing Refresh does not discard the user's place.
+
+Shared custom motion observes route focus, app foreground state, and Reduced Motion. Hidden completion effects are consumed quietly; only the first personalized reveal may wait for visibility. Interrupted effects settle, and rapid session reordering retargets from the current visual position. No dependency, loop, sound, or additional haptic was introduced. Native calibration remains pending; source/automated verification and the device acceptance matrix are recorded in expo/docs/MOTION_REVIEW.md and SMOKE_TEST.md.

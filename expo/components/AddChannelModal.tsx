@@ -165,7 +165,7 @@ export default function AddChannelModal({ visible, onClose, requestVideo = false
               accessibilityLabel={requestVideo ? "Video link" : "Source or video link"}
               testID="add-channel-input"
             />
-          {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text> : null}
+          {feedback ? <MotionView enter={Boolean(followedSourceId)} changeKey={followedSourceId ?? undefined} active={visible && Boolean(followedSourceId)}><Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: feedback.ok ? palette.success : palette.danger }]}>{feedback.message}</Text></MotionView> : null}
 
           {followedSourceId ? <Pressable accessibilityRole="button" style={styles.secondaryButton} onPress={() => { close(); router.push({ pathname: "/channel/[id]", params: { id: followedSourceId } }); }}><Text style={styles.secondaryText}>Browse source now</Text></Pressable> : null}
           {resolution ? (

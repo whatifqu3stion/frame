@@ -193,7 +193,7 @@ export default function SavedScreen() {
         </View>
       ) : null}
     />
-    {removal.removed ? <View pointerEvents="box-none" style={{ position: "absolute", left: insets.left, right: insets.right, bottom: insets.bottom + spacing.sm }}><View style={styles.page} onLayout={(event) => setNoticeHeight(event.nativeEvent.layout.height)}><SavedRemovalNotice title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /></View></View> : null}
+    {removal.removed ? <View pointerEvents="box-none" style={{ position: "absolute", left: insets.left, right: insets.right, bottom: insets.bottom + spacing.sm }}><View style={styles.page} onLayout={(event) => setNoticeHeight(event.nativeEvent.layout.height)}><SavedRemovalNotice targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /></View></View> : null}
     </View>
   );
 }

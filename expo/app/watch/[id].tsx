@@ -940,7 +940,7 @@ export default function WatchScreen() {
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>
-        {removal.removed ? <SavedRemovalNotice dark title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /> : null}
+        {removal.removed ? <SavedRemovalNotice dark targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /> : null}
         </View></ScrollView>
       </View>
     );
@@ -1015,7 +1015,7 @@ export default function WatchScreen() {
             <Text style={[type.label, styles.actionLabel, isSaved && { color: palette.accentSoft }]}>{pendingAction === "save" ? "Saving…" : isSaved ? "Saved" : "Save"}</Text>
           </Pressable>
         </View>
-        {removal.removed ? <SavedRemovalNotice dark title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /> : null}
+        {removal.removed ? <SavedRemovalNotice dark targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /> : null}
 
         {!showEnded ? <VideoChapters chapters={chapters} currentSeconds={currentSeconds} onJump={jumpToChapter} disabled={!showPlayer} /> : null}
 

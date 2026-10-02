@@ -146,7 +146,7 @@ export default function SavedSessionScreen() {
               </Pressable>
 
             </View>
-            {!isMetadataCurrent(video?.fetchedAt, Date.now()) ? <VideoDetailsRecovery key={`${activeProfileId}:${videoId}`} videoId={videoId} /> : null}
+            <VideoDetailsRecovery key={`${activeProfileId}:${videoId}`} videoId={videoId} expired={!isMetadataCurrent(video?.fetchedAt, Date.now())} />
             </View>
           );
         })}

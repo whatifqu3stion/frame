@@ -25,7 +25,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
   const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, video.id], enabled: false });
   video = expireVideo(recovered.data && (recovered.data.fetchedAt ?? 0) > (video.fetchedAt ?? 0) ? recovered.data : video, Date.now());
   const expired = !isMetadataCurrent(video.fetchedAt, Date.now());
-  const recovery = expired ? <VideoDetailsRecovery key={`${activeProfileId}:${video.id}`} videoId={video.id} /> : null;
+  const recovery = expired || recovered.data ? <VideoDetailsRecovery key={`${activeProfileId}:${video.id}`} videoId={video.id} expired={expired} /> : null;
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const navigationLocked = useRef<boolean>(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);

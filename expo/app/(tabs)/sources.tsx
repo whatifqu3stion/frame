@@ -234,7 +234,7 @@ export default function SourcesScreen() {
             </View>
           ) : (
             <View style={styles.section}>
-              {lastFollow ? <View style={{ marginBottom: spacing.lg }}><Text style={type.bodySoft} accessibilityLiveRegion="polite">{lastFollow.message}</Text><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: lastFollow.id } })}><Text style={[type.label, { color: palette.active }]}>Browse source now</Text></Pressable></View> : null}
+              {lastFollow ? <MotionView enter changeKey={lastFollow.id} style={{ marginBottom: spacing.lg }}><Text style={type.bodySoft} accessibilityLiveRegion="polite">{lastFollow.message}</Text><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: lastFollow.id } })}><Text style={[type.label, { color: palette.active }]}>Browse source now</Text></Pressable></MotionView> : null}
               <View style={styles.weeklyHeader}>
                 <Text style={type.caption}>Weekly picks</Text>
                 <Text style={styles.limitLabel}>A few at a time</Text>

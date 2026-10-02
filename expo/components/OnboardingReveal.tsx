@@ -2,14 +2,12 @@ import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useScreenAction } from "@/hooks/useScreenAction";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import CompletionMark from "@/components/motion/CompletionMark";
-import MotionView from "@/components/motion/MotionView";
-import { motion } from "@/constants/motion";
+import PersonalizedPreview from "@/components/motion/PersonalizedPreview";
 import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Check } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import MediaMount from "@/components/MediaMount";
 import MediaImage from "@/components/MediaImage";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -74,17 +72,19 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
       : today.data?.state === "source_limit" ? <><Text style={type.bodySoft}>Frame keeps your selection focused with up to 25 followed sources. Open Sources and unfollow a few to make room. Your saved videos stay kept.</Text><Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Manage sources</Text></Pressable></>
       : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>Your sources are ready. There are no new videos in today’s selection. You can browse your sources directly in Frame.</Text>{followedChannels[0] ? <View style={styles.supporting}><MediaImage source={followedChannels[0].thumbnailUrl ? { uri: followedChannels[0].thumbnailUrl } : null} style={{ width: 56, height: 56, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /><View style={styles.supportingDetails}><Text style={type.heading}>{followedChannels[0].title}</Text><Text style={type.bodySoft}>A source you chose. Open Sources to explore its videos.</Text></View></View> : null}<Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Browse my sources</Text></Pressable></>
-      : <MotionView enter={animateReveal} duration={motion.reveal} distance={4} onPresented={onRevealed}>
+      : <View>
         <Text style={type.bodySoft}>From the sources you chose. Find something to keep.</Text>
 
         <Text style={styles.summary}>{items.length} {items.length === 1 ? "video" : "videos"} · {new Set(items.map((item) => item.sourceId)).size} {new Set(items.map((item) => item.sourceId)).size === 1 ? "source" : "sources"}</Text>
         {today.data?.snapshot?.freshness !== "fresh" ? <Text style={type.caption}>Showing a previously loaded selection.</Text> : null}
         {feedback ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{feedback}</Text> : null}
         {items.map((item, index) => <View key={item.id} style={styles.video}>
-          <View style={index > 0 ? styles.supporting : undefined}>
-          <View style={index > 0 ? styles.thumbnail : undefined}>{index === 0 ? <MediaMount><MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" /></MediaMount> : <MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" />}</View>
-          <View style={[styles.details, index > 0 && styles.supportingDetails]}><Text style={type.caption}>{item.sourceTitle} · {formatDuration(item.durationSeconds)}</Text>
-          <Text style={index === 0 ? styles.featuredTitle : type.label}>{item.title}</Text></View></View>
+          {index === 0 ? <PersonalizedPreview animate={animateReveal} onPresented={onRevealed} image={<MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" />}>
+            <View style={styles.details}><Text style={type.caption}>{item.sourceTitle} · {formatDuration(item.durationSeconds)}</Text><Text style={styles.featuredTitle}>{item.title}</Text></View>
+          </PersonalizedPreview> : <View style={styles.supporting}>
+            <View style={styles.thumbnail}><MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.image} contentFit="cover" cachePolicy="none" /></View>
+            <View style={[styles.details, styles.supportingDetails]}><Text style={type.caption}>{item.sourceTitle} · {formatDuration(item.durationSeconds)}</Text><Text style={type.label}>{item.title}</Text></View>
+          </View>}
           <Pressable onPress={() => { void save(item); }} disabled={Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id))} accessibilityRole="button" accessibilityState={{ busy: busyId === item.id, disabled: Boolean(busyId) || (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) }} accessibilityLabel={(savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? `${item.title}, saved for later` : `Save ${item.title} for later`} style={styles.save}>
             <OutcomeIcon key={`${activeProfileId}:${item.id}`} confirmed={savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)} busy={busyId === item.id} color={palette.active} idle={<Bookmark size={18} color={palette.active} />}><Check size={18} color={palette.success} /></OutcomeIcon><Text style={styles.saveLabel}>{busyId === item.id ? "Saving…" : (savedHere.includes(item.id) || savedVideos.some((video) => video.id === item.id)) ? "Saved for later" : "Save for later"}</Text>
           </Pressable>
@@ -96,7 +96,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
         </View> : null}
         </View>)}
         <View style={styles.ending}><Text style={styles.endingTitle}>An ending, by design.</Text><Text style={styles.endingBody}>That’s today’s selection. The rest of your time is yours.</Text></View>
-      </MotionView>}
+      </View>}
   </View>;
 }
 function createStyles(p: FramePalette, t: FrameType) {
