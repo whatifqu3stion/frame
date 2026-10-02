@@ -6,6 +6,14 @@ Frame is a mobile app for collecting videos from creators you choose and watchin
 
 The product question is simple: can a video app make it easier to find something worthwhile, keep it for later, and reach a satisfying stopping point?
 
+## Preview
+
+<img src="docs/previews/onboarding.jpg" alt="Frame onboarding with Technology selected and a bounded interest-selection workflow" width="320" />
+
+Interest selection in Frame's onboarding, rendered from the Expo web app at a phone-sized viewport. This is a local interface preview; native playback and real-device acceptance are separate checks.
+
+[Capture notes](docs/previews/README.md) record the source revision and demo conditions.
+
 ## The experience
 
 - **Today:** a bounded daily selection from followed sources.
