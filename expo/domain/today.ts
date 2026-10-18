@@ -1,5 +1,6 @@
 import { isMetadataCurrent } from "./metadataRetention";
-import { MAX_ITEMS_PER_SOURCE, TODAY_MAX_ITEMS, TODAY_RESET_HOUR } from "@/constants/productConfig";
+import { isLongFormDuration } from "./videoLength";
+import { MAX_ITEMS_PER_SOURCE, SHORT_FORM_MAX_SECONDS, TODAY_MAX_ITEMS, TODAY_RESET_HOUR } from "@/constants/productConfig";
 import type { CachedTodayCandidate, TodayPeriod, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
 function pad(value: number): string { return String(value).padStart(2, "0"); }
@@ -17,7 +18,7 @@ export function defaultTodaySourceRule(profileId: string, sourceId: string): Tod
   return {
     profileId,
     sourceId,
-    minimumDurationSeconds: 0,
+    minimumDurationSeconds: SHORT_FORM_MAX_SECONDS + 1,
     hideLivestreams: true,
     hideUpcomingPremieres: true,
     todayContributionLimit: MAX_ITEMS_PER_SOURCE,
@@ -104,7 +105,7 @@ export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[
 
 export function visibleTodayItems(items: readonly TodaySnapshotItem[], followedSourceIds: ReadonlySet<string>, rules: ReadonlyMap<string, TodaySourceRule>, now: number): TodaySnapshotItem[] {
   return items.filter((item) => {
-    if (!isMetadataCurrent(item.fetchedAt, now) || !followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
+    if (!isLongFormDuration(item.durationSeconds) || !isMetadataCurrent(item.fetchedAt, now) || !followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
     const rule = rules.get(item.sourceId) ?? defaultTodaySourceRule(item.profileId, item.sourceId);
     if (rule.mutedUntil !== null && rule.mutedUntil > now) return false;
     if (item.disposition === "pending") return true;
@@ -113,7 +114,7 @@ export function visibleTodayItems(items: readonly TodaySnapshotItem[], followedS
 }
 
 export function nextSnoozedReturn(items: readonly TodaySnapshotItem[], now: number): number | null {
-  const future = items.flatMap((item) => isMetadataCurrent(item.fetchedAt, now) && item.disposition === "snoozed" && item.snoozedUntil !== null && item.snoozedUntil > now ? [item.snoozedUntil] : []);
+  const future = items.flatMap((item) => isLongFormDuration(item.durationSeconds) && isMetadataCurrent(item.fetchedAt, now) && item.disposition === "snoozed" && item.snoozedUntil !== null && item.snoozedUntil > now ? [item.snoozedUntil] : []);
   return future.length > 0 ? Math.min(...future) : null;
 }
 
@@ -139,6 +140,7 @@ function latestHistoryByMedia(history: readonly TodaySnapshotItem[]): Map<string
 }
 
 function isSourceEligible(item: CachedTodayCandidate, input: TodaySelectionInput): boolean {
+  if (!isLongFormDuration(item.durationSeconds)) return false;
   if (!isMetadataCurrent(item.fetchedAt, input.now) || !input.followedSourceIds.has(item.sourceId)) return false;
   const rule = input.rules.get(item.sourceId) ?? defaultTodaySourceRule(input.profileId, item.sourceId);
   if (rule.mutedUntil !== null && rule.mutedUntil > input.now) return false;

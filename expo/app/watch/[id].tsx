@@ -1,3 +1,4 @@
+import { isLongFormDuration, videoLengthMessage } from "@/domain/videoLength";
 import SavedRemovalNotice from "@/components/SavedRemovalNotice";
 import { useSavedRemoval } from "@/hooks/useSavedRemoval";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
@@ -262,7 +263,7 @@ export default function WatchScreen() {
   const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
   const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
 
-  const lifecycle = playerLifecycle({ resumeReady, contentAllowed: contentAccessStatus?.canPlay === true, allowanceAllowed: allowanceStatus?.canPlay === true, focused: isScreenFocused, active: isAppActive, ended: playbackState === "ended", failed: Boolean(playerError), ready: playerReady });
+  const lifecycle = playerLifecycle({ resumeReady, contentAllowed: contentAccessStatus?.canPlay === true && isLongFormDuration(video?.durationSeconds), allowanceAllowed: allowanceStatus?.canPlay === true, focused: isScreenFocused, active: isAppActive, ended: playbackState === "ended", failed: Boolean(playerError), ready: playerReady });
 
   const showAllowanceWarning = useCallback((warning: ViewingAllowanceWarning | undefined): void => {
     if (!warning) return;
@@ -784,6 +785,24 @@ export default function WatchScreen() {
         <Pressable onPress={closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.primaryLightButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={[type.label, { color: palette.accent }]}>Go back</Text>
         </Pressable>
+      </View>
+    );
+  }
+
+  // All entry points, including existing Saved items and session links, share this gate.
+  // Unknown lengths stay blocked until an explicit metadata refresh confirms eligibility.
+  if (!isLongFormDuration(video.durationSeconds)) {
+    const unknownLength = !Number.isInteger(video.durationSeconds) || video.durationSeconds <= 0;
+    return (
+      <View style={[styles.unavailableScreen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
+        <StatusBar style="dark" />
+        <Text style={type.heading}>{unknownLength ? "Confirm video length" : "A little more room to watch"}</Text>
+        <Text style={[type.bodySoft, styles.unavailableBody]}>{videoLengthMessage(video.durationSeconds)}</Text>
+        {unknownLength ? <Pressable disabled={metadataQuery.isFetching} onPress={() => { void metadataQuery.refetch(); }} style={styles.primaryLightButton} accessibilityRole="button"><Text style={[type.label, { color: palette.accent }]}>{metadataQuery.isFetching ? "Checking…" : "Check video details"}</Text></Pressable> : null}
+        {unknownLength && metadataQuery.data?.status && metadataQuery.data.status !== "success" ? <Text style={type.bodySoft}>{metadataQuery.data.message}</Text> : null}
+        {unknownLength && metadataQuery.isError ? <Text style={type.bodySoft}>Video details couldn’t load. Try again when connected.</Text> : null}
+        {isSession && nextSessionId ? <Pressable onPress={() => { void playNext(); }} style={styles.primaryLightButton} accessibilityRole="button"><Text style={[type.label, { color: palette.accent }]}>Skip to next video</Text></Pressable> : null}
+        <Pressable onPress={closePlayer} style={styles.primaryLightButton} accessibilityRole="button"><Text style={[type.label, { color: palette.accent }]}>Go back</Text></Pressable>
       </View>
     );
   }

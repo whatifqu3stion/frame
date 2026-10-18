@@ -1,4 +1,5 @@
 import { FOUNDATION_CAPABILITIES, WEEKLY_DISCOVERY_DISPLAY_MAX } from "../constants/productConfig";
+import { isLongFormDuration } from "../domain/videoLength";
 import type { DiscoveryResult, InterestId, SourceResolution, TodayFeedResult, WeeklyPickSourceSuggestion } from "../types";
 import {
   weeklyPicksClient,
@@ -155,7 +156,7 @@ function mapPublicSourceSuggestion(
       start: interest.publicationPeriod.start,
       end: interest.publicationPeriod.end,
     },
-    ...(pick.featuredMedia ? {
+    ...(pick.featuredMedia && isLongFormDuration(pick.featuredMedia.durationSeconds) ? {
       featuredMedia: {
         provider: pick.featuredMedia.provider,
         providerMediaId: pick.featuredMedia.providerMediaId,
@@ -182,7 +183,7 @@ export function weeklyPickToSourceResolution(suggestion: WeeklyPickSourceSuggest
       description: suggestion.description,
       thumbnailUrl: suggestion.thumbnailUrl,
     },
-    ...(suggestion.featuredMedia ? {
+    ...(suggestion.featuredMedia && isLongFormDuration(suggestion.featuredMedia.durationSeconds) ? {
       video: {
         provider: suggestion.featuredMedia.provider,
         providerMediaId: suggestion.featuredMedia.providerMediaId,

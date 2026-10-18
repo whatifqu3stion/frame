@@ -10,6 +10,11 @@ const response: SourceFeedClientResult = {
 };
 
 describe("cache-only source shelves", () => {
+  test("source shelves exclude short and unknown-length videos before rendering", async () => {
+    const candidates = [0, 60, 180, 181, 600].map((durationSeconds, i) => ({ id: `length0000${i}`, title: "Video", sourceId: channelId, sourceTitle: "Source", channelId, channelTitle: "Source", durationSeconds, fetchedAt: Date.now(), publishedAt: "2026-10-18", thumbnailUrl: "thumb", isLivestream: false, isUpcomingPremiere: false }));
+    const service = createCachedContentService({ async getCachedFeeds() { return { ...response, candidates }; } });
+    expect((await service.getChannelShelf(channelId)).videos.map((video) => video.durationSeconds)).toEqual([181, 600]);
+  });
   test("uses one bounded shared read and preserves truthful stale/empty state", async () => {
     const captured: string[][] = [];
     const service = createCachedContentService({ async getCachedFeeds(ids) { captured.push([...ids]); return response; } });

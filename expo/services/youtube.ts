@@ -1,5 +1,6 @@
 import { boundedRequest } from "@/services/boundedRequest";
 import { validRecoveredVideo } from "@/domain/videoRecovery";
+import { isLongFormDuration, videoLengthMessage } from "@/domain/videoLength";
 import { APP_ENV, FEATURE_FLAGS } from "@/constants/config";
 import { parseSourceInput, type ParsedSourceInput } from "@/domain/sourceInput";
 import { unavailableSearchResult } from "@/services/searchPolicy";
@@ -106,6 +107,9 @@ export async function resolveSourceFromInput(input: string, signal?: AbortSignal
     if (!source || (envelope.video !== undefined && !video) || (envelope.provenance !== "cache" && envelope.provenance !== "provider")) {
       return { status: "temporarily_unavailable", message: "Source verification returned incomplete metadata." };
     }
+    if (video && !isLongFormDuration(video.durationSeconds)) {
+      return { status: "unavailable", message: videoLengthMessage(video.durationSeconds) };
+    }
     return { status: "success", data: { source, ...(video ? { video } : {}), provenance: envelope.provenance, fetchedAt: typeof envelope.metadataFetchedAt === "string" && Number.isFinite(Date.parse(envelope.metadataFetchedAt)) ? Date.parse(envelope.metadataFetchedAt) : null } };
   } catch {
     return { status: "network_error", message: signal?.aborted ? "Lookup cancelled. Your link is still here." : "The lookup couldn’t finish. Check your connection and try again." };
@@ -201,7 +205,7 @@ function parseResolvedVideo(value: unknown): ResolvedVideo | null {
 
 export function resolutionVideoToVideo(resolution: SourceResolution): Video | null {
   const video = resolution.video;
-  if (!video) return null;
+  if (!video || !isLongFormDuration(video.durationSeconds)) return null;
   return {
     id: video.providerMediaId,
     fetchedAt: resolution.fetchedAt ?? null,

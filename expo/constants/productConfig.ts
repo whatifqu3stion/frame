@@ -10,6 +10,7 @@ export const PRODUCT_LIMITS = {
   todayResetHour: 4,
   sourceFeedMaxSources: 25,
   sourceFeedCandidatesPerSource: 20,
+  shortFormMaxSeconds: 180,
 } as const;
 
 export const TODAY_MAX_ITEMS = PRODUCT_LIMITS.todayMaxItems;
@@ -19,6 +20,7 @@ export const WEEKLY_DISCOVERY_DISPLAY_MAX = PRODUCT_LIMITS.weeklyDiscoveryDispla
 export const TODAY_RESET_HOUR = PRODUCT_LIMITS.todayResetHour;
 export const SOURCE_FEED_MAX_SOURCES = PRODUCT_LIMITS.sourceFeedMaxSources;
 export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandidatesPerSource;
+export const SHORT_FORM_MAX_SECONDS = PRODUCT_LIMITS.shortFormMaxSeconds;
 
 /** Central kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {

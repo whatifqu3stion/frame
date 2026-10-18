@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getTodayPeriod, performTodayAction, selectTodayItems, visibleTodayItems } from "./today";
+import { getTodayPeriod, nextSnoozedReturn, performTodayAction, selectTodayItems, visibleTodayItems } from "./today";
 import type { CachedTodayCandidate, TodaySnapshotItem, TodaySourceRule } from "../models/today";
 
 const profileId = "owner-default";
@@ -8,7 +8,7 @@ const sourceB = "UCabcdefghijklmnopqrstu2";
 const now = new Date(2026, 8, 6, 12).getTime();
 
 function candidate(id: string, sourceId: string, publishedOffset: number = 0): CachedTodayCandidate {
-  return { id, title: `Video ${id}`, channelId: sourceId, channelTitle: sourceId === sourceA ? "Alpha" : "Beta", sourceId, sourceTitle: sourceId === sourceA ? "Alpha" : "Beta", thumbnailUrl: `https://example.com/${id}.jpg`, publishedAt: new Date(now - publishedOffset).toISOString(), durationSeconds: 120, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now };
+  return { id, title: `Video ${id}`, channelId: sourceId, channelTitle: sourceId === sourceA ? "Alpha" : "Beta", sourceId, sourceTitle: sourceId === sourceA ? "Alpha" : "Beta", thumbnailUrl: `https://example.com/${id}.jpg`, publishedAt: new Date(now - publishedOffset).toISOString(), durationSeconds: 600, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now };
 }
 function history(item: CachedTodayCandidate, disposition: TodaySnapshotItem["disposition"], snoozedUntil: number | null = null): TodaySnapshotItem {
   return { ...item, profileId, periodKey: "2026-09-05", position: 0, disposition, dispositionAt: now - 1_000, snoozedUntil };
@@ -18,6 +18,18 @@ function input(candidates: CachedTodayCandidate[], overrides: Partial<Parameters
 }
 
 describe("finite Today selection", () => {
+  test("old permissive rules cannot admit short or unknown-length videos or reserve snooze slots", () => {
+    const items = [0, 60, 180, 181, 600].map((durationSeconds, i) => ({ ...candidate(`length0000${i}`, sourceA), durationSeconds }));
+    const permissive: TodaySourceRule = { profileId, sourceId: sourceA, minimumDurationSeconds: 0, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: null, updatedAt: 0 };
+    const result = selectTodayItems(input(items, { rules: new Map([[sourceA, permissive]]), history: [history(items[1], "snoozed", now - 1)] }));
+    expect(result.map((item) => item.durationSeconds)).toEqual([181, 600]);
+  });
+
+  test("persisted snapshots are pruned on display, including offline and returning snoozes", () => {
+    const items = [0, 180, 181].map((durationSeconds, i) => history({ ...candidate(`stored0000${i}`, sourceA), durationSeconds }, "pending"));
+    expect(visibleTodayItems(items, new Set([sourceA]), new Map(), now).map((item) => item.durationSeconds)).toEqual([181]);
+    expect(nextSnoozedReturn([history({ ...candidate("shortsnooze", sourceA), durationSeconds: 180 }, "snoozed", now + 1000)], now)).toBeNull();
+  });
   test("uses a local 4 a.m. period boundary", () => {
     expect(getTodayPeriod(new Date(2026, 8, 6, 3, 59).getTime()).key).toBe("2026-09-05");
     expect(getTodayPeriod(new Date(2026, 8, 6, 4, 0).getTime()).key).toBe("2026-09-06");

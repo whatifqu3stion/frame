@@ -1,10 +1,11 @@
 import type { TodaySnapshotItem, TodaySourceRule } from "../models/today";
 import { isMetadataCurrent } from "./metadataRetention";
 import { visibleTodayItems } from "./today";
+import { isLongFormDuration } from "./videoLength";
 
 /** Retain only this profile’s eligible selection and fresh cards saved in this reveal. */
 export function onboardingSelection(items: readonly TodaySnapshotItem[], profileId: string, sources: ReadonlySet<string>, rules: ReadonlyMap<string, TodaySourceRule>, now: number, savedHere: ReadonlySet<string>): TodaySnapshotItem[] {
-  const scoped = items.filter((item) => item.profileId === profileId);
+  const scoped = items.filter((item) => item.profileId === profileId && isLongFormDuration(item.durationSeconds));
   const visible = visibleTodayItems(scoped, sources, rules, now);
   const visibleIds = new Set(visible.map((item) => item.id));
   const justSaved = scoped.filter((item) => savedHere.has(item.id) && item.disposition === "saved" && sources.has(item.sourceId) && (rules.get(item.sourceId)?.mutedUntil ?? 0) <= now && isMetadataCurrent(item.fetchedAt, now) && !visibleIds.has(item.id));

@@ -1,4 +1,5 @@
 import type { Channel, Video } from "../types";
+import { isLongFormDuration } from "../domain/videoLength";
 import type { SourceFeedClientResult } from "./sourceFeedClient";
 
 export type CachedChannelShelf = { channel: Channel; videos: Video[]; message: string };
@@ -19,7 +20,7 @@ export function createCachedContentService(client: CachedFeedReader) {
       if (!feed || result.response.state === "unavailable") throw new Error("This source is waiting for shared cache availability. No live lookup was made.");
       return {
         channel: { id: channelId, title: feed.source.displayName, thumbnailUrl: feed.source.thumbnailUrl ?? "", fetchedAt: feed.source.fetchedAt ? Date.parse(feed.source.fetchedAt) : null },
-        videos: result.candidates.filter((video) => video.sourceId === channelId && !video.isLivestream && !video.isUpcomingPremiere),
+        videos: result.candidates.filter((video) => video.sourceId === channelId && isLongFormDuration(video.durationSeconds) && !video.isLivestream && !video.isUpcomingPremiere),
         message: feed.freshness === "stale"
           ? "Showing cached uploads while Frame waits for a shared refresh."
           : feed.items.length === 0 ? "No uploads are cached yet. Frame refreshes sources centrally; you do not need to keep retrying." : "Recent cached uploads. This list has an end.",

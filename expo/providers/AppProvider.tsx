@@ -1,3 +1,4 @@
+import { isLongFormDuration, videoLengthMessage } from "@/domain/videoLength";
 import { feedbackGate, resetFeedbackPreference } from "@/services/feedback";
 import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1124,6 +1125,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const saveMutation = useMutation({
     mutationFn: async ({ profileId, video }: { profileId: string; video: Video }) => {
       if (switchingRef.current || profileId !== activeProfileIdRef.current) throw new Error("Profile changed. Try again.");
+      if (!isLongFormDuration(video.durationSeconds)) throw new Error(videoLengthMessage(video.durationSeconds));
       await saveVideo(profileId, video);
     },
     onSuccess: async (_, { profileId }) => { await queryClient.invalidateQueries({ queryKey: ["library", profileId] }); await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }); await queryClient.invalidateQueries({ queryKey: ["today", profileId] }); },

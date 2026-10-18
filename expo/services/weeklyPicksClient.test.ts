@@ -218,6 +218,17 @@ describe("Round 2C Weekly Picks client", () => {
     expect(JSON.stringify(result.items[0])).not.toContain("never-transmitted-profile");
   });
 
+  test("short featured videos are omitted without dropping the source suggestion", async () => {
+    for (const durationSeconds of [null, 0, 180]) {
+      const response = publishedResponse();
+      response.interests[0].picks[0].featuredMedia!.durationSeconds = durationSeconds;
+      const result = await createDiscoveryService(clientReturning(response), true).getWeeklyPicks("owner", ["tech"]);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].featuredMedia).toBeUndefined();
+      expect(weeklyPickToSourceResolution(result.items[0]).video).toBeUndefined();
+    }
+  });
+
   test("selects at most three distinct sources while representing interests fairly", () => {
     const response: WeeklyPicksResponse = {
       state: "fresh",

@@ -6,9 +6,13 @@ import type { TodaySnapshotItem } from "../models/today";
 
 const now = new Date("2026-09-29T16:00:00Z").getTime();
 function item(id: string, extra: Partial<TodaySnapshotItem> = {}): TodaySnapshotItem {
-  return { id, profileId: "owner", periodKey: "2026-09-29", position: 0, disposition: "pending", dispositionAt: null, snoozedUntil: null, sourceId: "source", sourceTitle: "Source", channelId: "source", channelTitle: "Source", title: id, thumbnailUrl: "", publishedAt: "2026-09-28T00:00:00Z", durationSeconds: 180, fetchedAt: now - 1000, isLivestream: false, isUpcomingPremiere: false, ...extra };
+  return { id, profileId: "owner", periodKey: "2026-09-29", position: 0, disposition: "pending", dispositionAt: null, snoozedUntil: null, sourceId: "source", sourceTitle: "Source", channelId: "source", channelTitle: "Source", title: id, thumbnailUrl: "", publishedAt: "2026-09-28T00:00:00Z", durationSeconds: 600, fetchedAt: now - 1000, isLivestream: false, isUpcomingPremiere: false, ...extra };
 }
 describe("onboarding first value and demo checkout", () => {
+  test("a just-saved reveal cannot resurrect short or unknown-length cards", () => {
+    const items = [0, 180, 181].map((durationSeconds, i) => item(`length-${i}`, { durationSeconds, disposition: "saved", position: i }));
+    expect(onboardingSelection(items, "owner", new Set(["source"]), new Map(), now, new Set(items.map((video) => video.id))).map((video) => video.durationSeconds)).toEqual([181]);
+  });
   test("ends in content when sources exist, and a useful starting point otherwise", () => {
     expect(onboardingDestination(2, false)).toBe("/(tabs)");
     expect(onboardingDestination(0, false)).toBe("/(tabs)/sources");
