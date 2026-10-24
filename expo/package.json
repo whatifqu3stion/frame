@@ -68,9 +68,7 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "overrides": {
-    "axios": "1.13.2",
-    "expo-constants": "~18.0.14",
-    "expo-location": "~19.0.8"
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1 <27"
   }
 }
