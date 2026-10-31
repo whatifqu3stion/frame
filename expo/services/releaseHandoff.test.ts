@@ -12,7 +12,7 @@ describe("pre-design release handoff", () => {
       "Approved Sources",
       "Daily time and Managed playback controls",
       "Finite Today",
-      "one to three videos",
+      "time-based Session",
       "Selective Google import",
       "database version 9",
     ]) expect(smoke).toContain(boundary);

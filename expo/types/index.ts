@@ -39,6 +39,7 @@ export type WeeklyPickFeaturedMediaPreview = {
 
 /** Public source recommendation data exposed by the Weekly Picks boundary. */
 export type WeeklyPickSourceSuggestion = {
+  fetchedAt?: number;
   provider: ProviderId;
   providerSourceId: string;
   handle: string | null;
@@ -144,6 +145,7 @@ export type ResumePosition = {
 };
 
 export type VideoQueue = {
+  targetMinutes?: number | null;
   id: string;
   name: string;
   orderedVideoIds: string[];
@@ -154,6 +156,7 @@ export type VideoQueue = {
 
 /** One unfinished, profile-local Session composition. */
 export type SessionDraft = {
+  targetMinutes?: number | null;
   name: string;
   orderedVideoIds: string[];
   updatedAt: number;
@@ -169,6 +172,7 @@ export type ThemeMode = "warm" | "ink";
 export type AccentMode = "blue" | "green" | "rose";
 
 export type UserPreferences = {
+  todayVideoCount: number;
   theme: ThemeMode;
   accent: AccentMode;
   hasCompletedOnboarding: boolean;

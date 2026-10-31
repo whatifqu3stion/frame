@@ -1,3 +1,7 @@
+import { CollectionArrival } from "@/providers/CollectionArrivalProvider";
+import Text from "@/components/FrameText";
+import { useNavigationLayout } from "@/hooks/useNavigationLayout";
+import DisclosureIndicator from "@/components/motion/DisclosureIndicator";
 import ChoiceOption from "@/components/ChoiceOption";
 import { resumeSession } from "@/domain/resumeSession";
 import { boundedCollection } from "@/constants/layout";
@@ -5,19 +9,19 @@ import SavedRemovalNotice from "@/components/SavedRemovalNotice";
 import { useSavedRemoval } from "@/hooks/useSavedRemoval";
 import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
+import Heading from "@/components/Heading";
 import MotionView from "@/components/motion/MotionView";
 import Pressable from "@/components/motion/ChoicePressable";
 import { router } from "expo-router";
-import { ArrowRight, ChevronDown, ChevronUp, Play, Plus, Search, X } from "lucide-react-native";
+import { ArrowRight, Play, Plus, Search, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import SessionProgramme from "@/components/SessionProgramme";
 import ScreenHeader from "@/components/ScreenHeader";
 import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { sessionPosition } from "@/domain/sessionFlow";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -35,6 +39,7 @@ export default function SavedScreen() {
   const removal = useSavedRemoval();
   const [noticeHeight, setNoticeHeight] = useState(0);
   const insets = useSafeAreaInsets();
+  const { bottomBarHeight } = useNavigationLayout();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { activeProfileId, savedVideos, resumeList, sessions, sessionDraft, libraryLoading, libraryError, refreshLibrary, requirePurchase } = useApp();
@@ -66,7 +71,7 @@ export default function SavedScreen() {
   // Resume rows arrive newest first, including videos that were never saved.
   const latestResume = continueWatching.find((item) => Number.isFinite(item.progressSeconds) && item.progressSeconds > 5);
   const currentSession = sessions.find((item) => item.orderedVideoIds.length > 0 && sessionPosition(item) < item.orderedVideoIds.length) ?? sessions[0] ?? null;
-  const draft = sessionDraft?.name || sessionDraft?.orderedVideoIds.length ? sessionDraft : null;
+  const draft = sessionDraft?.name || sessionDraft?.orderedVideoIds.length || sessionDraft?.targetMinutes ? sessionDraft : null;
   const hasActiveFilter = searchQuery.trim().length > 0 || viewingFilter !== "all";
   const searchOpen = searchProfile === activeProfileId || hasActiveFilter;
 
@@ -74,8 +79,8 @@ export default function SavedScreen() {
     if (requirePurchase("sessions")) router.push("/session");
   };
 
-  if (libraryError) return <ScrollView style={styles.screen} contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 104 }}><View style={styles.page}>
-    <ScreenHeader eyebrow="Saved" title="Saved" />
+  if (libraryError) return <ScrollView style={styles.screen} contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, bottomBarHeight) + 104 }}><View style={styles.page}>
+    <ScreenHeader editorial eyebrow="Saved" title="Saved" />
     <EmptyState title="Your library couldn’t load" body="Try again to see your saved videos and sessions." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} />
   </View></ScrollView>;
 
@@ -84,19 +89,19 @@ export default function SavedScreen() {
       style={styles.screen}
       data={libraryLoading || planning ? [] : filteredSaved}
       keyExtractor={(item) => item.video.id}
-      renderItem={({ item }) => <View style={styles.page}><VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} />{editing ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.video.title} from Saved`} style={{ minHeight: 48, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md }} disabled={removal.busy} accessibilityState={{ disabled: removal.busy }} onPress={() => { void removal.remove(item.video); }}><X size={16} color={palette.inkMuted} /><Text style={[type.label, { color: palette.inkMuted }]}>Remove from Saved</Text></Pressable> : null}</View>}
-      contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + Math.max(104, removal.removed ? noticeHeight + spacing.lg : 0) }}
+      renderItem={({ item }) => <View style={styles.page}><CollectionArrival kind="video" id={item.video.id}><VideoCard video={item.video} variant="wide" progressSeconds={item.progressSeconds} /></CollectionArrival>{editing ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.video.title} from Saved`} style={{ minHeight: 48, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md }} disabled={removal.busy} accessibilityState={{ disabled: removal.busy }} onPress={() => { void removal.remove(item.video); }}><X size={16} color={palette.inkMuted} /><Text style={[type.label, { color: palette.inkMuted }]}>Remove from Saved</Text></Pressable> : null}</View>}
+      contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, bottomBarHeight) + Math.max(104, removal.removed ? noticeHeight + spacing.lg : 0) }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       initialNumToRender={8}
       windowSize={7}
       ListHeaderComponent={(
       <View style={styles.page}>
-        <ScreenHeader eyebrow="Saved" title="Your Saved" subtitle={planning ? "A short plan, or a place to pick up again." : "Your finds, ready when you are."} />
+        <ScreenHeader editorial compact={savedVideos.length > 0 || planning || Boolean(latestResume)} eyebrow="Saved" title="Your Saved" subtitle={planning ? "A short plan, or a place to pick up again." : savedVideos.length > 0 || latestResume ? undefined : "Your finds, ready when you are."} />
 
         {!libraryLoading && !planning && !editing && !searchOpen && latestResume ? (
           <View style={styles.resumeSection} testID="saved-latest-resume">
-            <Text accessibilityRole="header" style={styles.resumeTitle}>{latestResume.session ? `Continue ${latestResume.session.name} · video ${latestResume.session.currentIndex + 1} of ${latestResume.session.orderedVideoIds.length}` : "Continue watching"}</Text>
+            <Heading style={styles.resumeTitle}>{latestResume.session ? `Continue ${latestResume.session.name} · video ${latestResume.session.currentIndex + 1} of ${latestResume.session.orderedVideoIds.length}` : "Continue watching"}</Heading>
             <VideoCard video={latestResume.video} variant="wide" progressSeconds={latestResume.progressSeconds} sessionId={latestResume.session?.id} sessionLabel={latestResume.session?.name} />
           </View>
         ) : null}
@@ -109,14 +114,14 @@ export default function SavedScreen() {
         {!libraryLoading && draft ? (
           <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.sessionCard, { marginBottom: spacing.sm }, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Continue your session draft" testID="session-draft-card">
             <View style={styles.sessionIcon}><Plus size={18} color={palette.active} /></View>
-            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Untitled session"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos</Text></View>
+            <View style={styles.flex}><Text style={styles.sessionName}>{draft.name || "Untitled session"}</Text><Text style={styles.sessionMeta}>Draft · {draft.orderedVideoIds.length} videos{draft.targetMinutes ? ` · ${draft.targetMinutes} min target` : ""}</Text></View>
             <ArrowRight size={17} color={palette.inkMuted} />
           </Pressable>
         ) : null}
         {libraryLoading ? <VideoFeedSkeleton count={1} accessibilityLabel="Loading sessions" /> : currentSession ? (
-          <SessionProgramme profileId={activeProfileId} session={currentSession} savedVideos={savedVideos} onOpen={() => {
+          <CollectionArrival kind="session" id={currentSession.id}><SessionProgramme profileId={activeProfileId} session={currentSession} savedVideos={savedVideos} onOpen={() => {
             if (requirePurchase("sessions")) router.push({ pathname: "/session/[id]", params: { id: currentSession.id } });
-          }} />
+          }} /></CollectionArrival>
         ) : (
           <View>
             <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createSession, pressed && styles.pressed]} accessibilityRole="button">
@@ -180,31 +185,31 @@ export default function SavedScreen() {
         </> : null}
       </View>
       )}
-      ListEmptyComponent={planning ? null : <View style={styles.page}>{libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? <EmptyState compact title="No saved videos yet" body="Save a video from Today or while watching to find it here." action={{ label: "Open Today", onPress: () => router.push("/(tabs)") }} /> : <EmptyState compact title="No matching videos" body={hasActiveFilter ? "Try another title, source, or filter." : "Your saved videos are still here."} />}</View>}
+      ListEmptyComponent={planning ? null : <View style={styles.page}>{libraryLoading ? <VideoFeedSkeleton count={3} accessibilityLabel="Loading saved videos" /> : savedVideos.length === 0 ? <EmptyState gallery compact title="No saved videos yet" body="Save a video from Today or while watching to find it here." action={{ label: "Open Today", onPress: () => router.push("/(tabs)") }} /> : <EmptyState compact title="No matching videos" body={hasActiveFilter ? "Try another title, source, or filter." : "Your saved videos are still here."} />}</View>}
       ListFooterComponent={!planning && !libraryLoading ? (
         <View style={styles.page}>
           <View style={styles.savedHelp}>
-            <Pressable onPress={() => setHelpProfile(helpOpen ? null : activeProfileId)} style={styles.helpToggle} accessibilityRole="button" accessibilityState={{ expanded: helpOpen }} testID="saved-help-toggle">
+            <Pressable onPress={() => setHelpProfile(helpOpen ? null : activeProfileId)} style={styles.helpToggle} accessibilityRole="button" aria-expanded={helpOpen} accessibilityState={{ expanded: helpOpen }} testID="saved-help-toggle">
               <Text style={styles.helpLabel}>How Saved works</Text>
-              {helpOpen ? <ChevronUp size={16} color={palette.inkMuted} /> : <ChevronDown size={16} color={palette.inkMuted} />}
+              <DisclosureIndicator expanded={helpOpen} size={16} color={palette.inkMuted} />
             </Pressable>
-            {helpOpen ? <Text style={styles.helpBody}>Saved videos are links, not downloads. Watching needs an internet connection. Your saved videos, sessions, and progress stay on this device and don’t sync between devices.</Text> : null}
+            {helpOpen ? <MotionView enter><Text style={styles.helpBody}>Saved videos are links, not downloads. Watching needs an internet connection. Your saved videos, sessions, and progress stay on this device and don’t sync between devices.</Text></MotionView> : null}
           </View>
         </View>
       ) : null}
     />
-    {removal.removed ? <View pointerEvents="box-none" style={{ position: "absolute", left: insets.left, right: insets.right, bottom: insets.bottom + spacing.sm }}><View style={styles.page} onLayout={(event) => setNoticeHeight(event.nativeEvent.layout.height)}><SavedRemovalNotice targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /></View></View> : null}
+    {removal.removed ? <View pointerEvents="box-none" style={{ position: "absolute", left: insets.left, right: insets.right, bottom: Math.max(insets.bottom, bottomBarHeight) + spacing.sm }}><View style={styles.page} onLayout={(event) => setNoticeHeight(event.nativeEvent.layout.height)}><SavedRemovalNotice targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /></View></View> : null}
     </View>
   );
 }
 
 function SectionTitle({ label, testID, styles }: { label: string; testID?: string; styles: ReturnType<typeof createStyles> }) {
-  return <Text accessibilityRole="header" style={styles.sectionTitle} testID={testID}>{label}</Text>;
+  return <Heading style={styles.sectionTitle} testID={testID}>{label}</Heading>;
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: palette.wall },
+    screen: { flex: 1, backgroundColor: "transparent" },
     page: { ...boundedCollection, paddingHorizontal: spacing.page },
     flex: { flex: 1 },
     resumeSection: { marginTop: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.borderSoft },

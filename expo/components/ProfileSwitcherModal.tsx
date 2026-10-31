@@ -1,6 +1,7 @@
+import Text from "@/components/FrameText";
 import { Check, ChevronRight, Clock3, LockKeyhole, UserRound, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";

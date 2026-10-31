@@ -1,6 +1,7 @@
+import Text from "@/components/FrameText";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, AppState, findNodeHandle, Platform, Pressable, Text, View } from "react-native";
+import { AccessibilityInfo, AppState, findNodeHandle, Platform, Pressable, View } from "react-native";
 import MotionView from "@/components/motion/MotionView";
 import { useMotionVisibility } from "@/hooks/useMotionVisibility";
 import { useApp } from "@/providers/AppProvider";

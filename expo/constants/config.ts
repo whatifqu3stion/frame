@@ -60,7 +60,7 @@ export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 
 export const FEATURE_FLAGS = {
   ...FOUNDATION_CAPABILITIES,
-  knownYouTubeUrlResolution: APP_ENV === "development" && Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && (process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)),
+  knownYouTubeUrlResolution: true,
   googleConnection: FOUNDATION_CAPABILITIES.googleSelectiveImport && Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 

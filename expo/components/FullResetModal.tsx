@@ -1,9 +1,10 @@
+import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { router } from "expo-router";
 import { AlertTriangle, X } from "lucide-react-native";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createExitConfirmation } from "@/domain/exitConfirmation";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -11,7 +12,7 @@ import { useApp } from "@/providers/AppProvider";
 
 type Props = { visible: boolean; onClose: () => void; forgottenPinRecovery?: boolean };
 
-const DELETED_ITEMS = "all profiles; Owner PIN; viewing allowances, playback schedules, Pause Frame, and usage; Managed content approvals and requests; sources; saved videos (including former Watch Later links); Sessions; progress; interests; searches; appearance; and local Google credentials";
+const DELETED_ITEMS = "both API keys; all profiles; Owner PIN; viewing allowances, playback schedules, Pause Frame, and usage; Managed content approvals and requests; sources; saved videos; Sessions; progress; interests; searches; appearance; and local Google credentials";
 
 /** Shared irreversible full-reset recovery used by Privacy & Data and Forgot PIN. */
 export default function FullResetModal({ visible, onClose, forgottenPinRecovery = false }: Props) {

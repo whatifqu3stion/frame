@@ -1,5 +1,7 @@
+import { normalizeTodayVideoCount } from "./todayPreference";
+import { isLongFormVideo, MIN_VIDEO_DURATION_SECONDS } from "./contentPolicy";
 import { isMetadataCurrent } from "./metadataRetention";
-import { MAX_ITEMS_PER_SOURCE, TODAY_MAX_ITEMS, TODAY_RESET_HOUR } from "@/constants/productConfig";
+import { MAX_ITEMS_PER_SOURCE, TODAY_RESET_HOUR } from "@/constants/productConfig";
 import type { CachedTodayCandidate, TodayPeriod, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
 function pad(value: number): string { return String(value).padStart(2, "0"); }
@@ -13,11 +15,14 @@ export function getTodayPeriod(now: number): TodayPeriod {
   return { key: `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}`, startsAt, endsAt };
 }
 
+export const LIBRARY_ONLY_UNTIL = Number.MAX_SAFE_INTEGER;
+
 export function defaultTodaySourceRule(profileId: string, sourceId: string): TodaySourceRule {
   return {
     profileId,
     sourceId,
-    minimumDurationSeconds: 0,
+    favorite: false,
+    minimumDurationSeconds: MIN_VIDEO_DURATION_SECONDS,
     hideLivestreams: true,
     hideUpcomingPremieres: true,
     todayContributionLimit: MAX_ITEMS_PER_SOURCE,
@@ -27,6 +32,7 @@ export function defaultTodaySourceRule(profileId: string, sourceId: string): Tod
 }
 
 export type TodaySelectionInput = {
+  maxItems?: number;
   profileId: string;
   period: TodayPeriod;
   now: number;
@@ -41,6 +47,7 @@ export type TodaySelectionInput = {
 
 /** Builds one deterministic finite membership; overdue snoozes reserve space before new media. */
 export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[] {
+  const maxItems = normalizeTodayVideoCount(input.maxItems);
   const latestHistory = latestHistoryByMedia(input.history);
   const sourceCounts = new Map<string, number>();
   const selected: TodaySnapshotItem[] = [];
@@ -48,10 +55,10 @@ export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[
     .filter((item) => item.disposition === "snoozed" && item.snoozedUntil !== null && item.snoozedUntil < input.period.endsAt)
     .filter((item) => isSourceEligible(item, input))
     .sort((left, right) => (left.snoozedUntil ?? 0) - (right.snoozedUntil ?? 0) || left.id.localeCompare(right.id));
-  const snoozeReservation = Math.min(TODAY_MAX_ITEMS, dueSnoozes.length);
+
 
   for (const item of dueSnoozes) {
-    if (selected.length >= TODAY_MAX_ITEMS) break;
+    if (selected.length >= maxItems) break;
     if (!canSourceContribute(item.sourceId, input, sourceCounts)) continue;
     addSelected(selected, sourceCounts, {
       ...item,
@@ -72,20 +79,43 @@ export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[
   for (const id of input.resumeMediaIds) blockedIds.add(id);
   for (const item of selected) blockedIds.add(item.id);
 
-  const normalLimit = Math.max(0, TODAY_MAX_ITEMS - snoozeReservation);
+  const normalLimit = Math.max(0, maxItems - selected.length);
   const normalSelected: CachedTodayCandidate[] = [];
   const seen = new Set<string>();
   const sortedCandidates = [...input.candidates].sort((left, right) => {
     const published = Date.parse(right.publishedAt) - Date.parse(left.publishedAt);
     return (Number.isFinite(published) && published !== 0) ? published : left.id.localeCompare(right.id);
   });
+  // Sources shown least recently go first. Take one from each before taking seconds.
+  const lastShown = new Map<string, string>();
+  for (const item of input.history) {
+    if (item.periodKey < input.period.key && item.periodKey > (lastShown.get(item.sourceId) ?? "")) lastShown.set(item.sourceId, item.periodKey);
+  }
+  const pools = new Map<string, CachedTodayCandidate[]>();
   for (const candidate of sortedCandidates) {
-    if (normalSelected.length >= normalLimit || selected.length + normalSelected.length >= TODAY_MAX_ITEMS) break;
     if (seen.has(candidate.id) || blockedIds.has(candidate.id) || !isSourceEligible(candidate, input)) continue;
     seen.add(candidate.id);
-    if (!canSourceContribute(candidate.sourceId, input, sourceCounts)) continue;
-    sourceCounts.set(candidate.sourceId, (sourceCounts.get(candidate.sourceId) ?? 0) + 1);
-    normalSelected.push(candidate);
+    const pool = pools.get(candidate.sourceId) ?? [];
+    pool.push(candidate); pools.set(candidate.sourceId, pool);
+  }
+  const sourceOrder = [...pools.keys()].sort((a, b) => {
+    const oldest = (lastShown.get(a) ?? "").localeCompare(lastShown.get(b) ?? "");
+    if (oldest) return oldest;
+    // A favorite only wins a tie; older-waiting sources always keep priority.
+    const preference = Number(input.rules.get(b)?.favorite === true) - Number(input.rules.get(a)?.favorite === true);
+    if (preference) return preference;
+    const newest = Date.parse(pools.get(b)![0].publishedAt) - Date.parse(pools.get(a)![0].publishedAt);
+    return Number.isFinite(newest) && newest !== 0 ? newest : a.localeCompare(b);
+  });
+  for (let round = 0; round < MAX_ITEMS_PER_SOURCE; round += 1) {
+    for (const sourceId of sourceOrder) {
+      if (normalSelected.length >= normalLimit) break;
+      if (!canSourceContribute(sourceId, input, sourceCounts)) continue;
+      const candidate = pools.get(sourceId)?.shift();
+      if (!candidate) continue;
+      sourceCounts.set(sourceId, (sourceCounts.get(sourceId) ?? 0) + 1);
+      normalSelected.push(candidate);
+    }
   }
 
   for (const candidate of normalSelected) {
@@ -104,7 +134,7 @@ export function selectTodayItems(input: TodaySelectionInput): TodaySnapshotItem[
 
 export function visibleTodayItems(items: readonly TodaySnapshotItem[], followedSourceIds: ReadonlySet<string>, rules: ReadonlyMap<string, TodaySourceRule>, now: number): TodaySnapshotItem[] {
   return items.filter((item) => {
-    if (!isMetadataCurrent(item.fetchedAt, now) || !followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
+    if (!isLongFormVideo(item) || !isMetadataCurrent(item.fetchedAt, now) || !followedSourceIds.has(item.sourceId) || item.disposition === "unavailable") return false;
     const rule = rules.get(item.sourceId) ?? defaultTodaySourceRule(item.profileId, item.sourceId);
     if (rule.mutedUntil !== null && rule.mutedUntil > now) return false;
     if (item.disposition === "pending") return true;
@@ -139,7 +169,7 @@ function latestHistoryByMedia(history: readonly TodaySnapshotItem[]): Map<string
 }
 
 function isSourceEligible(item: CachedTodayCandidate, input: TodaySelectionInput): boolean {
-  if (!isMetadataCurrent(item.fetchedAt, input.now) || !input.followedSourceIds.has(item.sourceId)) return false;
+  if (!isLongFormVideo(item) || !isMetadataCurrent(item.fetchedAt, input.now) || !input.followedSourceIds.has(item.sourceId)) return false;
   const rule = input.rules.get(item.sourceId) ?? defaultTodaySourceRule(input.profileId, item.sourceId);
   if (rule.mutedUntil !== null && rule.mutedUntil > input.now) return false;
   if (item.durationSeconds < rule.minimumDurationSeconds) return false;

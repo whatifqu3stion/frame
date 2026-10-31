@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { weeklyPicksClient } from "./weeklyPicksClient";
+import { byokWeeklyPicks } from "./byokWeeklyPicksInstance";
 import { createWeeklyEditionService } from "./weeklyEdition";
 
-export const weeklyEditionService = createWeeklyEditionService(weeklyPicksClient, AsyncStorage);
+export const weeklyEditionService = createWeeklyEditionService(byokWeeklyPicks, AsyncStorage);

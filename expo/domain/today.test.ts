@@ -8,7 +8,7 @@ const sourceB = "UCabcdefghijklmnopqrstu2";
 const now = new Date(2026, 8, 6, 12).getTime();
 
 function candidate(id: string, sourceId: string, publishedOffset: number = 0): CachedTodayCandidate {
-  return { id, title: `Video ${id}`, channelId: sourceId, channelTitle: sourceId === sourceA ? "Alpha" : "Beta", sourceId, sourceTitle: sourceId === sourceA ? "Alpha" : "Beta", thumbnailUrl: `https://example.com/${id}.jpg`, publishedAt: new Date(now - publishedOffset).toISOString(), durationSeconds: 120, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now };
+  return { id, title: `Video ${id}`, channelId: sourceId, channelTitle: sourceId === sourceA ? "Alpha" : "Beta", sourceId, sourceTitle: sourceId === sourceA ? "Alpha" : "Beta", thumbnailUrl: `https://example.com/${id}.jpg`, publishedAt: new Date(now - publishedOffset).toISOString(), durationSeconds: 600, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now };
 }
 function history(item: CachedTodayCandidate, disposition: TodaySnapshotItem["disposition"], snoozedUntil: number | null = null): TodaySnapshotItem {
   return { ...item, profileId, periodKey: "2026-09-05", position: 0, disposition, dispositionAt: now - 1_000, snoozedUntil };
@@ -75,4 +75,78 @@ describe("finite Today selection", () => {
     expect(await performTodayAction(async () => false, async () => { marks += 1; return true; })).toBeFalse();
     expect(marks).toBe(1);
   });
+});
+
+test("Today gives every eligible source one turn before second videos", () => {
+  const sources = Array.from({ length: 12 }, (_, i) => `source-${i}`);
+  const videos = sources.flatMap((source, i) => [candidate(`a${i}`, source, i * 10000), candidate(`b${i}`, source, i * 10000 + 1)]);
+  const result = selectTodayItems(input(videos, { followedSourceIds: new Set(sources) }));
+  expect(result).toHaveLength(12);
+  expect(new Set(result.map((item) => item.sourceId)).size).toBe(12);
+});
+
+test("less recently shown sources get a turn ahead of frequent publishers", () => {
+  const sources = Array.from({ length: 13 }, (_, i) => `source-${i}`);
+  const videos = sources.map((source, i) => candidate(`new${i}`, source, i * 10000));
+  const recent = videos.slice(0, 12).map((item) => history({ ...item, id: `old-${item.id}` }, "dismissed"));
+  const result = selectTodayItems(input(videos, { followedSourceIds: new Set(sources), history: recent }));
+  expect(result[0].sourceId).toBe(sources[12]);
+  expect(result.map((item) => item.id)).toEqual(selectTodayItems(input([...videos].reverse(), { followedSourceIds: new Set(sources), history: recent })).map((item) => item.id));
+});
+
+test("library-only sources are excluded from new and visible snapshots without affecting follows", () => {
+  const rules = new Map([[sourceA, { profileId, sourceId: sourceA, minimumDurationSeconds: 0, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: Number.MAX_SAFE_INTEGER, updatedAt: now }]]);
+  const videos = [candidate("a", sourceA), candidate("b", sourceB)];
+  expect(selectTodayItems(input(videos, { rules })).map((item) => item.id)).toEqual(["b"]);
+  const existing = selectTodayItems(input(videos));
+  expect(visibleTodayItems(existing, new Set([sourceA, sourceB]), rules, now).map((item) => item.id)).toEqual(["b"]);
+});
+
+test("short-form cannot enter Today or reappear from legacy snapshots, snoozes, or permissive rules", () => {
+  const short = { ...candidate("short", sourceA), durationSeconds: 239 };
+  const unknown = { ...candidate("unknown", sourceB), durationSeconds: 0 };
+  const long = { ...candidate("long", sourceB), durationSeconds: 240 };
+  const snoozed = history(short, "snoozed", now - 1);
+  const result = selectTodayItems(input([short, unknown, long], { history: [snoozed] }));
+  expect(result.map((item) => item.id)).toEqual(["long"]);
+  expect(visibleTodayItems([history(short, "pending"), history(unknown, "pending")], new Set([sourceA, sourceB]), new Map(), now)).toEqual([]);
+});
+
+
+test("favorites break equal-wait ties, but never leapfrog an older waiting source", () => {
+  const videos = [candidate("a", sourceA, 1000), candidate("b", sourceB, 0)];
+  const favorite: TodaySourceRule = { profileId, sourceId: sourceA, favorite: true, minimumDurationSeconds: 240, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: null, updatedAt: now };
+  const rules = new Map([[sourceA, favorite]]);
+  expect(selectTodayItems(input(videos, { rules }))[0].sourceId).toBe(sourceA);
+  const recent = history(candidate("old-a", sourceA), "dismissed");
+  expect(selectTodayItems(input(videos, { rules, history: [recent] }))[0].sourceId).toBe(sourceB);
+  expect(selectTodayItems(input(videos, { rules: new Map([[sourceA, { ...favorite, mutedUntil: Number.MAX_SAFE_INTEGER }]]) })).map((item) => item.sourceId)).toEqual([sourceB]);
+});
+
+test("even many prolific favorites cannot starve quieter sources over successive days", () => {
+  const sources = Array.from({ length: 25 }, (_, i) => `fair-${i}`);
+  const rules = new Map(sources.slice(0, 20).map((sourceId) => [sourceId, { profileId, sourceId, favorite: true, minimumDurationSeconds: 240, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: null, updatedAt: now }]));
+  const historyItems: TodaySnapshotItem[] = [];
+  const appeared = new Set<string>();
+  for (let day = 0; day < 3; day++) {
+    const time = now + day * 86_400_000;
+    const videos = sources.flatMap((sourceId, i) => Array.from({ length: i < 20 ? 10 : 1 }, (_, index) => candidate(`${day}-${i}-${index}`, sourceId)));
+    const selected = selectTodayItems(input(videos, { now: time, period: getTodayPeriod(time), rules, followedSourceIds: new Set(sources), history: historyItems }));
+    expect(selected).toHaveLength(12);
+    expect(new Set(selected.map((item) => item.sourceId)).size).toBe(12);
+    selected.forEach((item) => appeared.add(item.sourceId)); historyItems.push(...selected);
+  }
+  expect(appeared.size).toBe(25);
+});
+
+test("personal selection size reserves snoozes, shares sources fairly and cannot exceed twelve", () => {
+  const sources = Array.from({ length: 15 }, (_, i) => `source-${i}`);
+  const videos = sources.flatMap((source, i) => [candidate(`video-${i}-a`, source), candidate(`video-${i}-b`, source)]);
+  const overdue = { ...history(videos[0], "snoozed"), snoozedUntil: now - 1000 };
+  for (const maxItems of [1, 3, 6, 9, 12, 50]) {
+    const result = selectTodayItems(input(videos, { maxItems, followedSourceIds: new Set(sources), history: [overdue] }));
+    expect(result).toHaveLength(Math.min(maxItems, 12));
+    expect(result[0].id).toBe(overdue.id);
+    expect(new Set(result.map((item) => item.sourceId)).size).toBe(result.length);
+  }
 });

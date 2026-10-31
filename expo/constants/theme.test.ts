@@ -52,3 +52,18 @@ test("viewing-room text remains readable on each dark surface", () => {
     }
   }
 });
+
+test("room lighting keeps text readable throughout entry and return in both themes", () => {
+  const p = context.exports.watchPalette;
+  for (const start of [p.litWall, p.darkLitWall]) {
+    for (let step = 0; step <= 20; step++) {
+      const amount = step / 20;
+      const bg = rgb(start).map((v, i) => v * (1 - amount) + rgb(p.wall)[i] * amount);
+      for (const foreground of [p.ink, p.inkSoft, p.inkMuted, p.accent]) {
+        const color = rgb(foreground);
+        const opaque = color.length === 4 ? bg.map((v, i) => v * (1 - color[3]) + color[i] * color[3]) : color;
+        expect(contrast(opaque, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  }
+});

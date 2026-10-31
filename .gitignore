@@ -12,3 +12,8 @@ supabase/.temp/
 # Cloudflare Functions
 functions/node_modules
 !functions/package.json
+
+# Local agent workspaces and alternate Git databases
+.codex/
+.frame-codex.git/
+.frame-worktrees/

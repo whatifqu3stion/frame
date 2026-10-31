@@ -1,9 +1,10 @@
+import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
 import MotionView from "@/components/motion/MotionView";
 import ChoiceOption from "@/components/ChoiceOption";
 import { useMemo, useState } from "react";
-import {  StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import type { ViewingAllowance } from "@/models/viewingAllowance";
@@ -11,12 +12,13 @@ import type { ViewingAllowance } from "@/models/viewingAllowance";
 type Props = {
   value: ViewingAllowance;
   onChange: (allowance: ViewingAllowance) => void;
+  showLabel?: boolean;
 };
 
 const PRESETS = [15, 30, 45, 60] as const;
 
 /** Compact profile viewing-allowance selector with validated whole-minute choices. */
-export default function AllowancePicker({ value, onChange }: Props) {
+export default function AllowancePicker({ value, onChange, showLabel = true }: Props) {
   const touch = useFeedback();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
@@ -35,7 +37,7 @@ export default function AllowancePicker({ value, onChange }: Props) {
 
   return (
     <View>
-      <Text style={styles.label}>Daily viewing allowance</Text>
+      {showLabel ? <Text style={styles.label}>Daily viewing allowance</Text> : null}
       <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Daily viewing allowance">
         {PRESETS.map((minutes) => {
           const selected = !customMode && value.mode === "dailyLimit" && value.minutes === minutes;

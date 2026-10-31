@@ -1,27 +1,17 @@
-import { useMotionVisibility } from "@/hooks/useMotionVisibility";
-import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, AppState, Easing, StyleSheet, View } from "react-native";
+import type { ReactNode } from "react";
+import { Animated, StyleSheet, View } from "react-native";
+import { useMotionTarget } from "@/hooks/useMotionTarget";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { motion } from "@/constants/motion";
 
-/** The tab stays fixed while its selected backing quietly resolves. */
+/** The selected backing opens around the icon without moving the tab target. */
 export default function TabIconSurface({ focused, children }: { focused: boolean; children: ReactNode }) {
   const { palette } = useFrameTheme();
   const reduced = useReducedMotion();
-  const visible = useMotionVisibility();
-  const opacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  useEffect(() => {
-    const target = focused ? 1 : 0;
-    opacity.stopAnimation();
-    if (reduced || !visible) { opacity.setValue(target); return; }
-    const animation = Animated.timing(opacity, { toValue: target, duration: motion.choice, easing: Easing.out(Easing.cubic), useNativeDriver: true, isInteraction: false });
-    animation.start();
-    const listener = AppState.addEventListener("change", (state) => { if (state !== "active") { animation.stop(); opacity.setValue(target); } });
-    return () => { animation.stop(); listener.remove(); opacity.setValue(target); };
-  }, [focused, opacity, reduced, visible]);
+  const opacity = useMotionTarget(focused ? 1 : 0, motion.choice);
   return <View style={styles.icon}>
-    <Animated.View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFillObject, styles.backing, { backgroundColor: palette.activeSoft, opacity }]} />
+    <Animated.View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFillObject, styles.backing, { backgroundColor: palette.activeSoft, opacity, transform: [{ scaleX: opacity.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 1 : 0.55, 1] }) }, { scaleY: opacity.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 1 : 0.85, 1] }) }] }]} />
     {children}
   </View>;
 }

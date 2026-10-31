@@ -12,7 +12,7 @@ bun install
 bun run start-web
 ```
 
-The checked-in start scripts use Rork's development tooling and project configuration. They are not a standalone deployment recipe. Backend-connected features require the appropriate development configuration; see [ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+This is the full-access BYOK edition. Start scripts use standard Expo tooling. Configure YouTube and optional Gemini keys inside the native app; see [BYOK setup and security](docs/BYOK.md). Google subscription import additionally requires platform OAuth client configuration.
 
 For the native development server:
 
@@ -20,7 +20,7 @@ For the native development server:
 bun run start
 ```
 
-A web preview can help review layout and interaction, but native playback, purchases, authentication, and device behavior require their own compatible builds and acceptance checks.
+A web preview can help review layout and interaction, but native playback, secure key storage, authentication, and device behavior require their own compatible builds and acceptance checks.
 
 ## Automated checks
 
@@ -40,3 +40,7 @@ This runs the configured typecheck, lint, and test commands. The [native accepta
 - [docs/](docs): environment guidance, design reviews, and acceptance work.
 
 The app began with Rork tooling. This guide describes the actual project rather than the generic template's optional features or deployment claims.
+
+## Android sideload
+
+Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.

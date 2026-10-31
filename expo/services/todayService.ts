@@ -7,6 +7,7 @@ import type { SourceFeedClientResult } from "@/services/sourceFeedClient";
 export type TodayFeedReader = { getCachedFeeds(sourceIds: readonly string[]): Promise<SourceFeedClientResult> };
 
 export type LoadTodayOptions = {
+  maxItems?: number;
   profileId: string;
   followedSourceIds: readonly string[];
   now?: number;
@@ -19,14 +20,22 @@ export function createTodayService(repository: TodayRepository, feedReader: Toda
       const now = options.now ?? Date.now();
       const period = getTodayPeriod(now);
       const existing = await repository.readSnapshot(options.profileId, period.key);
-      if (new Set(options.followedSourceIds).size > PRODUCT_LIMITS.futureSourcesPerProfile) return { state: "source_limit", snapshot: existing, message: `Today supports up to ${PRODUCT_LIMITS.futureSourcesPerProfile} sources. Unfollow a few sources to continue. Your saved videos stay in Saved.` };
+
       if (existing && !options.refreshExisting) return { state: existing.items.length > 0 ? "ready" : "empty", snapshot: existing };
       if (options.followedSourceIds.length === 0) return { state: "no_sources", snapshot: existing };
 
-      const feedResult = await feedReader.getCachedFeeds(options.followedSourceIds);
+      const rules = await repository.listRules(options.profileId);
+      const ruleMap = new Map<string, TodaySourceRule>(rules.map((rule) => [rule.sourceId, rule]));
+      const participatingIds = options.followedSourceIds.filter((id) => {
+        const mutedUntil = ruleMap.get(id)?.mutedUntil;
+        return mutedUntil == null || mutedUntil <= now;
+      });
+      if (participatingIds.length > PRODUCT_LIMITS.sourceFeedMaxSources) return { state: "source_limit", snapshot: existing, message: "Choose up to 100 sources for Today. Keep the others in your library." };
+      if (!participatingIds.length) return { state: "no_sources", snapshot: existing, message: "Your sources are library only. Include a source in Today from its channel page." };
+      const feedResult = await feedReader.getCachedFeeds(participatingIds);
       if (feedResult.status !== "success") {
         const state = feedResult.status === "network_error" ? "network_error" : feedResult.status === "missing_configuration" ? "unavailable" : "unavailable";
-        return { state, snapshot: existing ? { ...existing, freshness: "offline" } : null, message: state === "network_error" ? "Frame couldn’t reach the shared cache. Your local inbox was not changed." : "Frame’s cached media service is unavailable right now." };
+        return { state, snapshot: existing ? { ...existing, freshness: "offline" } : null, message: state === "network_error" ? "Frame couldn’t reach YouTube. Your local inbox was not changed." : "Video data is unavailable. Check your YouTube key and quota in Settings → Your API keys." };
       }
 
       const response = feedResult.response;
@@ -48,13 +57,12 @@ export function createTodayService(repository: TodayRepository, feedReader: Toda
         return { state: "no_cache", snapshot: null, message: response.message };
       }
 
-      const [history, rules, handled] = await Promise.all([
+      const [history, handled] = await Promise.all([
         repository.listHistory(options.profileId),
-        repository.listRules(options.profileId),
         repository.listHandledLibraryIds(options.profileId),
       ]);
-      const ruleMap = new Map<string, TodaySourceRule>(rules.map((rule) => [rule.sourceId, rule]));
       const selected = selectTodayItems({
+        maxItems: options.maxItems,
         profileId: options.profileId,
         period,
         now,

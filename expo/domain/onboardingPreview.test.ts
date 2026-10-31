@@ -18,14 +18,14 @@ test("disabled, loading, failed, and unpublished previews stay distinct", () => 
 test("configuration, offline, and maintenance offer their actual recovery", () => {
   const configuration = state({ status: "backend_allowance_unavailable", items: [], reason: "configuration" });
   expect(configuration.retry).toBe(false);
-  expect(configuration.message).toContain("configured");
+  expect(configuration.message).toContain("Prepare");
   const offline = state({ status: "network_error", items: [], reason: "offline" });
   expect(offline.retry).toBe(true);
   expect(offline.message).toContain("connection");
   const maintenance = state({ status: "temporarily_unavailable", items: [], reason: "maintenance" });
   expect(maintenance.retry).toBe(true);
   expect(maintenance.message).toContain("paused");
-  expect(state({ status: "cached_success", items: pool }).message).toContain("cached");
+  expect(state({ status: "cached_success", items: pool }).message).toContain("saved weekly edition");
   expect(state({ status: "success", items: pool }).message).toBe("");
 });
 

@@ -1,3 +1,12 @@
+import { PREVIEW_LIBRARY_ENABLED } from "../preview/mode";
+import { makePreviewLibrary } from "../preview/library";
+import { LIBRARY_OVERFLOW_RULE_SQL, SAVE_SOURCE_RULE_SQL } from "./sourceRuleSql";
+import { READ_SESSION_RUN_SQL, SAVE_SESSION_RUN_SQL, RESET_SESSION_RUN_SQL } from "./sessionRunSql";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { defaultTodaySourceRule, LIBRARY_ONLY_UNTIL, getTodayPeriod } from "@/domain/today";
+import { normalizeSessionTarget } from "../domain/sessionFlow";
+import { emptySessionRun, type SessionRun } from "../domain/sessionTimer";
+import { assertLongFormVideo, isLongFormVideo } from "../domain/contentPolicy";
 import * as SQLite from "expo-sqlite";
 import { SAVE_VIDEO_SQL, UNSAVE_VIDEO_SQL } from "@/db/savedLibrarySql";
 import { EXPIRE_TODAY_METADATA_SQL, EXPIRE_LIBRARY_METADATA_SQL, METADATA_MAX_AGE_MS, expireTodayItem, expireVideo, expireChannel, expireResume, isMetadataCurrent } from "@/domain/metadataRetention";
@@ -12,6 +21,41 @@ import type { FollowedChannel, ResumePosition, Video, VideoQueue, SessionDraft }
 import type { CachedTodayCandidate, TodayDisposition, TodaySnapshot, TodaySnapshotItem, TodaySourceRule } from "@/models/today";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+const webSessionRuns = new Map<string, SessionRun>();
+
+export async function readSessionRun(profileId: string, sessionId: string): Promise<SessionRun> {
+  if (Platform.OS === "web") return { ...(webSessionRuns.get(profileEntityKey(profileId, sessionId)) ?? emptySessionRun()) };
+  const db = await getDb();
+  const row = await db.getFirstAsync<Omit<SessionRun, "ended"> & { ended: number }>(READ_SESSION_RUN_SQL, [profileId, sessionId]);
+  return row ? { ...row, ended: row.ended === 1 } : emptySessionRun();
+}
+
+/** A previous run's delayed checkpoint cannot overwrite a newly started session. */
+export async function saveSessionRun(profileId: string, sessionId: string, run: SessionRun): Promise<void> {
+  if (!Number.isFinite(run.consumedSeconds) || run.consumedSeconds < 0) throw new Error("Invalid session time");
+  if (Platform.OS === "web") {
+    const key = profileEntityKey(profileId, sessionId);
+    if (!webStore.queues.has(key)) return;
+    const previous = webSessionRuns.get(key) ?? emptySessionRun();
+    if (previous.runId !== run.runId) return;
+    webSessionRuns.set(key, { ...run, consumedSeconds: Math.max(previous.consumedSeconds, run.consumedSeconds), ended: previous.ended || run.ended, finishVideoId: previous.ended || run.ended ? null : previous.finishVideoId ?? run.finishVideoId, lastVideoId: run.consumedSeconds >= previous.consumedSeconds ? run.lastVideoId : previous.lastVideoId });
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(SAVE_SESSION_RUN_SQL, [profileId, sessionId, run.runId, run.consumedSeconds, run.ended ? 1 : 0, run.finishVideoId, run.lastVideoId, profileId, sessionId]);
+}
+
+export async function resetSessionRun(profileId: string, sessionId: string): Promise<void> {
+  if (Platform.OS === "web") {
+    const key = profileEntityKey(profileId, sessionId);
+    if (!webStore.queues.has(key)) throw new Error("Session no longer available");
+    const previous = webSessionRuns.get(key) ?? emptySessionRun();
+    webSessionRuns.set(key, { ...emptySessionRun(), runId: previous.runId + 1 });
+    return;
+  }
+  const db = await getDb();
+  await db.runAsync(RESET_SESSION_RUN_SQL, [profileId, sessionId]);
+}
 
 export { DATABASE_SCHEMA_VERSION } from "@/db/migrations";
 
@@ -80,9 +124,33 @@ function clearProfileMap<T>(store: Map<string, T>, profileId: string): void {
   for (const key of store.keys()) if (key.startsWith(prefix)) store.delete(key);
 }
 
+let seededPreview = false;
+function seedWebPreview(): void {
+  if (!PREVIEW_LIBRARY_ENABLED || seededPreview || webStore.channels.size || webStore.saved.size) return;
+  seededPreview = true;
+  const now = Date.now() - 60_000; // Predates the initial screen clock; never future-dated metadata.
+  const profileId = DEFAULT_OWNER_PROFILE_ID;
+  const { channels, videos } = makePreviewLibrary(now);
+  for (const channel of channels) webStore.channels.set(profileEntityKey(profileId, channel.id), channel);
+  channels.forEach((channel, index) => {
+    webStore.sourceRules.set(profileEntityKey(profileId, channel.id), { ...defaultTodaySourceRule(profileId, channel.id), favorite: index < 2, mutedUntil: index >= 8 ? LIBRARY_ONLY_UNTIL : null });
+  });
+  const saved = videos.filter((_, index) => index % 3 === 2).slice(0, 8);
+  saved.forEach((video, index) => webStore.saved.set(profileEntityKey(profileId, video.id), { ...video, savedAt: now - index * 3600000 }));
+  const session: VideoQueue = { id: "preview-slow-sunday", name: "A slow Sunday", targetMinutes: 45, orderedVideoIds: [saved[0].id, saved[1].id, saved[3].id], currentIndex: 0, updatedAt: now };
+  webStore.queues.set(profileEntityKey(profileId, session.id), session);
+  const resume = saved[2];
+  webStore.resume.set(profileEntityKey(profileId, resume.id), { ...resume, videoId: resume.id, timestampSeconds: 428, sessionId: null, updatedAt: now });
+  const period = getTodayPeriod(Date.now());
+  const today = [...videos.filter((_, index) => index % 3 === 0 && index < 24), ...videos.filter((_, index) => index % 3 === 1 && index < 12)];
+  const snapshot: TodaySnapshot = { profileId, periodKey: period.key, createdAt: now, cacheFetchedAt: now, freshness: "fresh", items: today.map((video, position) => ({ ...video, fetchedAt: now, sourceId: video.channelId, sourceTitle: video.channelTitle, isLivestream: false, isUpcomingPremiere: false, profileId, periodKey: period.key, position, disposition: "pending", dispositionAt: null, snoozedUntil: null })) };
+  webStore.todaySnapshots.set(profileEntityKey(profileId, period.key), snapshot);
+}
+
 /** Initializes migrations eagerly for device-level smoke tests. */
 export async function initializeDatabase(): Promise<void> {
   if (Platform.OS !== "web") await getDb();
+  else seedWebPreview();
 }
 
 /** Reads non-sensitive database metadata without changing the schema. */
@@ -126,7 +194,7 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
     );
     if (allowance) {
       await writeManagedAllowanceRecord(allowance, db);
-      await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt) VALUES (?,?,?,?,?)", [profile.id, allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, null, null, allowance.updatedAt]);
+      await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt,commitment) VALUES (?,?,?,?,?,?)", [profile.id, allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, null, null, allowance.updatedAt]);
       await db.runAsync("INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)", [profile.id, allowance.dayKey, allowance.dayStartedAt, allowance.lastSeenAt, allowance.timezoneOffsetMinutes, allowance.consumedSeconds, allowance.warnedFive, allowance.warnedOne, allowance.updatedAt]);
       await db.runAsync("INSERT INTO managed_content_policies (profileId,mode,updatedAt) VALUES (?,?,?)", [profile.id, "selectedVideos", profile.updatedAt]);
     }
@@ -175,6 +243,7 @@ export async function deleteLocalProfileRecords(profileId: string): Promise<void
     clearProfileMap(webStore.saved, profileId);
     clearProfileMap(webStore.resume, profileId);
     clearProfileMap(webStore.queues, profileId);
+    clearProfileMap(webSessionRuns, profileId);
     webStore.drafts.delete(profileId);
     clearProfileMap(webStore.channels, profileId);
     clearProfileMap(webStore.todaySnapshots, profileId);
@@ -229,16 +298,17 @@ export async function upsertManagedAllowanceRecord(record: ManagedAllowanceRecor
 export async function readProfilePlaybackLimit(profileId: string): Promise<ProfilePlaybackLimitRecord | null> {
   if (Platform.OS === "web") return webStore.playbackLimits.get(profileId) ?? null;
   const db = await getDb();
-  return (await db.getFirstAsync<ProfilePlaybackLimitRecord>("SELECT * FROM profile_playback_limits WHERE profileId = ?", [profileId])) ?? null;
+  const row = await db.getFirstAsync<Omit<ProfilePlaybackLimitRecord, "commitment"> & { commitment: number }>("SELECT * FROM profile_playback_limits WHERE profileId = ?", [profileId]);
+  return row ? { ...row, commitment: row.commitment !== 0 } : null;
 }
 
 export async function upsertProfilePlaybackLimit(record: ProfilePlaybackLimitRecord): Promise<void> {
   if (Platform.OS === "web") { webStore.playbackLimits.set(record.profileId, { ...record }); return; }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt) VALUES (?,?,?,?,?)
-     ON CONFLICT(profileId) DO UPDATE SET dailyLimitMinutes=excluded.dailyLimitMinutes,pendingDailyLimitMinutes=excluded.pendingDailyLimitMinutes,pendingActivatesAt=excluded.pendingActivatesAt,updatedAt=excluded.updatedAt`,
-    [record.profileId, record.dailyLimitMinutes, record.pendingDailyLimitMinutes, record.pendingActivatesAt, record.updatedAt],
+    `INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt,commitment) VALUES (?,?,?,?,?,?)
+     ON CONFLICT(profileId) DO UPDATE SET dailyLimitMinutes=excluded.dailyLimitMinutes,pendingDailyLimitMinutes=excluded.pendingDailyLimitMinutes,pendingActivatesAt=excluded.pendingActivatesAt,updatedAt=excluded.updatedAt,commitment=excluded.commitment`,
+    [record.profileId, record.dailyLimitMinutes, record.pendingDailyLimitMinutes, record.pendingActivatesAt, record.updatedAt, record.commitment === false ? 0 : 1],
   );
 }
 
@@ -316,6 +386,7 @@ export async function listManagedApprovedVideos(profileId: string): Promise<Mana
 }
 
 export async function upsertManagedApprovedVideo(record: ManagedApprovedVideo): Promise<void> {
+  assertLongFormVideo(record);
   if (Platform.OS === "web") { webStore.managedApprovedVideos.set(profileEntityKey(record.profileId, record.id), { ...record }); return; }
   const db = await getDb();
   await db.runAsync(
@@ -401,7 +472,12 @@ export async function isVideoSaved(profileId: string, videoId: string): Promise<
 
 export async function saveVideo(profileId: string, video: Video): Promise<void> {
   video = expireVideo(video, Date.now());
-  const savedAt = Date.now();
+  assertLongFormVideo(video);
+  await writeSavedVideo(profileId, video, Date.now());
+}
+
+async function writeSavedVideo(profileId: string, video: Video, savedAt: number): Promise<void> {
+  video = expireVideo(video, Date.now());
   if (Platform.OS === "web") {
     const key = profileEntityKey(profileId, video.id);
     if (!webStore.saved.has(key)) webStore.saved.set(key, { ...video, savedAt });
@@ -414,13 +490,22 @@ export async function saveVideo(profileId: string, video: Video): Promise<void> 
   );
 }
 
-export async function unsaveVideo(profileId: string, videoId: string): Promise<void> {
+/** Returns an Undo receipt for the actual removed row; it cannot restore arbitrary new content. */
+export async function unsaveVideo(profileId: string, videoId: string): Promise<() => Promise<void>> {
+  let removed: (Video & { savedAt: number }) | null;
   if (Platform.OS === "web") {
-    webStore.saved.delete(profileEntityKey(profileId, videoId));
-    return;
+    const key = profileEntityKey(profileId, videoId);
+    removed = webStore.saved.get(key) ?? null;
+    webStore.saved.delete(key);
+  } else {
+    const db = await getDb();
+    removed = await db.getFirstAsync<Video & { savedAt: number }>("SELECT * FROM saved_videos WHERE profileId = ? AND id = ?", [profileId, videoId]);
+    await db.runAsync(UNSAVE_VIDEO_SQL, [profileId, videoId]);
   }
-  const db = await getDb();
-  await db.runAsync(UNSAVE_VIDEO_SQL, [profileId, videoId]);
+  return async () => {
+    // Legacy links may be restored for removal undo; playback still requires current long-form evidence.
+    if (removed) await writeSavedVideo(profileId, removed, removed.savedAt);
+  };
 }
 
 export type ResumeRow = ResumePosition & {
@@ -446,6 +531,7 @@ export async function getResume(profileId: string, videoId: string): Promise<Res
 }
 
 export async function upsertResume(profileId: string, video: Video, timestampSeconds: number, sessionId: string | null = null): Promise<void> {
+  if (!isLongFormVideo(video)) return;
   video = expireVideo(video, Date.now());
   const row: ResumeRow = {
     sessionId,
@@ -492,23 +578,24 @@ function safeParseIds(input: string): string[] {
 export async function listQueues(profileId: string): Promise<VideoQueue[]> {
   if (Platform.OS === "web") return profileValues(webStore.queues, profileId).sort((a, b) => b.updatedAt - a.updatedAt).map((queue) => ({ ...queue, orderedVideoIds: [...queue.orderedVideoIds] }));
   const db = await getDb();
-  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number; currentIndex: number }>(
-    "SELECT id,name,orderedVideoIds,updatedAt,currentIndex FROM queues WHERE profileId = ? ORDER BY updatedAt DESC",
+  const rows = await db.getAllAsync<{ id: string; name: string; orderedVideoIds: string; updatedAt: number; currentIndex: number; targetMinutes: number | null }>(
+    "SELECT id,name,orderedVideoIds,updatedAt,currentIndex,targetMinutes FROM queues WHERE profileId = ? ORDER BY updatedAt DESC",
     [profileId],
   );
   return rows.map((row) => { const orderedVideoIds = safeParseIds(row.orderedVideoIds); return { ...row, orderedVideoIds, currentIndex: Math.max(0, Math.min(row.currentIndex, orderedVideoIds.length)) }; });
 }
 
 export async function upsertQueue(profileId: string, queue: VideoQueue): Promise<void> {
+  queue = { ...queue, targetMinutes: normalizeSessionTarget(queue.targetMinutes) };
   if (Platform.OS === "web") {
     webStore.queues.set(profileEntityKey(profileId, queue.id), { ...queue, orderedVideoIds: [...queue.orderedVideoIds] });
     return;
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO queues (profileId,id,name,orderedVideoIds,updatedAt,currentIndex) VALUES (?,?,?,?,?,?)
-     ON CONFLICT(profileId,id) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt,currentIndex=excluded.currentIndex`,
-    [profileId, queue.id, queue.name, JSON.stringify(queue.orderedVideoIds), queue.updatedAt, queue.currentIndex],
+    `INSERT INTO queues (profileId,id,name,orderedVideoIds,updatedAt,currentIndex,targetMinutes) VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(profileId,id) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt,currentIndex=excluded.currentIndex,targetMinutes=excluded.targetMinutes`,
+    [profileId, queue.id, queue.name, JSON.stringify(queue.orderedVideoIds), queue.updatedAt, queue.currentIndex, queue.targetMinutes ?? null],
   );
 }
 
@@ -533,14 +620,15 @@ export async function setQueuePosition(profileId: string, id: string, expectedVi
 export async function readSessionDraft(profileId: string): Promise<SessionDraft | null> {
   if (Platform.OS === "web") { const draft = webStore.drafts.get(profileId); return draft ? { ...draft, orderedVideoIds: [...draft.orderedVideoIds] } : null; }
   const db = await getDb();
-  const row = await db.getFirstAsync<{ name: string; orderedVideoIds: string; updatedAt: number }>("SELECT name,orderedVideoIds,updatedAt FROM session_drafts WHERE profileId=?", [profileId]);
-  return row ? { name: row.name, orderedVideoIds: safeParseIds(row.orderedVideoIds), updatedAt: row.updatedAt } : null;
+  const row = await db.getFirstAsync<{ name: string; orderedVideoIds: string; updatedAt: number; targetMinutes: number | null }>("SELECT name,orderedVideoIds,updatedAt,targetMinutes FROM session_drafts WHERE profileId=?", [profileId]);
+  return row ? { name: row.name, orderedVideoIds: safeParseIds(row.orderedVideoIds), updatedAt: row.updatedAt, targetMinutes: normalizeSessionTarget(row.targetMinutes) } : null;
 }
 
 export async function writeSessionDraft(profileId: string, draft: SessionDraft): Promise<void> {
+  draft = { ...draft, targetMinutes: normalizeSessionTarget(draft.targetMinutes) };
   if (Platform.OS === "web") { webStore.drafts.set(profileId, { ...draft, orderedVideoIds: [...draft.orderedVideoIds] }); return; }
   const db = await getDb();
-  await db.runAsync("INSERT INTO session_drafts (profileId,name,orderedVideoIds,updatedAt) VALUES (?,?,?,?) ON CONFLICT(profileId) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt", [profileId, draft.name, JSON.stringify(draft.orderedVideoIds), draft.updatedAt]);
+  await db.runAsync("INSERT INTO session_drafts (profileId,name,orderedVideoIds,updatedAt,targetMinutes) VALUES (?,?,?,?,?) ON CONFLICT(profileId) DO UPDATE SET name=excluded.name,orderedVideoIds=excluded.orderedVideoIds,updatedAt=excluded.updatedAt,targetMinutes=excluded.targetMinutes", [profileId, draft.name, JSON.stringify(draft.orderedVideoIds), draft.updatedAt, draft.targetMinutes ?? null]);
 }
 
 export async function deleteSessionDraft(profileId: string): Promise<void> {
@@ -552,6 +640,7 @@ export async function deleteSessionDraft(profileId: string): Promise<void> {
 export async function deleteQueue(profileId: string, id: string): Promise<void> {
   if (Platform.OS === "web") {
     webStore.queues.delete(profileEntityKey(profileId, id));
+    webSessionRuns.delete(profileEntityKey(profileId, id));
     return;
   }
   const db = await getDb();
@@ -578,15 +667,27 @@ export async function followChannel(profileId: string, channel: FollowedChannel)
   if (Platform.OS === "web") {
     const key = profileEntityKey(profileId, channel.id);
     const existing = webStore.channels.get(key);
+    if (!existing) {
+      const participating = profileValues(webStore.channels, profileId).filter((source) => (webStore.sourceRules.get(profileEntityKey(profileId, source.id))?.mutedUntil ?? 0) <= Date.now());
+      if (participating.length >= PRODUCT_LIMITS.sourceFeedMaxSources) webStore.sourceRules.set(key, { ...defaultTodaySourceRule(profileId, channel.id), mutedUntil: LIBRARY_ONLY_UNTIL });
+    }
     webStore.channels.set(key, existing ? { ...channel, followedAt: existing.followedAt, source: existing.source } : { ...channel });
     return;
   }
   const db = await getDb();
+  await db.withTransactionAsync(async () => {
+  const existing = await db.getFirstAsync("SELECT id FROM followed_channels WHERE profileId=? AND id=?", [profileId, channel.id]);
   await db.runAsync(
     `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source,fetchedAt) VALUES (?,?,?,?,?,?,?,?)
      ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl,fetchedAt=excluded.fetchedAt`,
     [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source, channel.fetchedAt ?? null],
   );
+  if (!existing) await keepOverflowSourceInLibrary(db, profileId, channel.id);
+  });
+}
+
+async function keepOverflowSourceInLibrary(db: SQLite.SQLiteDatabase, profileId: string, sourceId: string): Promise<void> {
+  await db.runAsync(LIBRARY_OVERFLOW_RULE_SQL, [profileId, sourceId, LIBRARY_ONLY_UNTIL, Date.now(), profileId, Date.now(), PRODUCT_LIMITS.sourceFeedMaxSources]);
 }
 
 export async function followChannels(profileId: string, channels: FollowedChannel[]): Promise<void> {
@@ -598,11 +699,13 @@ export async function followChannels(profileId: string, channels: FollowedChanne
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     for (const channel of channels) {
+      const existing = await db.getFirstAsync("SELECT id FROM followed_channels WHERE profileId=? AND id=?", [profileId, channel.id]);
       await db.runAsync(
         `INSERT INTO followed_channels (profileId,id,title,description,thumbnailUrl,followedAt,source,fetchedAt) VALUES (?,?,?,?,?,?,?,?)
          ON CONFLICT(profileId,id) DO UPDATE SET title=excluded.title,description=excluded.description,thumbnailUrl=excluded.thumbnailUrl,fetchedAt=excluded.fetchedAt`,
         [profileId, channel.id, channel.title, channel.description ?? null, channel.thumbnailUrl, channel.followedAt, channel.source, channel.fetchedAt ?? null],
       );
+      if (!existing) await keepOverflowSourceInLibrary(db, profileId, channel.id);
     }
   });
 }
@@ -801,18 +904,22 @@ export async function getLatestTodayVideo(profileId: string, mediaId: string): P
 export async function listTodaySourceRules(profileId: string): Promise<TodaySourceRule[]> {
   if (Platform.OS === "web") return profileValues(webStore.sourceRules, profileId).map((rule) => ({ ...rule }));
   const db = await getDb();
-  const rows = await db.getAllAsync<Omit<TodaySourceRule, "hideLivestreams" | "hideUpcomingPremieres"> & { hideLivestreams: number; hideUpcomingPremieres: number }>("SELECT * FROM source_rules WHERE profileId = ?", [profileId]);
-  return rows.map((row) => ({ ...row, hideLivestreams: row.hideLivestreams === 1, hideUpcomingPremieres: row.hideUpcomingPremieres === 1 }));
+  const rows = await db.getAllAsync<Omit<TodaySourceRule, "hideLivestreams" | "hideUpcomingPremieres" | "favorite"> & { hideLivestreams: number; hideUpcomingPremieres: number; favorite: number }>("SELECT * FROM source_rules WHERE profileId = ?", [profileId]);
+  return rows.map((row) => ({ ...row, favorite: row.favorite === 1, hideLivestreams: row.hideLivestreams === 1, hideUpcomingPremieres: row.hideUpcomingPremieres === 1 }));
 }
 
 export async function upsertTodaySourceRule(rule: TodaySourceRule): Promise<void> {
-  if (Platform.OS === "web") { webStore.sourceRules.set(profileEntityKey(rule.profileId, rule.sourceId), { ...rule }); return; }
+  if (Platform.OS === "web") {
+    const activeOthers = profileValues(webStore.channels, rule.profileId).filter((source) => source.id !== rule.sourceId && (webStore.sourceRules.get(profileEntityKey(rule.profileId, source.id))?.mutedUntil ?? 0) <= Date.now()).length;
+    if ((rule.mutedUntil ?? 0) <= Date.now() && activeOthers >= PRODUCT_LIMITS.sourceFeedMaxSources) throw new Error("Today already includes 100 sources. Set another source to Library only first.");
+    webStore.sourceRules.set(profileEntityKey(rule.profileId, rule.sourceId), { ...rule }); return;
+  }
   const db = await getDb();
-  await db.runAsync(
-    `INSERT INTO source_rules (profileId,sourceId,minimumDurationSeconds,hideLivestreams,hideUpcomingPremieres,todayContributionLimit,mutedUntil,updatedAt) VALUES (?,?,?,?,?,?,?,?)
-     ON CONFLICT(profileId,sourceId) DO UPDATE SET minimumDurationSeconds=excluded.minimumDurationSeconds,hideLivestreams=excluded.hideLivestreams,hideUpcomingPremieres=excluded.hideUpcomingPremieres,todayContributionLimit=excluded.todayContributionLimit,mutedUntil=excluded.mutedUntil,updatedAt=excluded.updatedAt`,
-    [rule.profileId, rule.sourceId, rule.minimumDurationSeconds, rule.hideLivestreams ? 1 : 0, rule.hideUpcomingPremieres ? 1 : 0, rule.todayContributionLimit, rule.mutedUntil, rule.updatedAt],
+  const result = await db.runAsync(
+    SAVE_SOURCE_RULE_SQL,
+    [rule.profileId, rule.sourceId, rule.minimumDurationSeconds, rule.hideLivestreams ? 1 : 0, rule.hideUpcomingPremieres ? 1 : 0, rule.todayContributionLimit, rule.mutedUntil, rule.updatedAt, rule.favorite ? 1 : 0, rule.mutedUntil ?? 0, Date.now(), rule.profileId, rule.sourceId, Date.now(), PRODUCT_LIMITS.sourceFeedMaxSources],
   );
+  if (!result.changes) throw new Error("Today already includes 100 sources. Set another source to Library only first.");
 }
 
 function mapTodayItemRow(row: TodayItemRow): TodaySnapshotItem {
@@ -833,6 +940,7 @@ export async function clearAllData(profileId: string): Promise<void> {
     clearProfileMap(webStore.saved, profileId);
     clearProfileMap(webStore.resume, profileId);
     clearProfileMap(webStore.queues, profileId);
+    clearProfileMap(webSessionRuns, profileId);
     webStore.drafts.delete(profileId);
     clearProfileMap(webStore.channels, profileId);
     clearProfileMap(webStore.todaySnapshots, profileId);
@@ -867,6 +975,7 @@ export async function resetAllFrameDatabaseData(): Promise<void> {
     webStore.saved.clear();
     webStore.resume.clear();
     webStore.queues.clear();
+    webSessionRuns.clear();
     webStore.drafts.clear();
     webStore.channels.clear();
     webStore.todaySnapshots.clear();

@@ -7,7 +7,7 @@ import { createTodayService, type TodayFeedReader } from "./todayService";
 
 const now = new Date(2026, 8, 6, 12).getTime();
 const sourceId = "UCabcdefghijklmnopqrstuv";
-function candidate(id: string = "video000001"): CachedTodayCandidate { return { id, title: id, channelId: sourceId, channelTitle: "Source", sourceId, sourceTitle: "Source", thumbnailUrl: "https://example.com/thumb.jpg", publishedAt: new Date(now).toISOString(), durationSeconds: 120, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now }; }
+function candidate(id: string = "video000001"): CachedTodayCandidate { return { id, title: id, channelId: sourceId, channelTitle: "Source", sourceId, sourceTitle: "Source", thumbnailUrl: "https://example.com/thumb.jpg", publishedAt: new Date(now).toISOString(), durationSeconds: 600, description: "", madeForKids: false, isLivestream: false, isUpcomingPremiere: false, fetchedAt: now }; }
 function successReader(items: CachedTodayCandidate[] = [candidate()]): TodayFeedReader {
   return { getCachedFeeds: async () => ({ status: "success", candidates: items, response: { state: items.length ? "fresh" : "empty", freshness: "fresh", feeds: [{ source: { provider: "youtube", providerSourceId: sourceId, handle: null, displayName: "Source", thumbnailUrl: null }, freshness: items.length ? "fresh" : "empty", items: items.map((item) => ({ provider: "youtube", providerMediaId: item.id, title: item.title, description: item.description ?? "", thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, isLivestream: item.isLivestream, isUpcomingPremiere: item.isUpcomingPremiere, madeForKids: item.madeForKids ?? null, fetchedAt: new Date(item.fetchedAt).toISOString() })) }], unavailableSourceIds: [], fetchedAt: items.length ? new Date(now).toISOString() : null } }) };
 }
@@ -77,7 +77,7 @@ describe("Today snapshot service", () => {
   });
 });
 
- test("legacy profiles over 25 sources keep their snapshot and receive actionable recovery without a feed request", async () => {
+ test("legacy profiles over 100 sources keep their snapshot and receive actionable recovery without a feed request", async () => {
   const repository = new MemoryTodayRepository();
   const period = getTodayPeriod(now);
   const snapshot: TodaySnapshot = { profileId: "owner", periodKey: period.key, createdAt: now, cacheFetchedAt: now, freshness: "fresh", items: [] };
@@ -85,9 +85,60 @@ describe("Today snapshot service", () => {
   let calls = 0;
   const reader = successReader();
   const service = createTodayService(repository, { getCachedFeeds: async (...args) => { calls++; return reader.getCachedFeeds(...args); } });
-  const ids = Array.from({ length: 26 }, (_, i) => `UC${String(i).padStart(22, "0")}`);
+  const ids = Array.from({ length: 101 }, (_, i) => `UC${String(i).padStart(22, "0")}`);
   const blocked = await service.load({ profileId: "owner", followedSourceIds: ids, now, refreshExisting: true });
   expect(blocked.state).toBe("source_limit"); expect(blocked.snapshot).toBe(snapshot); expect(calls).toBe(0);
-  expect((await service.load({ profileId: "owner", followedSourceIds: ids.slice(0, 25), now, refreshExisting: true })).state).not.toBe("source_limit");
+  expect((await service.load({ profileId: "owner", followedSourceIds: ids.slice(0, 100), now, refreshExisting: true })).state).not.toBe("source_limit");
   expect(calls).toBe(1);
+});
+
+test("library-only sources are not fetched and toggling participation never refills an existing day", async () => {
+  const repository = new MemoryTodayRepository();
+  let muted = false;
+  repository.listRules = async () => muted ? [{ profileId: "owner", sourceId, minimumDurationSeconds: 0, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: Number.MAX_SAFE_INTEGER, updatedAt: now }] : [];
+  let calls = 0;
+  const reader = successReader();
+  const service = createTodayService(repository, { async getCachedFeeds(ids) { calls++; return reader.getCachedFeeds(ids); } });
+  muted = true;
+  expect((await service.load({ profileId: "owner", followedSourceIds: [sourceId], now })).state).toBe("no_sources");
+  expect(calls).toBe(0);
+  muted = false;
+  const first = await service.load({ profileId: "owner", followedSourceIds: [sourceId], now });
+  muted = true;
+  const disabled = await service.load({ profileId: "owner", followedSourceIds: [sourceId], now, refreshExisting: true });
+  expect(disabled.snapshot).toEqual(first.snapshot);
+  muted = false;
+  const restored = await service.load({ profileId: "owner", followedSourceIds: [sourceId], now });
+  expect(restored.snapshot).toEqual(first.snapshot);
+  expect(calls).toBe(1);
+});
+
+
+test("favorite changes affect future selection only, including an explicit metadata refresh", async () => {
+  const repository = new MemoryTodayRepository();
+  const secondId = "UCzyxwvutsrqponmlkjihgfe";
+  const videos = [candidate("video000001"), { ...candidate("video000002"), sourceId: secondId, channelId: secondId }];
+  const service = createTodayService(repository, successReader(videos));
+  const first = await service.load({ profileId: "owner", followedSourceIds: [sourceId, secondId], now });
+  repository.listRules = async () => [{ profileId: "owner", sourceId: secondId, favorite: true, minimumDurationSeconds: 240, hideLivestreams: true, hideUpcomingPremieres: true, todayContributionLimit: 2, mutedUntil: null, updatedAt: now }];
+  const refreshed = await service.load({ profileId: "owner", followedSourceIds: [sourceId, secondId], now, refreshExisting: true });
+  expect(refreshed.snapshot?.items.map((item) => item.id)).toEqual(first.snapshot?.items.map((item) => item.id));
+  expect(repository.finalizations).toBe(1);
+});
+
+test("selection size takes effect at the next daily boundary without refilling a handled day", async () => {
+  const repository = new MemoryTodayRepository();
+  const reader = successReader([candidate("video000001"), candidate("video000002")]);
+  const service = createTodayService(repository, reader);
+  const first = await service.load({ profileId: "owner", followedSourceIds: [sourceId], maxItems: 1, now });
+  expect(first.snapshot?.items).toHaveLength(1);
+  const key = `owner:${getTodayPeriod(now).key}`;
+  repository.snapshots.set(key, { ...first.snapshot!, items: first.snapshot!.items.map((item) => ({ ...item, disposition: "dismissed" })) });
+  const sameDay = await service.load({ profileId: "owner", followedSourceIds: [sourceId], maxItems: 12, now: now + 1000, refreshExisting: true });
+  expect(sameDay.snapshot?.items).toHaveLength(1);
+  expect(sameDay.snapshot?.items[0].disposition).toBe("dismissed");
+  const tomorrow = await service.load({ profileId: "owner", followedSourceIds: [sourceId], maxItems: 2, now: getTodayPeriod(now).endsAt + 1000 });
+  expect(tomorrow.snapshot?.items).toHaveLength(2);
+  const other = await service.load({ profileId: "other", followedSourceIds: [sourceId], maxItems: 1, now });
+  expect(other.snapshot?.items).toHaveLength(1);
 });

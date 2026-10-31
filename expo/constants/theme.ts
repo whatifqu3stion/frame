@@ -85,6 +85,8 @@ export const darkPalette: FramePalette = createPalette(true, "blue");
 export const palette = lightPalette;
 
 export const watchPalette = {
+  litWall: "#443A31",
+  darkLitWall: "#24201C",
   wall: "#181512",
   stage: "#0D0C0B",
   surface: "#24201C",
@@ -102,6 +104,7 @@ export const watchPalette = {
 export const fonts = {
   serif: "LibreCaslonText_400Regular",
   serifBold: "LibreCaslonText_700Bold",
+  serifItalic: "LibreCaslonText_400Regular_Italic",
   sans: "HankenGrotesk_400Regular",
   sansMedium: "HankenGrotesk_500Medium",
   sansSemibold: "HankenGrotesk_600SemiBold",
@@ -122,7 +125,9 @@ export const spacing = {
 export const radii = {
   small: 8,
   control: 10,
-  media: 6,
+  media: 0,
+  mount: 2,
+  source: 6,
   card: 16,
   large: 22,
   pill: 999,

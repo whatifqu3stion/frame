@@ -29,6 +29,7 @@ import {
   type SchemaMetadata,
 } from "./migrations";
 import { DEFAULT_OWNER_PROFILE_ID } from "../models/profile";
+import { EXPIRE_LIBRARY_METADATA_SQL } from "../domain/metadataRetention";
 
 function sqliteAdapter(database: Database): MigrationExecutor {
   return {
@@ -68,6 +69,27 @@ const LEGACY_COLUMNS: SchemaMetadata = {
 };
 
 describe("database version 1 migration", () => {
+  test("repairs early native version 12 metadata columns without losing bookmarks or progress", async () => {
+    const database = new Database(":memory:");
+    try {
+      createRepresentativeLegacyDatabase(database);
+      for (const sql of buildVersion1MigrationPlan(LEGACY_COLUMNS)) database.exec(sql);
+      // The early native schema advanced its version without the later v5/v6 additions.
+      database.exec("PRAGMA user_version=12");
+      await migrateDatabase(sqliteAdapter(database));
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: DATABASE_SCHEMA_VERSION });
+      expect(database.query("SELECT id,savedAt,fetchedAt,legacyWatchLaterAddedAt FROM saved_videos ORDER BY id").all()).toEqual([
+        { id: "video-a", savedAt: 10, fetchedAt: null, legacyWatchLaterAddedAt: null },
+        { id: "video-b", savedAt: 13, fetchedAt: null, legacyWatchLaterAddedAt: 13 },
+      ]);
+      expect(database.query("SELECT timestampSeconds,updatedAt FROM resume_positions").get()).toEqual({ timestampSeconds: 20, updatedAt: 11 });
+      expect(database.query("SELECT name,orderedVideoIds FROM queues").get()).toEqual({ name: "Evening", orderedVideoIds: '["video-a"]' });
+      for (const sql of EXPIRE_LIBRARY_METADATA_SQL) database.query(sql).run(0, Date.now());
+      await migrateDatabase(sqliteAdapter(database));
+      expect(database.query("SELECT COUNT(*) AS n FROM saved_videos").get()).toEqual({ n: 2 });
+      expect(database.query("SELECT COUNT(*) AS n FROM watch_later").get()).toEqual({ n: 0 });
+    } finally { database.close(); }
+  });
   test("executes fresh schema creation against SQLite", async () => {
     const database = new Database(":memory:");
     try {

@@ -1,7 +1,8 @@
+import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";

@@ -1,3 +1,4 @@
+import Text from "@/components/FrameText";
 import { boundedReading } from "@/constants/layout";
 import { useQueryClient } from "@tanstack/react-query";
 import { currentImportDraft, pendingImportIds, type GoogleImportDraft } from "@/domain/googleImportDraft";
@@ -9,7 +10,7 @@ import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -197,7 +198,7 @@ function GoogleImportContent() {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: palette.wall },
+    screen: { flex: 1, backgroundColor: "transparent" },
     dock: { ...boundedReading, gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surfaceHigh },
     content: { ...boundedReading, padding: spacing.page, gap: spacing.sm, paddingBottom: spacing.xxl },
     intro: { paddingBottom: spacing.md }, title: { ...type.heading, fontSize: 28, lineHeight: 34, marginTop: spacing.sm }, body: { ...type.bodySoft, color: palette.inkMuted, marginTop: spacing.sm },

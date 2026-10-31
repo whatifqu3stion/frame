@@ -13,7 +13,7 @@ export default function OutcomeIcon({ confirmed, busy = false, color, size = 18,
   const outcome = busy ? settled.current : confirmed;
   useEffect(() => { if (!busy) settled.current = confirmed; }, [busy, confirmed]);
   const complete = confirmed && !busy;
-  return <MotionView changeKey={outcome} active={focused && complete} fromScale={0.86} duration={motion.confirm}
+  return <MotionView changeKey={outcome} active={focused && complete} fromScale={0.7} distance={-3} duration={motion.confirm}
     accessible={false} pointerEvents="none" style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
     {busy ? <ActivityIndicator size="small" color={color} /> : confirmed ? children : idle}
   </MotionView>;

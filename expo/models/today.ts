@@ -12,6 +12,7 @@ export type CachedTodayCandidate = Video & {
 };
 
 export type TodaySourceRule = {
+  favorite?: boolean;
   profileId: string;
   sourceId: string;
   minimumDurationSeconds: number;

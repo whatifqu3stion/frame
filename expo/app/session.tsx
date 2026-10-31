@@ -1,3 +1,12 @@
+import Text from "@/components/FrameText";
+import MotionView from "@/components/motion/MotionView";
+import SelectionArtwork from "@/components/motion/SelectionArtwork";
+import ProgrammeArtwork from "@/components/ProgrammeArtwork";
+import { motion } from "@/constants/motion";
+import Heading from "@/components/Heading";
+import InlineHelp from "@/components/InlineHelp";
+import { resetSessionRun } from "@/db/database";
+import { isLongFormVideo } from "@/domain/contentPolicy";
 import { boundedCollection } from "@/constants/layout";
 import MediaImage from "@/components/MediaImage";
 import TextField from "@/components/TextField";
@@ -13,7 +22,7 @@ import { expireVideo } from "@/domain/metadataRetention";
 import { router, useLocalSearchParams, useNavigation, type Href } from "expo-router";
 import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -22,7 +31,7 @@ import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/cons
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { formatDuration } from "@/services/youtube";
-import { defaultSessionName, sessionRuntime } from "@/domain/sessionFlow";
+import { defaultSessionName, normalizeSessionTarget, SESSION_TARGET_MINUTES, sessionAdditionSummary, sessionBudgetSummary, sessionRuntime } from "@/domain/sessionFlow";
 import type { Video } from "@/types";
 
 export default function SessionBuilder() {
@@ -41,12 +50,14 @@ export default function SessionBuilder() {
   const persistLock = useRef(false);
   const savedDraft = useRef(false);
   const [search, setSearch] = useState("");
+  const [budgetMinutes, setBudgetMinutes] = useState<number | null>(30);
+  const [customMinutes, setCustomMinutes] = useState("30");
   const [name, setName] = useState<string>("");
   const [hydratedProfile, setHydratedProfile] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [draftState, setDraftState] = useState<"saving" | "saved" | "error" | null>(null);
   const [draftAttempt, setDraftAttempt] = useState(0);
-  const draftRevision = JSON.stringify([name, selected]);
+  const draftRevision = JSON.stringify([name, selected, budgetMinutes]);
   const [savedRevision, setSavedRevision] = useState<string | null>(null);
 
   const [destination, setDestination] = useState<Href | null>(null);
@@ -55,7 +66,7 @@ export default function SessionBuilder() {
   const canLeaveScope = hydratedProfile === activeProfileId && !profileSwitching && prefs.hasCompletedOnboarding;
   const scope = useRef({ profile: activeProfileId, active: canLeaveScope });
   scope.current = { profile: activeProfileId, active: canLeaveScope };
-  const dirty = Boolean(existingSession ? (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",")) : !id && (name || selected.length) && savedRevision !== draftRevision);
+  const dirty = Boolean(existingSession ? (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",") || budgetMinutes !== normalizeSessionTarget(existingSession.targetMinutes)) : !id && (name || selected.length || budgetMinutes) && savedRevision !== draftRevision);
   const confirmExit = useDiscardChanges(dirty, `${activeProfileId}:${id ?? "new"}`, canLeaveScope && !isSaving && !destination);
   usePreventRemove(canLeaveScope && !destination && (dirty || isSaving), ({ data }) => {
     // Wait for a write to finish before honoring a user exit.
@@ -72,6 +83,8 @@ export default function SessionBuilder() {
     if (id && !existingSession) return;
     setSelected((id ? existingSession?.orderedVideoIds : sessionDraft?.orderedVideoIds)?.slice(0, PRODUCT_LIMITS.sessionDraftMaxItems) ?? []);
     setName((id ? existingSession?.name : sessionDraft?.name) ?? "");
+    setBudgetMinutes((normalizeSessionTarget(id ? existingSession?.targetMinutes : sessionDraft?.targetMinutes) ?? 30));
+    setCustomMinutes(String(normalizeSessionTarget(id ? existingSession?.targetMinutes : sessionDraft?.targetMinutes) ?? 30));
     setHydratedProfile(activeProfileId);
   }, [activeProfileId, existingSession, hydratedProfile, id, sessionDraft, sessionDraftLoading, libraryError]);
 
@@ -80,13 +93,13 @@ export default function SessionBuilder() {
     if (id || hydratedProfile !== activeProfileId || isSaving || destination || savedDraft.current) return;
     let current = true;
     setDraftState("saving");
-    const write = !name && !selected.length
+    const write = !name && !selected.length && (budgetMinutes === 30 || budgetMinutes === null)
       ? hasDraft ? clearSessionDraft() : Promise.resolve()
-      : saveSessionDraft({ name, orderedVideoIds: selected });
+      : saveSessionDraft({ name, orderedVideoIds: selected, targetMinutes: budgetMinutes });
     void write.then(() => { if (current) { setSavedRevision(draftRevision); setDraftState("saved"); } })
       .catch(() => { if (current) setDraftState("error"); });
     return () => { current = false; };
-  }, [activeProfileId, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected, draftAttempt, draftRevision, isSaving, destination]);
+  }, [activeProfileId, budgetMinutes, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected, draftAttempt, draftRevision, isSaving, destination]);
 
   const selectedMedia = useQuery({
     queryKey: ["session-editor-media", activeProfileId, selected.join(",")], networkMode: "always",
@@ -98,11 +111,10 @@ export default function SessionBuilder() {
     ...savedVideos,
   ].map((video) => [video.id, expireVideo(video, Date.now())])).values()], [savedVideos, selectedMedia.data]);
 
-  const filteredPool = useMemo(() => pool.filter((video) => `${video.title} ${video.channelTitle}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [pool, search]);
+  const filteredPool = useMemo(() => pool.filter((video) => (selected.includes(video.id) || isLongFormVideo(video)) && `${video.title} ${video.channelTitle}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [pool, search, selected]);
 
   const runtime = useMemo(() => sessionRuntime(selected, pool), [pool, selected]);
   const durationSummary = `${runtime.seconds > 0 ? `${runtime.unknown ? "At least " : ""}${formatDuration(runtime.seconds)}` : "Duration unavailable"}${runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}`;
-  const finishTime = runtime.unknown === 0 && runtime.seconds > 0 ? new Date(Date.now() + runtime.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
 
   const move = useCallback((videoId: string, direction: -1 | 1): void => {
     const next = [...selectedRef.current];
@@ -124,21 +136,26 @@ export default function SessionBuilder() {
   const persistSession = useCallback(async (): Promise<string | null> => {
     if (persistLock.current || !requirePurchase("sessions")) return null;
     const sessionName = name.trim() || existingSession?.name || defaultName;
+    if (!budgetMinutes) { Alert.alert("Choose a duration", "Enter a whole number of minutes from 1 to 1440."); return null; }
     if (selected.length === 0) {
       Alert.alert("Choose a video", "A session needs at least one video.");
       return null;
     }
 
+    if (selected.some((id) => !isLongFormVideo(pool.find((video) => video.id === id)))) {
+      Alert.alert("Long-form videos only", "Remove short-form videos or refresh unavailable details in Saved before saving. Every video must be at least four minutes long.");
+      return null;
+    }
     persistLock.current = true;
     setIsSaving(true);
     try {
       if (existingSession) {
         await renameSession(existingSession.id, sessionName);
-        await updateSessionVideos(existingSession.id, selected);
+        await updateSessionVideos(existingSession.id, selected, budgetMinutes);
         return existingSession.id;
       }
-      await saveSessionDraft({ name: sessionName, orderedVideoIds: selected });
-      const created = await createSession(sessionName, selected);
+      await saveSessionDraft({ name: sessionName, orderedVideoIds: selected, targetMinutes: budgetMinutes });
+      const created = await createSession(sessionName, selected, budgetMinutes);
       if (created) {
         savedDraft.current = true;
         try { await clearSessionDraft(); }
@@ -152,20 +169,21 @@ export default function SessionBuilder() {
       persistLock.current = false;
       setIsSaving(false);
     }
-  }, [clearSessionDraft, createSession, defaultName, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos]);
+  }, [budgetMinutes, clearSessionDraft, createSession, defaultName, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos, pool]);
 
   const save = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
     const sessionId = await persistSession();
     if (!sessionId || !alive.current || !scope.current.active || scope.current.profile !== activeProfileId) return;
     done(existingSession ? "commit" : "milestone", !existingSession || existingSession.name !== name.trim() || existingSession.orderedVideoIds.join(",") !== selected.join(","));
-    setDestination({ pathname: "/session/[id]", params: { id: sessionId } });
+    setDestination({ pathname: "/session/[id]", params: { id: sessionId, assembled: "1" } });
   }, [activeProfileId, existingSession, feedback, name, persistSession, selected]);
 
   const saveAndBegin = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
     const sessionId = await persistSession();
     if (!sessionId || !alive.current || !scope.current.active || scope.current.profile !== activeProfileId) return;
+    try { await resetSessionRun(activeProfileId, sessionId); } catch { Alert.alert("Couldn’t start session", "Your plan is saved. Open it from Saved to try again."); return; }
     done("commit");
     setDestination({
       pathname: FRAME_PLAYBACK_ROUTE,
@@ -186,8 +204,8 @@ export default function SessionBuilder() {
 
   const header = (
     <View style={styles.header}>
-      <Text style={styles.title} accessibilityRole="header">{existingSession ? "Edit session" : "New session"}</Text>
-      <Text style={styles.subtitle}>Pick up to {PRODUCT_LIMITS.sessionDraftMaxItems} videos and choose their order. {existingSession ? "Save your changes before leaving." : "Your draft saves automatically on this device."}</Text>
+      <Heading level={1} style={styles.title}>{existingSession ? "Edit session" : "New session"}</Heading>
+      <Text style={styles.subtitle}>{existingSession ? "Changes apply when you save." : "Your draft saves automatically."}</Text>
       {!id && !isSaving && draftState ? <View accessibilityLiveRegion="polite">
         <Text style={[type.bodySoft, { marginTop: spacing.sm, color: draftState === "error" ? palette.danger : palette.inkMuted }]}>{draftState !== "error" && savedRevision !== draftRevision ? "Saving draft…" : draftState === "error" ? "Draft couldn’t save. Try again before leaving." : "Draft saved on this device"}</Text>
         {draftState === "error" ? <Pressable accessibilityRole="button" onPress={() => setDraftAttempt((value) => value + 1)} style={{ minHeight: 48, justifyContent: "center" }}><Text style={type.label}>Retry saving draft</Text></Pressable> : null}
@@ -204,20 +222,36 @@ export default function SessionBuilder() {
         accessibilityLabel="Session name"
         maxLength={64}
       />
+      <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+        <Text style={type.label}>Viewing time</Text>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Session duration" style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+          {SESSION_TARGET_MINUTES.map((minutes) => <Pressable key={minutes ?? "none"} disabled={isSaving} accessibilityRole="radio" aria-checked={budgetMinutes === minutes} accessibilityState={{ checked: budgetMinutes === minutes }} onPress={() => { setBudgetMinutes(minutes); setCustomMinutes(String(minutes)); }} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, backgroundColor: budgetMinutes === minutes ? palette.activeSoft : "transparent" }}><Text style={[type.label, { color: budgetMinutes === minutes ? palette.active : palette.inkMuted }]}>{minutes} min</Text></Pressable>)}
+        </View>
+        <Text style={type.bodySoft}>Custom minutes · 1–1440</Text>
+        <TextField accessibilityLabel="Custom session duration in minutes" placeholder="Custom minutes (1–1440)" keyboardType="number-pad" value={customMinutes} onChangeText={(value) => { setCustomMinutes(value); setBudgetMinutes(normalizeSessionTarget(Number(value))); }} maxLength={4} />
+        {budgetMinutes === null ? <Text style={[type.bodySoft, { color: palette.danger }]}>Choose a whole number of minutes from 1 to 1440.</Text> : null}
+        <InlineHelp label="How session timing works">
+          <Text style={type.bodySoft}>Only playback counts. At your limit, Frame pauses and offers to finish the current video. Profile limits still apply.</Text>
+          {budgetMinutes ? <Text style={type.bodySoft}>{sessionBudgetSummary(runtime, budgetMinutes)}</Text> : null}
+        </InlineHelp>
+      </View>
       {selected.length ? (
         <View style={styles.tray}>
-          <Text style={styles.trayLabel}>Video order · {selected.length}/{PRODUCT_LIMITS.sessionDraftMaxItems}</Text>
+          <ProgrammeArtwork videos={selected.map((videoId) => pool.find((video) => video.id === videoId))} enter />
+          <Text style={styles.trayLabel}>Video order · {selected.length} selected</Text>
           {selected.map((videoId, index) => {
             const video = pool.find((candidate) => candidate.id === videoId);
-            return <PositionedRow transitionKey={selected.join(",")} key={videoId} style={styles.trayRow}>
+            return <PositionedRow transitionKey={selected.join(",")} key={videoId}><MotionView enter distance={16} duration={motion.reorder} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
-              <View style={styles.trayMedia}><MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={styles.trayTitle}>{video?.title ?? "Video details unavailable"}</Text><Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable"}</Text></View></View>
+              <View style={styles.trayMedia}><MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={styles.trayTitle}>{video?.title ?? "Video details unavailable"}</Text><Text style={styles.duration}>{!isLongFormVideo(video) ? "Unavailable · remove or verify a 4+ minute video" : video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable"}</Text></View></View>
+              <View style={styles.trayControls}>
               <Pressable onPress={() => move(videoId, -1)} disabled={index === 0 || isSaving} accessibilityState={{ disabled: index === 0 || isSaving }} style={[styles.trayControl, (index === 0 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} earlier`}><ChevronUp size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} accessibilityState={{ disabled: index === selected.length - 1 || isSaving }} style={[styles.trayControl, (index === selected.length - 1 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
-            </PositionedRow>;
+              </View>
+            </MotionView></PositionedRow>;
           })}
-          <Text style={styles.trayFoot}>{durationSummary}{finishTime ? ` · Ends around ${finishTime} without breaks` : " · Finish time unavailable"}</Text>
+          <MotionView changeKey={durationSummary} distance={4}><Text style={styles.trayFoot}>{durationSummary} of video in your plan</Text></MotionView>
         </View>
       ) : null}
       <Text style={styles.pickLabel}>Choose videos</Text>
@@ -245,6 +279,7 @@ export default function SessionBuilder() {
               disabled={isDisabled || isSaving}
               style={({ pressed }) => [styles.row, isDisabled && styles.rowDisabled, pressed && styles.pressed]}
               accessibilityRole="checkbox"
+              aria-checked={isSelected}
               accessibilityState={{ checked: isSelected, disabled: isDisabled || isSaving }}
               accessibilityLabel={`${item.title}${isSelected ? `, selection ${order}` : ""}`}
               testID={`session-pick-${item.id}`}
@@ -252,11 +287,12 @@ export default function SessionBuilder() {
               <View style={[styles.indexBox, isSelected && styles.indexBoxOn]}>
                 {isSelected ? <Text style={styles.indexText}>{order}</Text> : null}
               </View>
-              <MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
+              <SelectionArtwork selected={isSelected}><MediaImage source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" /></SelectionArtwork>
               <View style={styles.videoCopy}>
                 <Text style={type.caption} numberOfLines={1}>{item.channelTitle || "Source"}</Text>
                 <Text style={[styles.rowTitle, isSelected && styles.selectedTitle]}>{item.title}</Text>
                 <Text style={styles.duration}>{item.durationSeconds ? formatDuration(item.durationSeconds) : "Duration unavailable"}</Text>
+                {budgetMinutes && !isSelected ? <Text style={type.bodySoft}>{sessionAdditionSummary(runtime, item.durationSeconds, budgetMinutes)}</Text> : null}
               </View>
             </Pressable>
           );
@@ -273,8 +309,8 @@ export default function SessionBuilder() {
       {hydratedProfile === activeProfileId && selected.length > 0 ? (
         <View style={[styles.footer, boundedCollection, { paddingLeft: spacing.lg + insets.left, paddingRight: spacing.lg + insets.right, paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.summary}>
-            <Text style={type.caption}>{selected.length} video{selected.length === 1 ? "" : "s"}</Text>
-            <Text style={styles.total}>{durationSummary}</Text>
+            <Text style={type.label}>{budgetMinutes ? `Viewing time: ${budgetMinutes} min` : "Choose a viewing time"}</Text>
+            <Text style={type.bodySoft}>Queue: {selected.length} video{selected.length === 1 ? "" : "s"} · {durationSummary}</Text>
           </View>
           <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" accessibilityLabel="Save session" accessibilityState={{ busy: isSaving, disabled: isSaving }} testID="save-session">
             <Save size={16} color={palette.accent} strokeWidth={1.8} />
@@ -292,9 +328,9 @@ export default function SessionBuilder() {
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    thumbnail: { width: 72, aspectRatio: 16 / 9, borderRadius: radii.media }, videoCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 120 }, trayMedia: { flexGrow: 1, flexBasis: "80%", flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+    thumbnail: { width: 72, aspectRatio: 16 / 9, borderRadius: radii.media }, videoCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 120 }, trayMedia: { flexGrow: 1, flexShrink: 1, flexBasis: 240, flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
     searchField: { marginTop: spacing.sm },
-    screen: { flex: 1, backgroundColor: palette.wall },
+    screen: { flex: 1, backgroundColor: "transparent" },
     content: { flexGrow: 1, paddingHorizontal: spacing.lg },
     header: { paddingBottom: spacing.xl },
     eyebrow: { ...type.caption, color: palette.accent },
@@ -312,7 +348,6 @@ function createStyles(palette: FramePalette, type: FrameType) {
     duration: { ...type.caption, color: palette.inkMuted },
     footer: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: palette.surfaceHigh, borderTopWidth: 1, borderTopColor: palette.border },
     summary: { width: "100%" },
-    total: { ...type.heading, marginTop: 2 },
     saveBtn: { flexGrow: 1, flexBasis: 140, minHeight: 48, flexDirection: "row", gap: spacing.sm, padding: spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.activeSoft },
     saveText: { ...type.label, color: palette.accent, flexShrink: 1 },
     beginBtn: { flexGrow: 1, flexBasis: 140, paddingVertical: spacing.sm, minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
@@ -322,6 +357,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     trayRow: { minHeight: 48, flexDirection: "row", flexWrap: "wrap", paddingVertical: spacing.sm, alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     trayNumber: { ...type.caption, color: palette.accent, width: 24 },
     trayTitle: { ...type.label },
+    trayControls: { flexDirection: "row", flexShrink: 0, marginLeft: "auto" },
     trayControl: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     trayFoot: { ...type.caption, color: palette.inkMuted, marginTop: spacing.md },
     pickLabel: { ...type.label, marginTop: spacing.xl },

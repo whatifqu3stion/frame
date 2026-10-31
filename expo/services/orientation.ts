@@ -1,30 +1,14 @@
 import * as ScreenOrientation from "expo-screen-orientation";
 
-type OrientationOwner = "app" | "watch" | "fullscreen";
+import { resolveOrientationLock, type OrientationOwner } from "@/domain/orientationPolicy";
 
-type OrientationRequest = {
-  lock: ScreenOrientation.OrientationLock;
-  priority: number;
-};
-
-const requests = new Map<OrientationOwner, OrientationRequest>();
+const requests = new Map<OrientationOwner, ScreenOrientation.OrientationLock>();
 let transitionChain: Promise<void> = Promise.resolve();
 let transitionVersion = 0;
 
-function effectiveLock(): ScreenOrientation.OrientationLock {
-  let selected: OrientationRequest = {
-    lock: ScreenOrientation.OrientationLock.PORTRAIT_UP,
-    priority: 0,
-  };
-  for (const request of requests.values()) {
-    if (request.priority > selected.priority) selected = request;
-  }
-  return selected.lock;
-}
-
 function scheduleTransition(): Promise<void> {
   const version = ++transitionVersion;
-  const lock = effectiveLock();
+  const lock = resolveOrientationLock(requests, ScreenOrientation.OrientationLock.DEFAULT);
   transitionChain = transitionChain
     .catch(() => {})
     .then(async (): Promise<void> => {
@@ -46,8 +30,7 @@ export function setOrientationRequest(
   owner: OrientationOwner,
   lock: ScreenOrientation.OrientationLock,
 ): Promise<void> {
-  const priority = owner === "fullscreen" ? 2 : owner === "watch" ? 1 : 0;
-  requests.set(owner, { lock, priority });
+  requests.set(owner, lock);
   return scheduleTransition();
 }
 

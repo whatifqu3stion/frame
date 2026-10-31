@@ -87,8 +87,8 @@ export function statusFromRecords(limit: ProfilePlaybackLimitRecord | null, usag
   }
   const remainingSeconds = Math.max(0, limit.dailyLimitMinutes * 60 - usage.consumedSeconds);
   const pendingChange = pendingFromLimit(limit);
-  if (remainingSeconds === 0) return { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: limit.dailyLimitMinutes, ...(pendingChange ? { pendingChange } : {}) };
-  return { kind: "limited", canPlay: true, remainingSeconds, allowanceMinutes: limit.dailyLimitMinutes, ...(pendingChange ? { pendingChange } : {}) };
+  if (remainingSeconds === 0) return { kind: "complete", canPlay: false, remainingSeconds: 0, allowanceMinutes: limit.dailyLimitMinutes, commitment: limit.commitment !== false, ...(pendingChange ? { pendingChange } : {}) };
+  return { kind: "limited", canPlay: true, remainingSeconds, allowanceMinutes: limit.dailyLimitMinutes, commitment: limit.commitment !== false, ...(pendingChange ? { pendingChange } : {}) };
 }
 
 export function claimWarning(usage: ProfilePlaybackUsageRecord, status: ViewingAllowanceStatus): { usage: ProfilePlaybackUsageRecord; warning?: ViewingAllowanceWarning } {
@@ -106,8 +106,10 @@ export function isOwnerRelaxation(currentMinutes: number | null, requestedMinute
 export function requestLimitChange(profile: Profile, current: ProfilePlaybackLimitRecord | null, allowance: ViewingAllowance, now: number): ProfilePlaybackLimitRecord {
   const requestedMinutes = minutesFromAllowance(allowance);
   const currentMinutes = current?.dailyLimitMinutes ?? null;
-  if (profile.role === "owner" && isOwnerRelaxation(currentMinutes, requestedMinutes)) {
-    return { profileId: profile.id, dailyLimitMinutes: currentMinutes, pendingDailyLimitMinutes: requestedMinutes, pendingActivatesAt: now + OWNER_RELAXATION_DELAY_MS, updatedAt: now };
+  // An existing commitment cannot be disabled while its limit is active.
+  const commitment = currentMinutes !== null ? current?.commitment !== false : allowance.mode === "dailyLimit" && allowance.commitment !== false;
+  if (profile.role === "owner" && commitment && isOwnerRelaxation(currentMinutes, requestedMinutes)) {
+    return { profileId: profile.id, commitment, dailyLimitMinutes: currentMinutes, pendingDailyLimitMinutes: requestedMinutes, pendingActivatesAt: now + OWNER_RELAXATION_DELAY_MS, updatedAt: now };
   }
-  return { profileId: profile.id, dailyLimitMinutes: requestedMinutes, pendingDailyLimitMinutes: null, pendingActivatesAt: null, updatedAt: now };
+  return { profileId: profile.id, commitment, dailyLimitMinutes: requestedMinutes, pendingDailyLimitMinutes: null, pendingActivatesAt: null, updatedAt: now };
 }

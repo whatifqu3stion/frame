@@ -1,6 +1,6 @@
+import RecoveryScreen from "@/components/RecoveryScreen";
 import { Component, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type as typography } from "@/constants/theme";
+import { StyleSheet, View } from "react-native";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -21,32 +21,15 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   override render() {
     if (this.state.error) {
-      return (
-        <ScrollView style={{ flex: 1, backgroundColor: palette.wall }} contentContainerStyle={styles.root}>
-          <Text style={typography.heading} accessibilityRole="header">Frame couldn’t open this screen</Text>
-          <Text style={[typography.body, { marginTop: spacing.md }]}>
-            Frame couldn’t show this screen. Try again. If this keeps happening, close and reopen Frame.
-          </Text>
-          <Pressable onPress={() => this.setState({ error: null })} style={styles.retry} accessibilityRole="button"><Text style={[typography.label, { color: palette.onDark }]}>Try again</Text></Pressable>
-        </ScrollView>
-      );
+      return <RecoveryScreen title="Frame couldn’t open this screen" message="Try again. If this continues, close and reopen Frame." onRetry={() => this.setState({ error: null })} />;
     }
     return <View style={styles.wrapper}>{this.props.children}</View>;
   }
 }
 
 const styles = StyleSheet.create({
-  retry: { minHeight: 48, paddingHorizontal: spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentDeep, borderRadius: 10, marginTop: spacing.lg },
   wrapper: {
     flex: 1,
-  },
-  root: {
-    flexGrow: 1,
-    backgroundColor: palette.wall,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing.xl,
-    paddingVertical: spacing.xxxl,
   },
 });
 

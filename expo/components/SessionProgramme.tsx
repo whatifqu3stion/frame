@@ -1,8 +1,10 @@
+import Text from "@/components/FrameText";
+import ProgrammeArtwork from "@/components/ProgrammeArtwork";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight } from "lucide-react-native";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { expireVideo } from "@/domain/metadataRetention";
@@ -24,20 +26,22 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
     ...(media.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos,
   ].map((video) => [video.id, expireVideo(video, Date.now())])), [media.data, savedVideos]);
   const position = sessionPosition(session);
-  const remaining = sessionRuntime(session.orderedVideoIds, [...videos.values()], position);
+  const remaining = sessionRuntime(session.orderedVideoIds, [...videos.values()]);
   const status = position >= session.orderedVideoIds.length ? "Complete" : `Next: video ${position + 1} of ${session.orderedVideoIds.length}`;
-  const duration = remaining.seconds ? `${remaining.unknown ? "At least " : ""}${Math.ceil(remaining.seconds / 60)} min of video` : "";
-  const summary = [status, duration, remaining.unknown ? "Some durations unavailable" : ""].filter(Boolean).join(" · ");
-  return <Pressable onPress={onOpen} style={({ pressed }) => [styles.root, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open current session ${session.name}. ${summary}. ${session.orderedVideoIds.map((id, index) => `${index + 1}: ${videos.get(id)?.title ?? "Video details unavailable"}`).join(". ")}`}>
+  const duration = remaining.seconds ? `Full queue: ${remaining.unknown ? "at least " : ""}${Math.ceil(remaining.seconds / 60)} min` : "";
+  const summary = [session.targetMinutes ? `Viewing time: ${session.targetMinutes} min` : "Choose a session duration", status, duration, remaining.unknown ? "Some durations unavailable" : ""].filter(Boolean).join(" · ");
+  return <Pressable onPress={onOpen} style={({ pressed }) => [styles.root, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open current session ${session.name}. ${summary}. ${session.orderedVideoIds.slice(position, position + 3).map((id, offset) => `${position + offset + 1}: ${videos.get(id)?.title ?? "Video details unavailable"}`).join(". ")}`}>
     <ProgrammeGrain />
+    <ProgrammeArtwork videos={session.orderedVideoIds.slice(position, position + 3).map((id) => videos.get(id))} />
     <Text style={styles.title}>{session.name}</Text>
     <Text style={styles.summary}>{summary}</Text>
     <View style={styles.list}>
-      {session.orderedVideoIds.map((id, index) => <View key={id} style={styles.row}>
-        <Text style={[styles.number, index === position && styles.currentNumber]}>{String(index + 1).padStart(2, "0")}</Text>
+      {session.orderedVideoIds.slice(position, position + 3).map((id, offset) => <View key={id} style={styles.row}>
+        <Text style={[styles.number, offset === 0 && styles.currentNumber]}>{String(position + offset + 1).padStart(2, "0")}</Text>
         <Text numberOfLines={2} style={styles.videoTitle}>{videos.get(id)?.title ?? "Video details unavailable"}</Text>
       </View>)}
     </View>
+    {session.orderedVideoIds.length > position + 3 ? <Text style={styles.summary}>More videos in your plan</Text> : null}
     <View style={styles.footer}><Text style={styles.action}>Open session</Text><ArrowUpRight size={19} color={palette.onProgramme} /></View>
   </Pressable>;
 }

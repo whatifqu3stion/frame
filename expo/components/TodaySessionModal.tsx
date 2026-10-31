@@ -1,8 +1,9 @@
+import Text from "@/components/FrameText";
 import { defaultSessionName } from "@/domain/sessionFlow";
 import TextField from "@/components/TextField";
 import { Plus, Rows3, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -26,7 +27,7 @@ export default function TodaySessionModal({ visible, title, videoId, busy, sessi
         const included = session.orderedVideoIds.includes(videoId);
         const full = session.orderedVideoIds.length >= PRODUCT_LIMITS.sessionDraftMaxItems;
         const disabled = busy || full || included;
-        return <Pressable key={session.id} disabled={disabled} onPress={() => onPick(session.id)} style={[styles.row, disabled && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled }}><Rows3 size={18} color={palette.accent} /><View style={styles.flex}><Text style={type.label}>{session.name}</Text><Text style={styles.meta}>{included ? "Already in this session" : full ? "Full · choose another session" : `${session.orderedVideoIds.length} of ${PRODUCT_LIMITS.sessionDraftMaxItems} videos`}</Text></View></Pressable>;
+        return <Pressable key={session.id} disabled={disabled} onPress={() => onPick(session.id)} style={[styles.row, disabled && styles.disabled]} accessibilityRole="button" accessibilityState={{ disabled }}><Rows3 size={18} color={palette.accent} /><View style={styles.flex}><Text style={type.label}>{session.name}</Text><Text style={styles.meta}>{included ? "Already in this session" : full ? "Full · choose another session" : `${session.targetMinutes ? `${session.targetMinutes} min` : "Choose duration"} · ${session.orderedVideoIds.length} videos`}</Text></View></Pressable>;
       })}
       <Text style={styles.label}>New session name · optional</Text>
       <TextField value={name} onChangeText={setName} editable={!busy} placeholder={defaultName} placeholderTextColor={palette.inkMuted} maxLength={64} returnKeyType="done" accessibilityLabel="New session name" />

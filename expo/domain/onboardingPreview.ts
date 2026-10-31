@@ -21,9 +21,9 @@ export function onboardingPreviewStatus(input: { enabled: boolean; loading: bool
   if (input.loading) return { kind: "loading", retry: false, message: "Finding sources for your interests…" } as const;
   if (input.failed || !input.result) return { kind: "unavailable", retry: true, message: "Suggestions couldn’t load. Try again, or bring a favorite below." } as const;
   const { result } = input;
-  if (result.reason === "configuration") return { kind: "unavailable", retry: false, message: "Source suggestions aren’t configured for this build. You can still bring a favorite below." } as const;
+  if (result.reason === "configuration") return { kind: "unavailable", retry: false, message: "Prepare this week’s suggestions above, or add a creator you already know." } as const;
   if (result.reason === "maintenance") return { kind: "unavailable", retry: true, message: "Source suggestions are paused while the next publication is prepared. Check again later, or bring a favorite below." } as const;
   if (result.status !== "success" && result.status !== "cached_success") return { kind: "unavailable", retry: true, message: result.reason === "offline" ? "Suggestions need a connection. Try again when you’re connected, or continue with sources you already follow." : "The suggestion service is unavailable. Try again, or bring a favorite below." } as const;
-  if (!result.items.length) return { kind: "empty", retry: false, message: "No sources are published for these interests yet. Go Back to change interests, or bring a favorite below." } as const;
-  return { kind: "ready", retry: false, message: result.status === "cached_success" ? "Showing a cached publication for your interests." : "" } as const;
+  if (!result.items.length) return { kind: "empty", retry: false, message: "No sources qualified for this edition. You can try the available recovery option above or add a creator you know." } as const;
+  return { kind: "ready", retry: false, message: result.status === "cached_success" ? "Showing your saved weekly edition." : "" } as const;
 }

@@ -41,6 +41,6 @@ const styles = StyleSheet.create({
   field: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 1, borderRadius: radii.control },
   input: { flex: 1, minWidth: 0, minHeight: 50, fontSize: 16, paddingHorizontal: 0, paddingVertical: spacing.sm, borderWidth: 0, backgroundColor: "transparent" },
   // The enclosing field provides a visible focus border for mouse and keyboard alike.
-  webInput: { outlineWidth: 0 },
+  webInput: { outlineStyle: "solid", outlineWidth: 0 },
   disabled: { opacity: 0.6 },
 });

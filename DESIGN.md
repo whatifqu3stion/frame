@@ -123,7 +123,9 @@ typography:
 rounded:
   small: "8px"
   control: "10px"
-  media: "6px"
+  media: "0px"
+  mount: "2px"
+  source: "6px"
   card: "16px"
   large: "22px"
   pill: "999px"
@@ -139,7 +141,7 @@ spacing:
 components:
   media-mount-light:
     backgroundColor: "{colors.light-mount}"
-    rounded: "{rounded.card}"
+    rounded: "{rounded.mount}"
     padding: "{spacing.sm}"
   session-programme-light:
     backgroundColor: "{colors.light-programme}"
@@ -184,7 +186,7 @@ components:
 
 The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.
 
-This is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. The approved motion phase is now implemented in source: restrained choice feedback, measured session ordering, a first-selection reveal and a deliberate ending. Timing and haptic strength still need real-device approval.
+This is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. The approved motion phase is now implemented in source: expressive choice feedback, spatial session ordering, a first-selection reveal and an artwork-led ending. Timing and haptic strength still need real-device approval.
 
 **Key Characteristics:**
 - Warm tonal surfaces with restrained mineral accents.
@@ -226,14 +228,14 @@ Tonal layering and fine rules carry everyday depth. Session programme surfaces a
 
 ## Shapes
 
-Use the observed radius scale above: restrained media corners, slightly softer controls, and card-shaped mounts/programmes/sheets. Saved radio filters share the restrained control radius used by other choices; the tab highlight and avatars retain their existing geometry. Hairline borders are `StyleSheet.hairlineWidth`, so their physical rendering is platform-dependent. Media clips inside its own radius, independently of the padded surround.
+Use the observed radius scale above: square video corners, nearly square 2-unit matte surrounds, slightly softer controls, and card-shaped programmes/sheets. Saved radio filters share the restrained control radius used by other choices; the tab highlight and avatars retain their existing geometry. Hairline borders are `StyleSheet.hairlineWidth`, so their physical rendering is platform-dependent. Media clips inside its own radius, independently of the padded surround.
 
 ## Components
 
 | Native component | Character and implementation |
 | --- | --- |
 | `ScreenHeader` | Serif page identity and compact profile chooser above a hairline rule; optional sans-serif subtitle. Native header/button semantics, wrapping top row and named profile action. |
-| `MediaMount` | Matte `mount` surface with `mountEdge` hairline, `sm` inset and `card` radius. Shared by Today and Weekly Picks; content ratio remains inside. |
+| `MediaMount` | Matte `mount` surface with `mountEdge` hairline, `sm` inset and `mount` radius. Shared by Today and Weekly Picks; content ratio remains inside. |
 | `TodayVideoCard` | Mounted thumbnail, source, serif title, metadata and explicit Watch / Save / Session / More actions; lower divider. Busy/disabled semantics and polite progress feedback remain. |
 | `WeeklyPickCard` | Mounted featured media, source identity and explanatory copy. Follow changes to Followed with selected-tonal styling; separate dismiss action and polite success/error feedback. |
 | `SessionProgramme` | Deep umber with static grain, `lg` padding and `card` radius. Ordered two-digit rows with rules, current position, known remaining runtime and unknown-runtime disclosure. Entire programme is a labelled Open session button. |
@@ -244,7 +246,9 @@ Use the observed radius scale above: restrained media corners, slightly softer c
 
 The shared `ProgrammeGrain` is restricted to the current-session card, session detail header, and confirmed first-save moment in onboarding. It repeats a bundled 128-unit tile with 1×/2×/3× density assets, clips to the card radius and is excluded from touch and accessibility. Per-pixel alpha is capped at 32/255; layer opacity is 0.22 in light mode and 0.16 in dark mode. Text and controls paint above it. The original deterministic generator and provenance ship with the assets. Main backgrounds, controls and video remain untextured.
 
-Motion uses `expo/constants/motion.ts`: 160 ms choices, 180 ms local state changes, 220 ms row continuity, 400 ms first selection, and 340 ms final ending. Cubic ease-out, no overshoot. Selected-control labels stay opaque; geometry remains stable. Native navigation and sheet presentation retain OS ownership. Reduced Motion makes custom transitions immediate. Static grain and loading placeholders never loop.
+Motion uses `expo/constants/motion.ts`: 180 ms choices, 220 ms state changes, 360 ms confirmations, 520 ms artwork, 560–740 ms chart assembly, 720 ms first selection, and 680 ms final ending. These express distance and consequence rather than impose an app-wide duration cap. Row continuity uses a damped spring (230 stiffness, 26 damping, mass 1). Selected-control labels and hit targets remain stable. Native navigation and sheet presentation retain OS ownership. Reduce Motion settles spatial effects immediately while retaining clear state feedback. Static grain and loading placeholders never loop.
+
+Onboarding opens with the supplied four-corner mark beside the Caslon Frame wordmark. Its corners settle inward by five logical units over 640 ms in the active accent color. This identity appears only on the first setup screen; controls remain usable throughout. The entrance runs once for a fresh setup (or an explicitly opened welcome preview), never on Back or a restored draft. It waits for the motion preference, remains static under Reduce Motion, and settles on interruption. Original mark: “Fullscreen” by Andrejs Kirma, from the Noun Project; supplied by the project owner.
 
 Touch feedback belongs to accepted choices and completed actions, with stronger confirmation reserved for genuine milestones. The device-wide Settings switch controls custom feedback across profiles. Web, inactive or stale contexts, no-op results, and bursts are suppressed. Navigation, automatic playback changes, erasure, typing and native picker gestures remain quiet. See `expo/docs/MOTION_AND_HAPTICS_REVIEW.md` for exact scope and hardware verification gates.
 
@@ -331,7 +335,7 @@ Pressed rows gain a quiet surface tint without dimming text. Theme, accent color
 and touch feedback have separate headings. Selection uses checks and restrained
 neutral borders; reserve check space so choices do not shift when selected.
 
-### Motion refinement: outcomes, not spectacle
+### Motion refinement: confirmation and continuity (historical)
 
 Save and follow icons stay mounted through pending work and settle only after a
 new confirmed result (220 ms, 0.86–1 scale, no overshoot). Existing saved/followed
@@ -407,8 +411,50 @@ Source lookup can be cancelled by leaving its sheet or setup step, retains the p
 
 No additional motion was added. Automated validation covers provenance/migration, recovery identity/expiry, request cancellation/timeouts, source ceilings, and profile-scoped intent cleanup. Native visual, focus, keyboard, orientation, and player acceptance remain pending; see the smoke plan.
 
-### Motion finishing — October 2, 2026
+### Motion finishing — October 2, 2026 (superseded by the October 29 pass)
 
 The personalized preview now owns the onboarding reveal. Its matte remains stationary; a subtle tonal veil clears over the real image and source context settles within 400 ms. Supporting content and actions stay available. Follow confirmations and Saved notices use the shared nonspatial state transition. Successful metadata recovery keeps a readable, focusable confirmation so removing Refresh does not discard the user's place.
 
 Shared custom motion observes route focus, app foreground state, and Reduced Motion. Hidden completion effects are consumed quietly; only the first personalized reveal may wait for visibility. Interrupted effects settle, and rapid session reordering retargets from the current visual position. No dependency, loop, sound, or additional haptic was introduced. Native calibration remains pending; source/automated verification and the device acceptance matrix are recorded in expo/docs/MOTION_REVIEW.md and SMOKE_TEST.md.
+
+
+### Expressive interactions — October 29, 2026
+
+Frame can be beautiful and compelling. Consumption boundaries do not imply restrained interface motion. The current direction is a tangible personal collection: prints settle into selections, programmes assemble from their own artwork, and endings resolve into a finished print. This supersedes the earlier tight motion guidance above.
+
+- Today’s confirmed save/session notice carries the actual thumbnail. Surviving rows settle with an interruptible spring; a restored dismissal enters back into the collection. Compact notice geometry keeps the close action on the same row, omitting the thumbnail at narrow widths or large font scales.
+- Session selections seat their artwork, new order rows arrive, and reordering preserves visual position. Programme covers use up to three available, unexpired thumbnails in queue order. Saving opens an authored programme reveal once; navigation never waits for it.
+- The first personalised preview opens its image inside the square matte over 720 ms. First-save feedback remains tied to successful persistence.
+- The player’s loading stage carries the current poster until ready; the official player is never covered once ready. Completion seats the watched artwork as a small finished print. Native stack transitions remain in charge: this is a poster handoff, not a cross-screen shared-element morph. The originating card acknowledges return without replaying every card on tab changes.
+- Viewing-time bars grow from the baseline, retarget when values change, and retain fixed plot geometry and 44-point day targets. A moving day backing, colour transition and concise readout acknowledge day selection. Day changes use the existing optional selection haptic; values remain real totals, never an animated fictional counter.
+- Newly followed source rows arrive into the collection; choice illustrations respond to selection, tab backings open around their icons, and inline guidance resolves below its disclosure.
+
+No new animation dependency, artificial wait, autoplay, audio or marketing copy. All custom effects observe Reduce Motion and route/foreground visibility. Functional and visual evidence, plus remaining native checks, are recorded in `expo/docs/MOTION_REVIEW.md`.
+
+### Completed secondary motion — October 29, 2026
+
+This follow-up supersedes the poster-only handoff described above. Measured artwork now travels between its originating Today/Saved card and the watch stage, with one visible print during travel. The ready player always takes priority. Missing geometry, different profile/viewport, backgrounding and Reduced Motion use immediate/native fallback behavior. Return uses the same measured movement instead of layering the earlier card-seating scale effect.
+
+Appearance changes use a short change of lighting around the persisted palette, with a single live interface preserving focus and drafts. Empty-to-first-video and empty-to-first-session arrivals are driven by successful collection changes and presented once when that collection is visible; startup hydration is not a milestone. Viewing-time exploration now supports horizontal scrubbing, exact-value selection and narrow-screen positioning without giving up tap/keyboard access. The chart remains awareness, without reward or consumption cues. Native acceptance limits and the independent critique are recorded in the motion review.
+
+### Settings refinement — October 29, 2026
+
+Settings groups destinations into Your experience, Connections, and Privacy & support. Shared ruled rows use wrapping titles and summaries, consistent touch targets, and navigation chevrons only for destinations. Submenus retain Frame’s serif section headings, semantic colors, and common reading width; phone accent choices stack evenly. Profile editors use one title and named return navigation. Optional focus, setup, and help details use disclosure; provider charges, playback scope, and erasure consequences stay explicit. See `expo/docs/SETTINGS_REVIEW.md` for visual evidence and remaining native acceptance checks.
+
+### Editorial session cover — October 29, 2026
+
+The session detail cover gives its own video artwork priority: one generous square-edged landscape print, followed by two smaller offset prints. The October 30 refinement replaces overlap with consistent 12-point gaps and a soft downward shadow, like staggered prints on a gallery wall. Existing compact programme strips elsewhere remain unchanged. A smaller Caslon title and one queue-runtime caption sit beneath the artwork. Chosen viewing time is separate beside Start/Continue and opens its timing explanation on tap. The cover retains genuine queue order, missing-metadata behavior, playback rules, and reduced-motion-aware arrival. Reference research and verification are in `research/session-collage/patterns.md`.
+
+### Viewing-room lighting — October 31, 2026
+
+Entering a video dims the surrounding room from warm umber to the existing dark
+watch surface over 520 ms, using the artwork handoff’s easing and timing. Dark
+mode begins closer to the final shade. The brightest starting shade remains
+dark enough for readable light text throughout. Only a background plane changes
+opacity; video, controls and captions retain full opacity. This is one entrance
+per visit to the player, not a repeated effect for loading, pausing or advancing
+a session. Return retargets the room light over 380 ms while navigation remains
+in charge; a shared-artwork return immediately reveals the original library.
+Nothing waits for the lighting. Reduce Motion and backgrounding settle directly,
+and cold deep links start in the settled viewing room. No new dependency, sound,
+overlay on the video, or playback permission change. See `expo/docs/MOTION_REVIEW.md`.

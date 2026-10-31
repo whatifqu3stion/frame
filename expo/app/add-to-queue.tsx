@@ -1,7 +1,8 @@
+import Text from "@/components/FrameText";
 import { useFeedback } from "@/hooks/useFeedback";
 import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, View } from "react-native";
 import TodaySessionModal from "@/components/TodaySessionModal";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { useFrameTheme } from "@/constants/useFrameTheme";

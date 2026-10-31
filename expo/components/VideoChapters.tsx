@@ -1,7 +1,8 @@
+import Text from "@/components/FrameText";
 import Pressable from "@/components/motion/ChoicePressable";
 import { ListVideo } from "lucide-react-native";
 import { memo, useMemo } from "react";
-import {  StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { formatDuration, type VideoChapter } from "@/services/youtube";
 

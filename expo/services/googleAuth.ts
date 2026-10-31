@@ -18,14 +18,16 @@ function googleFailure<T>(status: number): ServiceResult<T> {
 export async function fetchGoogleEmail(accessToken: string): Promise<ServiceResult<string>> {
   try {
     const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      redirect: "error", credentials: "omit", cache: "no-store",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return googleFailure(response.status);
     const data = (await response.json()) as { email?: string };
     if (!data.email) return { status: "empty", data: "", message: "Google did not return an email address." };
     return { status: "success", data: data.email };
-  } catch (error) {
-    console.warn("[google] profile request failed", error instanceof Error ? error.message : "unknown error");
+  } catch {
+    // Transport exceptions can contain credentials; keep diagnostics fixed.
+    console.warn("[google] profile request failed");
     return { status: "offline", message: "Frame couldn't reach Google. Check your connection and try again." };
   }
 }
@@ -83,6 +85,7 @@ export async function fetchSubscriptions(accessToken: string, pageToken?: string
   if (pageToken) params.set("pageToken", pageToken);
   try {
     const response = await fetch(`${SUBSCRIPTIONS_URL}?${params.toString()}`, {
+      redirect: "error", credentials: "omit", cache: "no-store",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return googleFailure(response.status);
@@ -100,8 +103,9 @@ export async function fetchSubscriptions(accessToken: string, pageToken?: string
     if (unique.length === 0) return { status: "empty", data: page, message: "No subscriptions were found on this page." };
     if (unique.length !== data.items.length) return { status: "partial", data: page, message: "Some subscriptions could not be read and were left out." };
     return { status: "success", data: page };
-  } catch (error) {
-    console.warn("[google] subscription request failed", error instanceof Error ? error.message : "unknown error");
+  } catch {
+    // Transport exceptions can contain credentials; keep diagnostics fixed.
+    console.warn("[google] subscription request failed");
     return { status: "offline", message: "Frame couldn't reach Google. Check your connection and try again." };
   }
 }
@@ -111,13 +115,15 @@ export async function revokeGoogleAccess(accessToken: string): Promise<ServiceRe
   try {
     const response = await fetch("https://oauth2.googleapis.com/revoke", {
       method: "POST",
+      redirect: "error", credentials: "omit", cache: "no-store",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `token=${encodeURIComponent(accessToken)}`,
     });
     if (!response.ok) return googleFailure(response.status);
     return { status: "success", data: true };
-  } catch (error) {
-    console.warn("[google] revoke request failed", error instanceof Error ? error.message : "unknown error");
+  } catch {
+    // Transport exceptions can contain credentials; keep diagnostics fixed.
+    console.warn("[google] revoke request failed");
     return { status: "offline", message: "Frame couldn't reach Google to disconnect. Check your connection and try again." };
   }
 }

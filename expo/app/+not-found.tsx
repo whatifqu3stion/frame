@@ -1,6 +1,7 @@
+import Text from "@/components/FrameText";
 import { Link, Stack } from "expo-router";
 import { useMemo } from "react";
-import { StyleSheet, Pressable, Text, ScrollView } from "react-native";
+import { StyleSheet, Pressable, ScrollView } from "react-native";
 import { spacing, type FramePalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 

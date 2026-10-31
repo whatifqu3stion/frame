@@ -1,3 +1,5 @@
+> For the current personal BYOK build, also use `PERSONAL_USE.md`. It supersedes the historical shared-service, billing, and search restrictions below.
+
 # Frame prepublication acceptance
 
 This is the current native acceptance pass for Frame’s implemented feature contract. Run it after design and hardening changes, before distributing a native build. The welcome flow includes a clearly labeled sample checkout. Billing is intentionally disabled during the free beta.
@@ -109,7 +111,7 @@ Pass condition: every player entry, actual start, 15-second checkpoint, backgrou
 1. Save a video and confirm Saved persists it after restart.
 2. Play beyond 15 seconds, leave, and confirm Continue Watching records the position.
 3. Reopen, resume, and complete the video. Confirm completion clears stale progress.
-4. Create a named Session of one to three videos and reorder it.
+4. Create a named time-based Session, choose a custom duration, add more than ten videos, and reorder it.
 5. Start at each position and confirm progress follows the intended item after edits.
 6. Finish an item and confirm nothing auto-advances; Continue is always explicit.
 7. Finish the final item and confirm a stable quiet end state.
@@ -308,7 +310,7 @@ Run on iPhone and Android, including a narrow phone and Android expanded window,
 
 - Start with a saved/resume/session item whose metadata is over 30 days old. Refresh details explicitly, then check Saved search, session rows, and the player. Title/image recovery must keep save time, resume seconds, session order, and Today action state. A deleted/private video, mismatched response, offline response, or timeout must keep the link and offer honest retry; no background polling.
 - Interrupt a saved session, restart, then use Continue watching in Saved. Confirm it returns to the named session and correct next item. Delete/reorder/advance that session and confirm stale provenance cannot attach to another session containing the same video. A migrated standalone resume stays standalone.
-- At 25 sources, manual follow and import must refuse a 26th source. A legacy profile with 26+ sources retains all follows and saved videos, receives Manage sources in Today, and recovers after choosing what to unfollow.
+- At 100 sources participating in Today, manual follow and import must keep a 101st source as Library only. Verify it stays browsable, participation cannot exceed 100, and the existing Today selection does not refill. The library safety ceiling is 500.
 - Begin an Owner settings edit, wait for authorization expiry, then unlock. Ordinary fields and the selected profile/request remain; current/new/confirmation PIN fields are blank. Close with unfinished changes and verify the discard decision. Repeat after an external approval preview and after backgrounding.
 - In Managed Approved Sources, open an unfamiliar real video. Verify source identity through the bounded resolver; an approved source may proceed only after the existing access and allowance checks. Unapproved, unavailable, quota-limited, and offline responses stay blocked. Retry verification must never grant approval.
 - Start a slow source lookup in the Add source sheet and setup. Close/Back/Skip must remain available during the read, cancel its result, and retain pasted input. Explicit follow writes remain guarded. Change profiles during lookup and confirm no stale result appears.
@@ -329,3 +331,10 @@ Use a real iPhone and a representative Android phone; include an Android expande
 - **Reordering:** with three long titles, move a session item repeatedly before the 220 ms movement finishes, including reversing direction. Check no snap to an obsolete position, duplicate row, incorrect ordinal, or stale callback after Back/background. Confirm the spoken order and final saved order match.
 - **Preferences and interruption:** switch Reduce Motion while moving, turn Touch feedback off during a pending write, and change profiles. Effects settle immediately; states remain legible; no old-profile surface appears. Test light/dark, large text, keyboard open, and supported orientations.
 - **Calibration:** judge 160–220 ms routine feedback and the 400 ms focal reveal on release-like builds. Record dropped frames and perceived haptic strength. Tune only observed issues; automatic arrivals, metadata reads, navigation, and playback endings stay silent.
+
+## Personal policy update: native acceptance pending
+
+- Prepare up to 12 reviewed weekly sources. Next/Previous show three at a time; reopening preserves position and dismissals. No auto-refill. Exercise the one empty-edition recovery and cooldown.
+- Timed sessions count only playback across pause/buffering/background/reopen, with a 5-second persistence checkpoint. Seek forward/backward without changing time used. At expiry Finish this video must resume the same video and position, never override profile controls or advance.
+- Preserve schema-11 sessions and Owner commitments during upgrade; custom session durations and timer state survive restart. New Owner flexible limits change immediately; existing commitments still delay relaxation by 24 hours.
+- Exercise 500 library sources with 100 active in Today, finite 20-row source paging, and a large session plan.

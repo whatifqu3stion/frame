@@ -87,7 +87,7 @@ export function createSourceFeedClient(options: SourceFeedClientOptions) {
   };
 }
 
-function mapCandidates(response: SourceFeedResponse): CachedTodayCandidate[] {
+export function mapCandidates(response: SourceFeedResponse): CachedTodayCandidate[] {
   return response.feeds.flatMap((feed) => feed.items.map((item) => ({
     id: item.providerMediaId,
     title: item.title,

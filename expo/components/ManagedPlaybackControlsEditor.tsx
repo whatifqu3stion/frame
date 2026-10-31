@@ -1,9 +1,10 @@
+import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
 import MotionView from "@/components/motion/MotionView";
 import { PauseCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 import ClockTimePicker from "@/components/ClockTimePicker";
 import { scheduleSummary } from "@/domain/scheduleSummary";
 import { INDEFINITE_PAUSE, MAX_SESSION_LIMIT_MINUTES, MAX_SESSION_BREAK_MINUTES } from "@/domain/playbackControls";

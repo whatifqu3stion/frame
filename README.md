@@ -30,7 +30,7 @@ Today is designed to stay stable during the day rather than refill as items are 
 
 A source-level implementation or passing automated test does not establish that the native experience is ready to ship. Real-device visual, accessibility, motion, and playback checks remain part of the [acceptance plan](expo/docs/SMOKE_TEST.md).
 
-The Premium preview is an explicitly labelled no-charge demo. It does not establish a live subscription or commercial launch.
+This branch is the full-access BYOK edition: no subscription tiers or paywalls. Owners configure their own YouTube and optional Gemini keys in Settings → Your API keys. See [BYOK setup and security](expo/docs/BYOK.md).
 
 ## Design decisions
 

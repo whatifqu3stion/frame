@@ -1,5 +1,6 @@
+import Text from "@/components/FrameText";
 import { router, Stack } from "expo-router";
-import { Pressable, Text, ScrollView } from "react-native";
+import { Pressable, ScrollView } from "react-native";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function LinkUnavailable() {
