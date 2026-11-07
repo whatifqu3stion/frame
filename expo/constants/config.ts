@@ -1,3 +1,4 @@
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
 import { DEFAULT_OWNER_PROFILE_ID } from "@/models/profile";
 import { FOUNDATION_CAPABILITIES } from "@/constants/productConfig";
@@ -38,18 +39,19 @@ export const BACKEND_BASE_URL = valueForEnvironment({
 
 /** Environment-scoped Google OAuth client configuration. OAuth client IDs are public. */
 export const GOOGLE_CONFIG = {
+  clientId: valueForEnvironment({ development: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID }),
   iosClientId: valueForEnvironment({
-    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS,
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS ?? process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_STAGING,
     production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS_PRODUCTION,
   }),
   androidClientId: valueForEnvironment({
-    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID,
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_STAGING,
     production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID_PRODUCTION,
   }),
   webClientId: valueForEnvironment({
-    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB,
+    development: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_DEVELOPMENT ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB ?? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     staging: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_STAGING,
     production: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB_PRODUCTION,
   }),
@@ -61,19 +63,16 @@ export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 export const FEATURE_FLAGS = {
   ...FOUNDATION_CAPABILITIES,
   knownYouTubeUrlResolution: APP_ENV === "development" && Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && (process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)),
-  googleConnection: FOUNDATION_CAPABILITIES.googleSelectiveImport && Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
+  googleConnection: FOUNDATION_CAPABILITIES.googleSelectiveImport && Boolean(GOOGLE_CONFIG.clientId || GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 
-export function isGoogleConfigured(): boolean {
-  return FEATURE_FLAGS.googleConnection;
-}
-
-/** Returns whether the current platform has the OAuth client ID it requires. */
+/** Only offer sign-in when the running app can receive its callback. */
 export function isGooglePlatformConfigured(): boolean {
   if (!FEATURE_FLAGS.googleConnection) return false;
-  if (Platform.OS === "ios") return Boolean(GOOGLE_CONFIG.iosClientId);
-  if (Platform.OS === "android") return Boolean(GOOGLE_CONFIG.androidClientId);
-  return Boolean(GOOGLE_CONFIG.webClientId);
+  if (Platform.OS !== "web" && Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return false;
+  const platformId = Platform.OS === "ios" ? GOOGLE_CONFIG.iosClientId
+    : Platform.OS === "android" ? GOOGLE_CONFIG.androidClientId : GOOGLE_CONFIG.webClientId;
+  return Boolean(platformId || GOOGLE_CONFIG.clientId);
 }
 
 /** Read-only access supports an explicit, user-selected subscription import. */

@@ -2,7 +2,7 @@ import { feedbackGate, resetFeedbackPreference } from "@/services/feedback";
 import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import * as Google from "expo-auth-session/providers/google";
+import { useGooglePrompt } from "@/hooks/useGooglePrompt";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +18,7 @@ import type { ManagedPlaybackControls, PlaybackControlStatus } from "@/models/pl
 import type { ManagedApprovalRequest, ManagedContentAccessStatus, ManagedContentMode, ManagedContentOverview } from "@/models/managedContentAccess";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS } from "@/constants/productConfig";
-import { APP_ENV, FEATURE_FLAGS, GOOGLE_CONFIG, GOOGLE_SCOPES, isGoogleConfigured, isGooglePlatformConfigured } from "@/constants/config";
+import { APP_ENV, FEATURE_FLAGS, isGooglePlatformConfigured } from "@/constants/config";
 import { canonicalizeInterestIds, toggleInterestId } from "@/domain/interests";
 import { resolveActiveProfileId } from "@/domain/profiles";
 import { normalizeSessionIds, positionAfterEdit } from "@/domain/sessionFlow";
@@ -294,26 +294,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const pinVerificationRef = useRef<boolean>(false);
   const pinPromptGenerationRef = useRef<number>(0);
 
-  // `expo-auth-session` throws if the active platform's client ID is missing, so we
-  // only start the auth request when this platform is actually configured. The
-  // condition is derived from build-time env + platform, so it's constant for the
-  // whole session and safe to gate the hook on.
-  let promptGoogle: ReturnType<typeof Google.useAuthRequest>[2] | null = null;
-  if (isGooglePlatformConfigured()) {
-    const [request, , prompt] = Google.useAuthRequest({
-      iosClientId: GOOGLE_CONFIG.iosClientId,
-      androidClientId: GOOGLE_CONFIG.androidClientId,
-      webClientId: GOOGLE_CONFIG.webClientId,
-      scopes: GOOGLE_SCOPES,
-    });
-    promptGoogle = prompt;
-    // Surface the exact redirect URI Google expects to be whitelisted. This is the
-    // value you must add under "Authorized redirect URIs" in the Google Cloud console
-    // for your OAuth client to resolve `redirect_uri_mismatch`.
-    if (request?.redirectUri) {
-      console.log("[google] redirectUri to whitelist:", request.redirectUri);
-    }
-  }
+  const promptGoogle = useGooglePrompt();
 
   useEffect(() => {
     let mounted = true;
@@ -1238,8 +1219,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const isCurrent = () => generation === storageGenerationRef.current && activeProfileId === activeProfileIdRef.current && !switchingRef.current;
     const cancelled = { ok: false, message: "Profile changed. Connect Google again from the profile you want to use." };
     if (!isCurrent()) return cancelled;
-    if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
-    if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
+    if (!isGooglePlatformConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
+    if (!promptGoogle) return { ok: false, message: "Google sign-in is getting ready. Please try again." };
     try {
       const result = await promptGoogle();
       if (!isCurrent()) return cancelled;
@@ -1517,7 +1498,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       recentSearches,
       addRecentSearch,
       clearRecentSearches,
-      googleConfigured: isGoogleConfigured(),
+      googleConfigured: isGooglePlatformConfigured(),
       googleConnected: Boolean(googleCredential && googleCredential.expiresAt > Date.now() && prefs.googleConnectedAt),
       googleEmail: prefs.googleEmail,
       importing,

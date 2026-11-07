@@ -19,6 +19,7 @@
       "bundleIdentifier": "app.rork.vabp4o345ww8b0akdpr7p"
     },
     "android": {
+      "scheme": "app.rork.vabp4o345ww8b0akdpr7p",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FBF9F4"

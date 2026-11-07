@@ -57,3 +57,7 @@ Worker environment:
 - `YOUTUBE_API_KEY_PRODUCTION`
 
 Compatibility variables `EXPO_PUBLIC_RORK_FUNCTIONS_URL`, platform Google IDs without an environment suffix, and `YOUTUBE_API_KEY` are development-only fallbacks. Remove them after all development configuration has moved to explicit names.
+
+Google sign-in also recognizes the older `EXPO_PUBLIC_GOOGLE_{ANDROID|IOS|WEB}_CLIENT_ID` names in development. A development build can use `EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID` as a last resort; it must be an OAuth client for the platform being tested. Prefer platform-specific IDs when sharing one environment across platforms. Staging and production still require their own platform IDs.
+
+For native testing use a development build, not Expo Go. Rebuild after changing URL schemes. Frame registers `app.rork.vabp4o345ww8b0akdpr7p:/oauthredirect` for the browser callback. Use the matching bundle/package ID and, on Android, the signing certificate fingerprint. This AuthSession flow requires an Android OAuth client that permits custom URI redirects; see [Google's Android client settings](https://support.google.com/googleapi/answer/6158849). On web, register the deployed origin as the web client's redirect URI (or the local origin and port for development). Verify that returning from consent opens the subscription picker; cancelling must leave the profile disconnected.
