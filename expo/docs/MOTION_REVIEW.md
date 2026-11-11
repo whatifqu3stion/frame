@@ -224,3 +224,28 @@ benchmark. The final browser console check contained no errors.
 ## Onboarding release pass — October 31, 2026
 
 The existing artwork reveal and first-save animation are retained. The reveal presents three videos at most, explicitly pointing to Today for the rest. Copy is shorter, direct source entry precedes optional discovery, and setup can finish without manufacturing an empty reveal. No extra entrance animations were added. Android Back is focus-aware so provider setup owns its navigation. Browser QA covered populated first save/replay and an isolated empty first run; see RELEASE_CANDIDATE.md for native acceptance limits.
+
+## Still video entry — October 31, 2026
+
+Supersedes the shared-artwork flight and lighting timing above. Removed the
+measured thumbnail flight in both directions and the loading poster's settling
+zoom. Watch navigation has no spatial transition or measurement delay. The
+room dims over 1.72 seconds with a gentle start and long settling curve
+(0.22, 0, 0.2, 1). Dark mode starts at `#2D2925`. Both themes settle at
+charcoal `#202021`.
+Back immediately shows the library, with the persistent light retargeting over
+320 ms for quick re-entry. Player readiness and playback policy are unchanged.
+
+Browser samples confirmed increasing background opacity and identity transforms
+on the artwork and its ancestors in both themes. Rapid Back/re-entry works.
+Hook tests cover interruption, Android/native versus web animation drivers,
+Reduce Motion, backgrounding, direct entry, and no replay on player updates.
+Contrast checks sample 21 points in both themes. TypeScript and scoped ESLint
+pass. Native playback, interactive Back, accessibility settings, and release
+frame pacing still require device acceptance; the browser player is fictional.
+
+## Curating weekly picks
+
+The waiting scene reuses the three studies from Frame’s opening print. Their mounts settle on an umber table while a soft band of light passes over them. The caption follows real discovery callbacks: finding creators, checking channels, reading uploads, reviewing quality, and saving. Checking and review can repeat; the arrangement is not a percentage or a promise that three videos qualified.
+
+On arrival, the lead mount opens and the smaller prints settle beside it on one 840 ms presentation clock. Buttons and artwork are available throughout. No provider request, minimum wait, retry, autoplay, or quality-policy change is part of this animation. Cancellation, failure and empty editions have no success reveal. The light stops on unmount, backgrounding, loss of focus, or Reduce Motion; the static table keeps the live status. Phone-width visual QA uses the explicitly fictional sample rehearsal described in `expo/preview/README.md`. Native frame pacing and live provider timing require device testing.

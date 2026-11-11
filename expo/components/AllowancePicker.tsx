@@ -37,17 +37,17 @@ export default function AllowancePicker({ value, onChange, showLabel = true }: P
 
   return (
     <View>
-      {showLabel ? <Text style={styles.label}>Daily viewing allowance</Text> : null}
-      <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Daily viewing allowance">
+      {showLabel ? <Text style={styles.label}>Daily viewing limit</Text> : null}
+      <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Daily viewing limit">
         {PRESETS.map((minutes) => {
           const selected = !customMode && value.mode === "dailyLimit" && value.minutes === minutes;
           return <ChoiceOption key={minutes} label={`${minutes} min`} selected={selected} onPress={() => { if (selected) return; setCustomMode(false); onChange({ mode: "dailyLimit", minutes }); touch.selection(); }} style={styles.option} />;
         })}
         <ChoiceOption label="Custom" selected={value.mode === "dailyLimit" && customMode} onPress={() => { if (customMode && value.mode === "dailyLimit") return; chooseCustom(custom || "1"); touch.selection(); }} style={styles.option} />
-        <ChoiceOption label="Unlimited — no daily limit" selected={value.mode === "unlimited"} onPress={() => { if (value.mode === "unlimited") return; setCustomMode(false); onChange({ mode: "unlimited" }); touch.selection(); }} style={styles.unlimited} />
+        <ChoiceOption label="Unlimited" selected={value.mode === "unlimited"} onPress={() => { if (value.mode === "unlimited") return; setCustomMode(false); onChange({ mode: "unlimited" }); touch.selection(); }} style={styles.unlimited} />
       </View>
-      {value.mode === "dailyLimit" && customMode ? <MotionView enter><Text style={styles.note}>Custom minutes (1–1440)</Text><TextField value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} containerStyle={styles.input} maxLength={4} accessibilityLabel="Custom daily viewing allowance in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</MotionView> : null}
-      <Text style={styles.note}>This allowance limits playback only inside Frame. It does not limit viewing in browsers or other apps.</Text>
+      {value.mode === "dailyLimit" && customMode ? <MotionView enter><Text style={styles.note}>Custom minutes (1–1440)</Text><TextField value={custom} onChangeText={chooseCustom} keyboardType="number-pad" placeholder="Minutes (1–1440)" placeholderTextColor={palette.inkMuted} containerStyle={styles.input} maxLength={4} accessibilityLabel="Custom daily viewing limit in minutes" />{value.minutes < 1 || value.minutes > 1440 ? <Text style={[styles.note, { color: palette.danger }]} accessibilityLiveRegion="polite">Enter between 1 and 1440 minutes.</Text> : null}</MotionView> : null}
+      <Text style={styles.note}>Only time spent playing a video in Frame counts toward the daily limit.</Text>
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import { isShortsLink, SHORT_FORM_MESSAGE } from "@/domain/contentPolicy";
 import { parseSourceInput } from "@/domain/sourceInput";
@@ -196,13 +197,13 @@ export default function AddChannelModal({ visible, onClose, requestVideo = false
           ) : null}
 
           {resolution ? (
-            <Pressable onPress={() => { if (requestVideo) void requestApproval(); else void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
+            <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => { if (requestVideo) void requestApproval(); else void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
               {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <View style={styles.buttonContent}><UserPlus size={17} color={palette.onDark} /><Text style={styles.buttonText}>{requestVideo ? "Request approval" : "Follow source"}</Text></View>}
-            </Pressable>
+            </PrimaryAction>
           ) : (
-            <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
+            <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
               {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>{requestVideo ? "Find video" : "Find source"}</Text>}
-            </Pressable>
+            </PrimaryAction>
           )}
     </Sheet>
   );

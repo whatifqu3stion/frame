@@ -1,11 +1,11 @@
 export const SETTINGS_TITLES = {
-  today: "Today’s selection",
-  interests: "Interests",
-  appearance: "Appearance & feedback",
-  google: "Google connection",
-  privacy: "Privacy & data",
-  about: "About & help",
-  keys: "Your API keys",
+  today: "Viewing preferences",
+  interests: "Weekly interests",
+  appearance: "Appearance",
+  google: "Subscription import",
+  privacy: "Privacy & device data",
+  about: "Help & about",
+  keys: "YouTube & Gemini",
 } as const;
 
 export type SettingsSection = keyof typeof SETTINGS_TITLES;

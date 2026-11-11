@@ -1,3 +1,4 @@
+import Heading from "@/components/Heading";
 import Text from "@/components/FrameText";
 import { useApp } from "@/providers/AppProvider";
 import { Link } from "expo-router";
@@ -39,13 +40,12 @@ export default function PrivacyScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={type.caption}>Frame</Text>
-      <Text accessibilityRole="header" style={styles.title}>Privacy Policy</Text>
+      <Heading level={2} style={styles.title}>Privacy Policy</Heading>
       <Text style={styles.updated}>Effective October 20, 2026</Text>
       <Text style={styles.intro}>Frame is built around a private, on-device library. This policy explains what stays on your device, when information is shared to provide a feature, and the controls available to you.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text accessibilityRole="header" style={styles.heading}>{section.title}</Text>
+          <Heading style={styles.heading}>{section.title}</Heading>
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}

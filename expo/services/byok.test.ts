@@ -66,6 +66,31 @@ describe("BYOK credential lifecycle", () => {
 });
 
 describe("BYOK network boundary", () => {
+  test("Gemini HTTP failures identify the status without exposing raw errors or retrying", async () => {
+    for (const [status, kind] of [[400, "request"], [401, "access"], [402, "billing"], [403, "access"], [404, "unavailable"], [429, "quota"], [500, "unavailable"], [503, "unavailable"]] as const) {
+      const { keys } = fixture(); await keys.save("gemini", fakeKey);
+      let calls = 0;
+      const transport = createProviderTransport(keys, async () => { calls++; return json({ error: { message: fakeKey, errors: "malformed" } }, status); });
+      const error = await transport.gemini("gemini-3.5-flash-lite", {}).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(ProviderError);
+      expect(error).toMatchObject({ kind, provider: "gemini", httpStatus: status });
+      expect(String(error)).toContain(`Gemini (HTTP ${status})`);
+      expect(String(error)).not.toContain(fakeKey);
+      expect(JSON.stringify(error)).not.toContain(fakeKey);
+      expect(calls).toBe(1);
+    }
+  });
+  test("recognizing a Gemini key does not imply generation access", async () => {
+    const { keys } = fixture(); await keys.save("gemini", fakeKey);
+    const requests: string[] = [];
+    const transport = createProviderTransport(keys, async (url) => {
+      requests.push(String(url));
+      return String(url).includes(":generateContent") ? json({ error: { message: fakeKey } }, 403) : json({ models: [] });
+    });
+    await transport.validateGemini(fakeKey);
+    await expect(transport.gemini("gemini-3.5-flash-lite", {})).rejects.toMatchObject({ kind: "access", provider: "gemini", httpStatus: 403 });
+    expect(requests).toHaveLength(2);
+  });
   test("routes each key only to its provider and keeps credentials out of URLs/body", async () => {
     const { keys } = fixture();
     await keys.save("youtube", fakeKey); await keys.save("gemini", `${fakeKey}-gemini`);
@@ -141,13 +166,39 @@ describe("direct YouTube metadata", () => {
 });
 
 describe("explicit Gemini generation", () => {
+  test("YouTube verification failures are not all mislabeled as rejected access", async () => {
+    for (const [failure, kind] of [["quota", "quota"], ["network", "network"], ["access", "access"], ["invalid_response", "unavailable"]] as const) {
+      const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+      let calls = 0; let writes = 0; let inspections = 0;
+      const transport = createProviderTransport(keys, async (url) => {
+        calls++;
+        if (String(url).includes("generativelanguage.googleapis.com")) return json(draftResponse(drafts));
+        if (failure === "network") throw new Error(fakeKey);
+        if (failure === "invalid_response") return json({ items: null });
+        return json({ error: { message: fakeKey, errors: [{ reason: failure === "quota" ? "quotaExceeded" : "forbidden" }] } }, 403);
+      });
+      const youtube = createByokYouTube(transport, keys);
+      const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() { writes++; } }, youtube.resolve, async () => { inspections++; return inspect(); });
+      const error = await client.generate(["science"]).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(ProviderError);
+      expect(error).toMatchObject({ kind, provider: "youtube" });
+      expect(String(error)).toContain("YouTube:");
+      expect(String(error)).not.toContain(fakeKey);
+      expect(calls).toBe(2);
+      expect(inspections).toBe(0);
+      expect(writes).toBe(0);
+    }
+  });
   test("reads spend no quota; generation verifies sources and reuses the weekly result", async () => {
     const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
     const stored = new Map<string, string>(); let calls = 0; const resolved: string[] = []; let requestBody = "";
     const transport = createProviderTransport(keys, (async (_url, init) => { calls++; requestBody = String(init?.body); return json(draftResponse(calls === 1 ? drafts : review)); }) as typeof fetch);
     const client = createByokWeeklyPicks(transport, keys, { async getItem(key) { return stored.get(key) ?? null; }, async setItem(key, value) { stored.set(key, value); } }, async (handle) => { resolved.push(handle); return { status: "success", data: { source, provenance: "provider" } }; }, inspect);
     expect(await client.getWeeklyPicks(["science"])).toEqual({ status: "missing_configuration" }); expect(calls).toBe(0);
-    await client.generate(["science"]); expect(calls).toBe(2); expect(resolved).toEqual(["@science"]);
+    const stages: string[] = [];
+    await client.generate(["science"], undefined, undefined, (stage) => stages.push(stage));
+    expect(stages).toEqual(["suggestions", "verification", "sample", "review", "save"]);
+    expect(calls).toBe(2); expect(resolved).toEqual(["@science"]);
     const result = await client.getWeeklyPicks(["science"]);
     expect(result).toMatchObject({ status: "success", response: { state: "cached", interests: [{ picks: [{ source }] }] } });
     expect(weeklyPickToSourceResolution(mapWeeklyPicksClientResult(result).items[0]).fetchedAt).toBeGreaterThan(0);
@@ -157,7 +208,7 @@ describe("explicit Gemini generation", () => {
   test("unverified and malformed model output never becomes a source", () => {
     expect(() => parseGeminiDraft(draftResponse([{ ...drafts[0], handle: "https://evil.example" }]), ["science"])).toThrow();
     expect(() => parseGeminiDraft(draftResponse([{ ...drafts[0], interestId: "unknown" }]), ["science"])).toThrow();
-    expect(() => parseGeminiDraft(draftResponse([...drafts, ...drafts]), ["science"])).toThrow();
+    expect(parseGeminiDraft(draftResponse([null, { ...drafts[0], handle: "https://evil.example" }, ...drafts, ...drafts]), ["science"])).toEqual(drafts);
     expect(() => parseGeminiDraft({ candidates: [{ finishReason: "MAX_TOKENS" }] }, ["science"])).toThrow();
   });
   test("missing keys never generate and cancelled verification never persists", async () => {
@@ -268,6 +319,108 @@ describe("explicit Gemini generation", () => {
     ]);
     await pruneByokPicks({ async getAllKeys() { return [...data.keys()]; }, async getItem(key) { return data.get(key) ?? null; }, async removeItem(key) { data.delete(key); } }, Date.parse("2026-10-20T12:00:00Z"));
     expect([...data.keys()]).toEqual(["frame.byok.weekly.current.v1", "frame.library", providerKeyName("youtube")]);
+  });
+});
+
+describe("discovery resilience and safe diagnostics", () => {
+  test("requests bounded structured output while keeping local quality checks", async () => {
+    const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+    const bodies: { generationConfig: { responseMimeType: string; responseJsonSchema: Record<string, unknown> } }[] = [];
+    const transport = createProviderTransport(keys, async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return json(draftResponse(bodies.length === 1 ? drafts : review)); });
+    const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() {} }, async () => ({ status: "success", data: { source, provenance: "provider" } }), inspect);
+    await client.generate(["science"]);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].generationConfig).toMatchObject({ responseMimeType: "application/json", responseJsonSchema: { type: "array", maxItems: 24, items: { properties: { interestId: { enum: ["science"] } } } } });
+    expect(bodies[1].generationConfig.responseJsonSchema).toMatchObject({ additionalProperties: false, required: ["decision", "confidence", "reason", "valuableVideoIds", "concerns"] });
+  });
+  test("late provider failures retain only reviewed picks without retries or refill", async () => {
+    for (const failureStage of ["verification", "sample", "review", "malformed-review"] as const) {
+      const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+      const stored = new Map<string, string>(); let calls = 0; let resolutions = 0; let inspections = 0;
+      const transport = createProviderTransport(keys, async () => {
+        calls++;
+        if (calls === 3 && failureStage === "malformed-review") return json({ candidates: [{ finishReason: "STOP", content: { parts: [null] } }] });
+        return calls === 3 ? json({ error: { message: fakeKey } }, 429) : json(draftResponse(calls === 1 ? [...drafts, { ...drafts[0], handle: "@second" }] : review));
+      });
+      const client = createByokWeeklyPicks(transport, keys, { async getItem(key) { return stored.get(key) ?? null; }, async setItem(key, value) { stored.set(key, value); } }, async () => {
+        resolutions++;
+        if (resolutions === 2 && failureStage === "verification") return { status: "unauthorized", message: fakeKey };
+        return { status: "success", data: { source: { ...source, providerSourceId: resolutions === 1 ? channelId : "UCzyxwvutsrqponmlkjihgfed" }, provenance: "provider" } };
+      }, async (sourceId) => {
+        if (++inspections === 2 && failureStage === "sample") throw new ProviderError("network", "youtube");
+        return { ...await inspect(), sourceId };
+      });
+      await client.generate(["science"], undefined, "profile-a");
+      const result = await client.getWeeklyPicks(["science"], "profile-a");
+      expect(result.status).toBe("success");
+      if (result.status !== "success") throw new Error("Missing partial edition");
+      expect(result.response.interests.flatMap((group) => group.picks)).toHaveLength(1);
+      expect(result.response.message).toContain("Saved the fully reviewed picks");
+      expect(result.response.message).toContain(failureStage === "malformed-review" ? "Gemini: The provider returned incomplete data" : failureStage === "review" ? "Gemini (HTTP 429)" : "YouTube:");
+      expect(result.response.message).not.toContain(fakeKey);
+      expect(await client.canRetryEmpty("profile-a")).toBeFalse();
+      await client.generate(["science"], undefined, "profile-a");
+      expect(calls).toBe(failureStage === "review" || failureStage === "malformed-review" ? 3 : 2);
+      expect(await client.getWeeklyPicks(["science"], "profile-b")).toEqual({ status: "missing_configuration" });
+    }
+  });
+  test("cancellation or key changes after an accepted pick never save partial work", async () => {
+    for (const cancelBy of ["signal", "key"]) {
+      const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+      const controller = new AbortController(); let calls = 0; let resolutions = 0; let writes = 0;
+      const transport = createProviderTransport(keys, async () => json(draftResponse(++calls === 1 ? [...drafts, { ...drafts[0], handle: "@second" }] : review)));
+      const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() { writes++; } }, async () => {
+        if (++resolutions === 2) {
+          if (cancelBy === "signal") controller.abort(); else await keys.remove("gemini");
+          throw new ProviderError("network", "youtube");
+        }
+        return { status: "success", data: { source, provenance: "provider" } };
+      }, inspect);
+      await expect(client.generate(["science"], controller.signal)).rejects.toMatchObject({ kind: "cancelled" });
+      expect(writes).toBe(0); expect(calls).toBe(2);
+    }
+  });
+  test("first-request errors identify stage, model and HTTP status without caching an empty edition", async () => {
+    const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+    let writes = 0;
+    const transport = createProviderTransport(keys, async () => json({ error: { message: fakeKey } }, 400));
+    const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() { writes++; } }, async () => ({ status: "not_found", message: "Unavailable" }), inspect);
+    const error = await client.generate(["science"]).catch((error: unknown) => error);
+    expect(error).toMatchObject({ kind: "request", provider: "gemini", httpStatus: 400, stage: "suggestions" });
+    expect(String(error)).toContain("Suggesting sources"); expect(String(error)).toContain("gemini-3.5-flash-lite");
+    expect(String(error)).not.toContain(fakeKey); expect(writes).toBe(0);
+  });
+  test("local save errors do not blame provider keys or leak raw exceptions", async () => {
+    const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+    let calls = 0;
+    const transport = createProviderTransport(keys, async () => json(draftResponse(++calls === 1 ? drafts : review)));
+    const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() { throw new Error(fakeKey); } }, async () => ({ status: "success", data: { source, provenance: "provider" } }), inspect);
+    const error = await client.generate(["science"]).catch((error: unknown) => error);
+    expect(String(error)).toContain("read or save discovery"); expect(String(error)).not.toContain(fakeKey);
+  });
+  test("invalid JSON transport responses are data failures, not network or access failures", async () => {
+    const { keys } = fixture(); await keys.save("gemini", fakeKey);
+    const transport = createProviderTransport(keys, async () => new Response("not JSON", { status: 200 }));
+    await expect(transport.gemini("gemini-3.5-flash-lite", {})).rejects.toMatchObject({ kind: "invalid_response", provider: "gemini", httpStatus: 200 });
+  });
+  test("thought text is not parsed as a recommendation", () => {
+    const value = draftResponse(drafts);
+    value.candidates[0].content.parts.unshift({ text: "private reasoning", thought: true } as { text: string });
+    expect(parseGeminiDraft(value, ["science"])).toEqual(drafts);
+  });
+  test("malformed provider envelopes consistently produce typed data errors", () => {
+    for (const parts of [null, {}, [null], ["text"], []]) {
+      expect(() => parseGeminiDraft({ candidates: [{ finishReason: "STOP", content: { parts } }] }, ["science"])).toThrow(ProviderError);
+    }
+  });
+  test("rejected reviews remain bounded to 25 Gemini requests per attempt", async () => {
+    const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+    let calls = 0;
+    const candidates = Array.from({ length: 24 }, (_, index) => ({ ...drafts[0], handle: `@creator${index}` }));
+    const transport = createProviderTransport(keys, async () => json(draftResponse(++calls === 1 ? candidates : { ...review, decision: "reject" })));
+    const client = createByokWeeklyPicks(transport, keys, { async getItem() { return null; }, async setItem() {} }, async (handle) => ({ status: "success", data: { source: { ...source, providerSourceId: `UC${handle.slice(1).padEnd(22, "a")}` }, provenance: "provider" } }), async (sourceId) => ({ ...await inspect(), sourceId }));
+    await client.generate(["science"]);
+    expect(calls).toBe(25);
   });
 });
 

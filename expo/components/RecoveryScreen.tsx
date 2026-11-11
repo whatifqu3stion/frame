@@ -1,5 +1,6 @@
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useColorScheme } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { createPalette, createType, radii, spacing } from "@/constants/theme";
 import { recoveryAppearance } from "@/services/recoveryAppearance";
@@ -17,7 +18,7 @@ export default function RecoveryScreen({ loading = false, title, message, onRetr
     {loading ? <ActivityIndicator color={palette.active} accessibilityLabel={title} /> : null}
     <Text accessibilityRole="header" style={[type.heading, styles.copy]}>{title}</Text>
     {message ? <Text style={[type.bodySoft, styles.copy]}>{message}</Text> : null}
-    {onRetry && !loading ? <Pressable accessibilityRole="button" onPress={onRetry} testID="recovery-retry" style={[styles.retry, { backgroundColor: palette.accentDeep }]}><Text style={[type.label, { color: palette.onDark, textAlign: "center" }]}>Try again</Text></Pressable> : null}
+    {onRetry && !loading ? <PrimaryAction depth={palette.primaryButtonDepth} accessibilityRole="button" onPress={onRetry} testID="recovery-retry" style={[styles.retry, { backgroundColor: palette.accentDeep }]}><Text style={[type.label, { color: palette.onDark, textAlign: "center" }]}>Try again</Text></PrimaryAction> : null}
   </ScrollView>;
 }
 

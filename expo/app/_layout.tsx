@@ -1,6 +1,6 @@
 import CollectionArrivalProvider from "@/providers/CollectionArrivalProvider";
 import ThemeTransitionProvider from "@/providers/ThemeTransitionProvider";
-import ArtworkTransitionProvider, { useArtworkTransition } from "@/providers/ArtworkTransitionProvider";
+import RoomLightingProvider from "@/providers/RoomLightingProvider";
 import Text, { FontScaleProvider } from "@/components/FrameText";
 import PaperSurface from "@/components/PaperSurface";
 import PreviewLibraryBar from "@/preview/PreviewLibraryBar";
@@ -15,7 +15,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { ActivityIndicator, AppState, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, View } from "react-native";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import StartupGate from "@/components/StartupGate";
 import { rememberRecoveryAppearance } from "@/services/recoveryAppearance";
@@ -27,12 +27,7 @@ import { clearOrientationRequest, setOrientationRequest } from "@/services/orien
 
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 60 * 5, retry: false } },
-});
-
 function AppContent() {
-  const { shared } = useArtworkTransition();
   const { ready, prefs, activeProfileId } = useApp();
   const entryPath = usePathname();
   const { palette } = useFrameTheme();
@@ -74,12 +69,13 @@ function AppContent() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="welcome-preview" options={{ headerShown: false }} />
-      <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: shared ? "card" : "fullScreenModal", animation: shared ? "none" : "default" }} />
+      <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: "card", animation: "none", contentStyle: { backgroundColor: watchPalette.wall } }} />
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
       <Stack.Screen name="terms" options={{ title: "Terms" }} />
       <Stack.Screen name="settings/[section]" options={{ title: "Settings" }} />
       <Stack.Screen name="diagnostics" options={{ title: "Device diagnostics" }} />
+      <Stack.Screen name="add-source" options={{ headerShown: false }} />
       <Stack.Screen name="google-import" options={{ title: "Import subscriptions", presentation: "modal" }} />
       <Stack.Screen name="add-to-queue" options={{ presentation: "modal", title: "Add to session" }} />
       <Stack.Screen name="session" options={{ presentation: "modal", title: "Session", headerTitle: () => null }} />
@@ -101,9 +97,16 @@ function ThemedApp() {
   const { profileSwitching, activeProfileId, prefs } = useApp();
   React.useLayoutEffect(() => { rememberRecoveryAppearance(prefs.theme, prefs.accent); }, [prefs.theme, prefs.accent]);
   const isWatching = segments[0] === "watch";
+  const wall = isWatching ? watchPalette.wall : palette.wall;
+  React.useLayoutEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", wall);
+    document.body.style.backgroundColor = wall;
+    document.documentElement.style.colorScheme = isWatching || isDark ? "dark" : "light";
+  }, [isDark, isWatching, wall]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: isWatching ? watchPalette.wall : palette.wall }}>
+    <View style={{ flex: 1, backgroundColor: wall }}>
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
       <PreviewLibraryBar />
       <View key={activeProfileId} style={{ flex: 1 }}><AppContent /></View>
@@ -114,6 +117,10 @@ function ThemedApp() {
 }
 
 export default function RootLayout() {
+  // Keep the provider and mounted query observers on the same cache during Fast Refresh.
+  const [queryClient] = React.useState(() => new QueryClient({
+    defaultOptions: { queries: { staleTime: 1000 * 60 * 5, retry: false } },
+  }));
   const [fontWaitExpired, setFontWaitExpired] = React.useState(false);
   React.useEffect(() => { const timer = setTimeout(() => setFontWaitExpired(true), 8000); return () => clearTimeout(timer); }, []);
   const [fontsLoaded, fontError] = useFonts({
@@ -135,7 +142,7 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <FontScaleProvider><AppProvider>
-          <StartupGate><ThemeTransitionProvider><CollectionArrivalProvider><ArtworkTransitionProvider><ThemedApp /></ArtworkTransitionProvider></CollectionArrivalProvider></ThemeTransitionProvider></StartupGate>
+          <StartupGate><ThemeTransitionProvider><CollectionArrivalProvider><RoomLightingProvider><ThemedApp /></RoomLightingProvider></CollectionArrivalProvider></ThemeTransitionProvider></StartupGate>
         </AppProvider></FontScaleProvider>
       </QueryClientProvider>
     </ErrorBoundary>

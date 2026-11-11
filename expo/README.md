@@ -22,6 +22,8 @@ bun run start
 
 A web preview can help review layout and interaction, but native playback, secure key storage, authentication, and device behavior require their own compatible builds and acceptance checks.
 
+For hosting the browser preview, see the [Render deployment guide](docs/RENDER.md) and the root `render.yaml`.
+
 ## Automated checks
 
 ```bash

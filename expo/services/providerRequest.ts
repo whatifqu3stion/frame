@@ -1,10 +1,22 @@
 import { boundedRequest } from "./boundedRequest";
 import type { KeyProvider, ProviderKeyStore } from "../storage/providerKeys";
 
-export type ProviderErrorKind = "missing_key" | "access" | "quota" | "network" | "invalid_response" | "cancelled" | "storage";
+export type ProviderErrorKind = "missing_key" | "access" | "request" | "billing" | "unavailable" | "quota" | "network" | "invalid_response" | "cancelled" | "storage";
 export class ProviderError extends Error {
-  constructor(public readonly kind: ProviderErrorKind) {
-    super({ storage: "Secure key storage is unavailable. Use the iPhone or Android app, or try again after unlocking your device.", missing_key: "Add your provider key in Settings → Your API keys.", access: "The provider rejected access. Check the key, API restrictions, and whether the API is enabled.", quota: "Your provider quota or rate limit was reached. Check your provider account before trying again.", network: "The provider could not be reached. Check your connection and try again.", invalid_response: "The provider returned incomplete data. Try again later.", cancelled: "The request was cancelled. Try again when you are ready." }[kind]);
+  constructor(public readonly kind: ProviderErrorKind, public readonly provider?: KeyProvider, public readonly httpStatus?: number) {
+    const message = {
+      storage: "Secure key storage is unavailable. Use the iPhone or Android app, or try again after unlocking your device.",
+      missing_key: "Add your provider key in Settings → YouTube & Gemini.",
+      access: provider === "gemini" ? "API access was rejected. Check your Gemini key restrictions, Generative Language API access, and project eligibility or billing status in Google AI Studio." : "The provider rejected access. Check the key, API restrictions, and whether the API is enabled.",
+      request: "The request or project configuration was rejected. Check provider setup; if it is correct, Frame’s request may need an update.",
+      billing: "The provider requires a billing or credit update. Review your provider account before trying again.",
+      unavailable: "The provider service, resource, or model is unavailable. Try later; if this persists, Frame’s provider configuration may need an update.",
+      quota: "Your provider quota or rate limit was reached. Check your provider account before trying again.",
+      network: "The provider could not be reached. Check your connection and try again.",
+      invalid_response: "The provider returned incomplete data. Try again later.",
+      cancelled: "The request was cancelled. Try again when you are ready.",
+    }[kind];
+    super(`${provider ? `${provider === "gemini" ? "Gemini" : "YouTube"}${httpStatus === undefined ? "" : ` (HTTP ${httpStatus})`}: ` : ""}${message}`);
     this.name = "ProviderError";
   }
 }
@@ -34,21 +46,23 @@ export function createProviderTransport(keys: ProviderKeyStore, fetchImpl: typeo
         });
         // Raw provider errors may echo credentials or request content. Never surface them.
         if (!response.ok) {
-          if (response.status === 429) throw new ProviderError("quota");
+          if (response.status === 429) throw new ProviderError("quota", provider, response.status);
           if (response.status === 403) {
             const errorBody = await response.json().catch(() => null) as { error?: { errors?: { reason?: string }[] } } | null;
-            if (errorBody?.error?.errors?.some((error) => ["quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"].includes(error.reason ?? ""))) throw new ProviderError("quota");
+            if (Array.isArray(errorBody?.error?.errors) && errorBody.error.errors.some((error) => ["quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"].includes(error?.reason ?? ""))) throw new ProviderError("quota", provider, response.status);
           }
-          if ([400, 401, 403].includes(response.status)) throw new ProviderError("access");
-          throw new ProviderError("network");
+          if (response.status === 400) throw new ProviderError("request", provider, response.status);
+          if (response.status === 402) throw new ProviderError("billing", provider, response.status);
+          if ([401, 403].includes(response.status)) throw new ProviderError("access", provider, response.status);
+          throw new ProviderError("unavailable", provider, response.status);
         }
-        const result: unknown = await response.json();
+        const result: unknown = await response.json().catch(() => { throw new ProviderError("invalid_response", provider, response.status); });
         if (keys.revision() !== revision || requestSignal.aborted) throw new ProviderError("cancelled");
         return result;
       }, body === undefined ? 12_000 : 30_000, controller.signal);
     } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError(controller.signal.aborted ? "cancelled" : "network");
+      if (error instanceof ProviderError) throw error.provider ? error : new ProviderError(error.kind, provider, error.httpStatus);
+      throw new ProviderError(controller.signal.aborted ? "cancelled" : "network", provider);
     } finally { unsubscribe(); signal?.removeEventListener("abort", cancel); }
   }
   return {

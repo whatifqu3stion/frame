@@ -10,21 +10,23 @@ export type TodayFeedback = FeedbackBase & (
 
 type TodayFeedbackEvent =
   | { type: "clear" }
+  | { type: "expireCollection"; notice: TodayFeedback }
   | { type: "dismissed"; item: TodaySnapshotItem }
   | { type: "saved"; profileId: string; videoId: string }
-  | { type: "session"; profileId: string; sessionId: string }
+  | { type: "session"; profileId: string; sessionId: string; name: string }
   | { type: "snoozed"; profileId: string; videoId: string; until: number };
 
 // A result always replaces the whole message and action together.
-export function todayFeedbackReducer(_current: TodayFeedback | null, event: TodayFeedbackEvent): TodayFeedback | null {
+export function todayFeedbackReducer(current: TodayFeedback | null, event: TodayFeedbackEvent): TodayFeedback | null {
   switch (event.type) {
     case "clear": return null;
+    case "expireCollection": return current === event.notice && (current.action === "viewSaved" || current.action === "openSession") ? null : current;
     case "dismissed": return {
       profileId: event.item.profileId, message: "Dismissed from Today", action: "undoDismiss",
       target: { item: event.item, previous: event.item.disposition, snoozedUntil: event.item.snoozedUntil },
     };
     case "saved": return { profileId: event.profileId, message: "Video saved", action: "viewSaved", target: { videoId: event.videoId } };
-    case "session": return { profileId: event.profileId, message: "Added to session", action: "openSession", target: { sessionId: event.sessionId } };
+    case "session": return { profileId: event.profileId, message: `Added to ${event.name}`, action: "openSession", target: { sessionId: event.sessionId } };
     case "snoozed": return {
       profileId: event.profileId,
       message: `Snoozed until ${new Date(event.until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`,

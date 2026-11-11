@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
-import { Alert } from "react-native";
+import { confirmUser } from "@/services/notifyUser";
 import { createExitConfirmation } from "@/domain/exitConfirmation";
 
 /** Only user exits are guarded. Authorization loss and profile teardown bypass this hook. */
@@ -12,9 +12,6 @@ export function useDiscardChanges(dirty: boolean, scope: string, enabled = true)
   return useCallback((proceed: () => void) => {
     if (!enabled) return;
     if (!dirty) { proceed(); return; }
-    gate.request((decide) => Alert.alert("Discard changes?", "Your changes haven’t been saved.", [
-      { text: "Keep editing", style: "cancel", onPress: () => decide(false) },
-      { text: "Discard changes", style: "destructive", onPress: () => decide(true) },
-    ], { cancelable: true, onDismiss: () => decide(false) }), proceed);
+    gate.request((decide) => confirmUser("Discard changes?", "Your changes haven’t been saved.", "Discard changes", decide, true), proceed);
   }, [dirty, enabled, gate]);
 }

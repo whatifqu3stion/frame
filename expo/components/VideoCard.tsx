@@ -1,4 +1,3 @@
-import { useArtworkLink } from "@/providers/ArtworkTransitionProvider";
 import Text from "@/components/FrameText";
 import { durationDecision, SHORT_FORM_MESSAGE } from "@/domain/contentPolicy";
 import { skipToken, useQuery } from "@tanstack/react-query";
@@ -27,7 +26,6 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
   const { requirePurchase, activeProfileId } = useApp();
   const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, video.id], queryFn: skipToken, enabled: false });
   video = expireVideo(recovered.data && (recovered.data.fetchedAt ?? 0) > (video.fetchedAt ?? 0) ? recovered.data : video, Date.now());
-  const artwork = useArtworkLink(video.id, video.thumbnailUrl);
   const expired = !isMetadataCurrent(video.fetchedAt, Date.now());
   const shortForm = durationDecision(video.durationSeconds) === "short";
   const policyNotice = shortForm ? <Text style={[type.bodySoft, { paddingVertical: spacing.sm }]}>{SHORT_FORM_MESSAGE}</Text> : null;
@@ -37,7 +35,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
   const progressFraction = progressSeconds && video.durationSeconds ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds)) : 0;
   const accessibilityLabel = `${sessionLabel ? `${sessionLabel}. ` : ""}${shortForm ? "Unavailable short-form video" : progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
-  const dateLabel = formatRelativeDate(video.publishedAt);
+  const dateLabel = progressSeconds && progressSeconds > 0 ? `Resume at ${formatDuration(progressSeconds)}` : formatRelativeDate(video.publishedAt);
 
   useEffect(() => {
     setIsThumbnailLoading(Boolean(video.thumbnailUrl));
@@ -46,12 +44,12 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
   const onPress = useCallback((): void => {
     if (navigationLocked.current || !requirePurchase("library")) return;
     navigationLocked.current = true;
-    artwork.open(() => router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { ...(sessionId ? { savedSessionId: sessionId, sessionProfileId: activeProfileId } : {}), id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } }));
+    router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { ...(sessionId ? { savedSessionId: sessionId, sessionProfileId: activeProfileId } : {}), id: video.id, title: video.title, channelId: video.channelId, channelTitle: video.channelTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), description: video.description ?? "", madeForKids: video.madeForKids === true ? "1" : video.madeForKids === false ? "0" : "", cachedMetadata: "1", fetchedAt: String(video.fetchedAt ?? 0) } });
     setTimeout(() => { navigationLocked.current = false; }, 800);
-  }, [activeProfileId, artwork, requirePurchase, sessionId, video]);
+  }, [activeProfileId, requirePurchase, sessionId, video]);
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
-    <View ref={artwork.ref} collapsable={false} style={[wrapStyle, artwork.hidden && { opacity: 0 }]}><View style={{ flex: 1 }}>
+    <View style={wrapStyle}><View style={{ flex: 1 }}>
       {video.thumbnailUrl ? <Image
         source={{ uri: video.thumbnailUrl }}
         style={imageStyle}

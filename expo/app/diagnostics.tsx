@@ -1,9 +1,10 @@
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import Heading from "@/components/Heading";
 import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useMemo, useState } from "react";
-import { Platform, Pressable, Share, ScrollView, StyleSheet, View } from "react-native";
+import { Platform, Share, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   APP_ENV,
@@ -74,17 +75,18 @@ function DiagnosticsScreen() {
         <Text style={type.body}>Include this report when describing a problem. Add what happened and the steps to repeat it.</Text>
         <Text style={type.bodySoft}>No keys, PINs, account details or viewing history are included. Nothing is sent automatically.</Text>
         <InlineHelp label="View diagnostic report"><Text selectable style={type.bodySoft}>{report}</Text></InlineHelp>
-        {Platform.OS !== "web" ? <Pressable disabled={sharing} onPress={() => { void shareStatus(); }} accessibilityRole="button" accessibilityState={{ disabled: sharing, busy: sharing }} style={{ minHeight: 48, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep, alignItems: "center" }}><Text style={[type.label, { color: palette.onDark }]}>{sharing ? "Opening share options…" : "Share diagnostic report"}</Text></Pressable> : <Text style={type.bodySoft}>Sharing is available in the mobile app. You can select and copy the report above.</Text>}
+        {Platform.OS !== "web" ? <PrimaryAction depth={palette.primaryButtonDepth} disabled={sharing} onPress={() => { void shareStatus(); }} accessibilityRole="button" accessibilityState={{ disabled: sharing, busy: sharing }} style={{ minHeight: 48, padding: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep, alignItems: "center" }}><Text style={[type.label, { color: palette.onDark }]}>{sharing ? "Opening share options…" : "Share diagnostic report"}</Text></PrimaryAction> : <Text style={type.bodySoft}>Sharing is available in the mobile app. You can select and copy the report above.</Text>}
         {shareError ? <Text accessibilityLiveRegion="polite" style={type.bodySoft}>Couldn’t open sharing. Open the report above to select and copy it.</Text> : null}
       </View>
 
-      <DiagnosticSection title="Runtime" styles={styles} type={type}>
+      <View style={{ paddingHorizontal: spacing.page, marginTop: spacing.md }}><InlineHelp label="Technical details">
+      <DiagnosticSection title="App and device" styles={styles} type={type}>
         <DiagnosticRow label="App version" value={`${version} · Build ${build}`} styles={styles} type={type} />
         <DiagnosticRow label={Platform.OS === "android" ? "Android API level" : "System"} value={systemVersion} styles={styles} type={type} />
         <DiagnosticRow label="Environment" value={APP_ENV} styles={styles} type={type} />
       </DiagnosticSection>
 
-      <DiagnosticSection title="Persistence" styles={styles} type={type}>
+      <DiagnosticSection title="Local storage" styles={styles} type={type}>
         <DiagnosticRow
           label="Database version"
           value={database ? `${database.version}${database.version === 0 ? " (unversioned baseline)" : ""}` : databaseQuery.isError ? "unavailable" : `${DATABASE_SCHEMA_VERSION} (loading)`}
@@ -99,7 +101,6 @@ function DiagnosticsScreen() {
         <DiagnosticRow label="Latest attempt" value={cleanup ? cleanupLabels[cleanup.state] : "Loading"} styles={styles} type={type} />
         <DiagnosticRow label="Disk / memory" value={cleanup ? `${cleanup.diskCleared === null ? "not confirmed" : cleanup.diskCleared ? "cleared" : "not cleared"} / ${cleanup.memoryCleared === null ? "not confirmed" : cleanup.memoryCleared ? "cleared" : "not cleared"}` : "Loading"} styles={styles} type={type} />
         <DiagnosticRow label="Attempt time" value={cleanup?.attemptedAt ? new Date(cleanup.attemptedAt).toLocaleString() : "No native attempt this launch"} styles={styles} type={type} />
-        <DiagnosticRow label="Device verification" value="API results are not a full device acceptance test. Confirm retained links, progress and Session order after restart and offline. Videos still require internet." styles={styles} type={type} />
       </DiagnosticSection>
 
       <DiagnosticSection title="Services" styles={styles} type={type}>
@@ -107,7 +108,7 @@ function DiagnosticsScreen() {
         <DiagnosticRow label="Google on this device" value={isGooglePlatformConfigured() ? `${APP_ENV} configured` : "not configured"} styles={styles} type={type} />
         <DiagnosticRow label="Storage mode" value={database?.storage === "sqlite" ? "persistent on device" : database ? "preview only; resets on refresh" : databaseQuery.isError ? "unavailable" : "checking storage"} styles={styles} type={type} />
       </DiagnosticSection>
-
+      </InlineHelp></View>
     </ScrollView>
   );
 }
@@ -154,7 +155,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: "transparent" },
     intro: { paddingHorizontal: spacing.page, gap: spacing.sm },
-    section: { paddingHorizontal: spacing.page, marginTop: spacing.xl, gap: spacing.sm },
+    section: { marginTop: spacing.md, gap: spacing.sm },
     card: {
       backgroundColor: palette.surface,
       borderRadius: radii.card,

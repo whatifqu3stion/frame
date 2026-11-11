@@ -1,32 +1,30 @@
+import PlaybackAction from "@/components/PlaybackAction";
 import Text from "@/components/FrameText";
 import MotionView from "@/components/motion/MotionView";
 import ProgrammeArtwork from "@/components/ProgrammeArtwork";
-import DisclosureIndicator from "@/components/motion/DisclosureIndicator";
+import InfoButton from "@/components/InfoButton";
 import { motion } from "@/constants/motion";
 import Heading from "@/components/Heading";
-import { readSessionRun, resetSessionRun } from "@/db/database";
+import { useSessionPlayback } from "@/hooks/useSessionPlayback";
 import { sessionTimeRemaining } from "@/domain/sessionTimer";
-import { useFocusEffect } from "@react-navigation/native";
 import { boundedCollection } from "@/constants/layout";
 import MediaImage from "@/components/MediaImage";
-import { useScreenAction } from "@/hooks/useScreenAction";
 import { useFeedback } from "@/hooks/useFeedback";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Copy, Pencil, Play, Trash2 } from "lucide-react-native";
+import { Copy, Pencil, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
 import EmptyState from "@/components/EmptyState";
-import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo, isMetadataCurrent } from "@/domain/metadataRetention";
-import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
+import { sessionRuntime } from "@/domain/sessionFlow";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
@@ -36,9 +34,8 @@ export default function SavedSessionScreen() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [timingOpen, setTimingOpen] = useState(false);
-  const { id, assembled } = useLocalSearchParams<{ id: string; assembled?: string }>();
-  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionPosition, requirePurchase, libraryError, refreshLibrary } = useApp();
-  const { busy, run, capture } = useScreenAction(`${activeProfileId}:${id}`);
+  const { id, assembled, addedVideoId } = useLocalSearchParams<{ id: string; assembled?: string; addedVideoId?: string }>();
+  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, requirePurchase, libraryError, refreshLibrary } = useApp();
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
     queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""], networkMode: "always",
@@ -53,34 +50,8 @@ export default function SavedSessionScreen() {
     });
     return map;
   }, [savedVideos, todayVideosQuery.data, recovered.data]);
-  const timerQuery = useQuery({ queryKey: ["session-run", activeProfileId, id], queryFn: () => readSessionRun(activeProfileId, String(id)), enabled: Boolean(session), networkMode: "always" });
-  const refreshTimer = timerQuery.refetch;
-  useFocusEffect(useCallback(() => { void refreshTimer(); }, [refreshTimer]));
-  const timeComplete = Boolean(timerQuery.data && (timerQuery.data.ended || (session?.targetMinutes && sessionTimeRemaining(timerQuery.data, session.targetMinutes) === 0)));
-  const finishingCurrent = Boolean(timerQuery.data?.finishVideoId && !timerQuery.data.ended && session?.orderedVideoIds[sessionPosition(session)] === timerQuery.data.finishVideoId);
-  const position = session ? sessionPosition(session) : 0;
+  const { busy, run, capture, startAt, timerQuery, position, timeComplete, playLabel } = useSessionPlayback(session, videoMap);
   const runtime = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()]);
-
-  const startAt = useCallback(async (index: number): Promise<void> => {
-    if (!session || !requirePurchase("sessions")) return;
-    if (!session.targetMinutes) { router.push({ pathname: "/session", params: { id: session.id } }); return; }
-    const videoId = session.orderedVideoIds[index];
-    if (!videoId) return;
-    const done = feedback.capture();
-    await run(async () => {
-      const usage = await readSessionRun(activeProfileId, session.id);
-      if (usage.ended || (sessionTimeRemaining(usage, session.targetMinutes!) === 0 && usage.finishVideoId !== videoId) || position >= session.orderedVideoIds.length) await resetSessionRun(activeProfileId, session.id);
-      const moved = await updateSessionPosition(session.id, videoId, index, index);
-      if (!moved) throw new Error("Session changed");
-    }, () => {
-      done("commit");
-      const video = videoMap.get(videoId);
-      router.push({
-        pathname: FRAME_PLAYBACK_ROUTE,
-        params: { id: videoId, savedSessionId: session.id, sessionProfileId: activeProfileId, title: video?.title ?? "", channelId: video?.channelId ?? "", channelTitle: video?.channelTitle ?? "", thumbnailUrl: video?.thumbnailUrl ?? "", publishedAt: video?.publishedAt ?? "", durationSeconds: String(video?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(video?.fetchedAt ?? 0) },
-      });
-    }, () => Alert.alert("Couldn’t start session", "Check your session and try again."));
-  }, [activeProfileId, feedback, requirePurchase, session, updateSessionPosition, videoMap, run, position]);
 
   const duplicate = useCallback(async (): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
@@ -123,21 +94,20 @@ export default function SavedSessionScreen() {
       <ProgrammeGrain />
       <ProgrammeArtwork videos={session.orderedVideoIds.map((videoId) => videoMap.get(videoId))} enter={assembled === "1"} editorial />
       <Heading level={1} style={styles.title}>{session.name}</Heading>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length} {session.orderedVideoIds.length === 1 ? "video" : "videos"} · {runtime.seconds ? `${runtime.unknown ? "at least " : ""}${Math.ceil(runtime.seconds / 60)} min in queue` : "duration unavailable"}{runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}</Text>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length} {session.orderedVideoIds.length === 1 ? "video" : "videos"} · {runtime.seconds ? `${runtime.unknown ? "at least " : ""}${Math.ceil(runtime.seconds / 60)} min of video` : "duration unavailable"}{runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}</Text>
       {position > 0 ? <Text style={styles.subtitle}>{position >= session.orderedVideoIds.length ? "Queue complete" : `Up next · Video ${position + 1} of ${session.orderedVideoIds.length}`}</Text> : null}
       {session.orderedVideoIds.length > 0 ? (
         <View style={styles.startRow}>
           {session.targetMinutes ? <View style={styles.timeCopy}>
-            <Pressable onPress={() => setTimingOpen(!timingOpen)} style={styles.timingToggle} accessibilityRole="button" accessibilityLabel={`Viewing time: ${session.targetMinutes} minutes. How session timing works`} accessibilityState={{ expanded: timingOpen }} testID="session-timing-help">
-              <Text style={styles.timeLabel}>{session.targetMinutes} min viewing</Text>
-              <DisclosureIndicator expanded={timingOpen} color={palette.onProgrammeSoft} />
-            </Pressable>
+            <View style={styles.timingToggle}>
+              <Text style={styles.timeLabel}>Pause after {session.targetMinutes} min</Text>
+              <InfoButton onProgramme label={`Session duration: ${session.targetMinutes} minutes. How session timing works`} expanded={timingOpen} onPress={() => setTimingOpen(!timingOpen)} testID="session-timing-help" />
+            </View>
             {timeComplete || timerQuery.data?.consumedSeconds ? <Text style={styles.timeStatus}>{timeComplete ? "Time complete" : `${Math.ceil(sessionTimeRemaining(timerQuery.data!, session.targetMinutes) / 60)} min left`}</Text> : null}
           </View> : null}
-        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, (pressed || busy) && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
-          <Play size={17} color={palette.programme} fill={palette.programme} />
-          <Text style={styles.beginText}>{busy ? "Working…" : !session.targetMinutes ? "Choose duration" : finishingCurrent ? "Finish current video" : timeComplete || position >= session.orderedVideoIds.length ? "Start a new timed session" : position > 0 ? `Continue with video ${position + 1}` : "Start session"}</Text>
-        </Pressable>
+        <PlaybackAction programme disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={[styles.beginButton, busy && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
+          <Text style={styles.beginText}>{busy ? "Working…" : playLabel}</Text>
+        </PlaybackAction>
         </View>
       ) : null}
       {timingOpen && session.targetMinutes ? <MotionView enter distance={-6}><Text style={styles.timingNote}>Only playback counts toward your {session.targetMinutes} minutes. Frame pauses when your time is up; you can finish the current video. Profile limits still apply.</Text></MotionView> : null}
@@ -162,10 +132,10 @@ export default function SavedSessionScreen() {
           return (
             <View key={videoId}><View style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
-              <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
+              <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}${addedVideoId === videoId ? ", just added" : ""}`} >
                 <MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
                 <View style={styles.videoCopy}><Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Saved source"}</Text>
-                <Text style={styles.videoTitle}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
+                <Text style={styles.videoTitle}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}{addedVideoId === videoId ? " · Just added" : ""}</Text>
                 <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text></View>
               </Pressable>
 
@@ -190,7 +160,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     subtitle: { ...type.bodySoft, marginTop: spacing.xs, color: palette.onProgrammeSoft },
     startRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.md, marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.programmeRule },
     timeCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 120 },
-    timingToggle: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.xs },
+    timingToggle: { minHeight: 48, flexDirection: "row", alignItems: "center" },
     timeLabel: { ...type.label, color: palette.onProgramme, flexShrink: 1 },
     timeStatus: { ...type.caption, color: palette.onProgrammeSoft },
     timingNote: { ...type.bodySoft, color: palette.onProgrammeSoft, marginTop: spacing.md },

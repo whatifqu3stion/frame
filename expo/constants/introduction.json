@@ -1,0 +1,9 @@
+{
+  "secondsPerChapter": 7,
+  "chapters": [
+    { "section": "Sources", "title": "Start with a creator.", "body": "Follow a creator whose work you want to see again.", "before": "Follow creator", "after": "Following" },
+    { "section": "Today", "title": "Choose what plays.", "body": "Eligible sources can appear in Today. Pick a film when you’re ready.", "before": "Eligible for Today", "after": "Watch" },
+    { "section": "Saved", "title": "Keep your place.", "body": "Save a film for later. Open Saved to resume where you stopped.", "before": "Save video", "after": "Resume at 4:48" },
+    { "section": "Sessions", "title": "Make a programme.", "body": "Add films to a session, choose their order, then start with the first.", "before": "Add to session", "after": "Start session" }
+  ]
+}

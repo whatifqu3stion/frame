@@ -8,25 +8,40 @@ import { motion } from "../constants/motion";
 // Run the actual hook effect with deterministic native animation and lifecycle
 // boundaries. Advancing a value models interruption without a wall-clock timer.
 function harness(initialWatching = false) {
+  const calls: { from: number; toValue: number; duration: number; easing: unknown }[] = [];
   class Value {
     stopped = false;
     constructor(public value: number) {}
-    stopAnimation() { this.stopped = true; }
-    setValue(value: number) { this.value = value; }
+    get() { return this.value; }
+    set(next: number | { toValue: number; duration: number; easing: unknown }) {
+      if (typeof next === "number") this.value = next;
+      else {
+        this.stopped = false;
+        calls.push({ from: this.value, ...next });
+      }
+    }
   }
   let ref: { current: Value } | undefined;
   let dependencies: unknown[] = [];
   let cleanup: (() => void) | undefined;
   let reduced = false;
   const listeners = new Set<(state: string) => void>();
-  const calls: { from: number; toValue: number; duration: number; useNativeDriver: boolean }[] = [];
   const app = { currentState: "active", addEventListener: (_name: string, callback: (state: string) => void) => { listeners.add(callback); return { remove: () => listeners.delete(callback) }; } };
   const modules: Record<string, unknown> = {
-    react: { useRef: (value: Value) => ref ??= { current: value }, useLayoutEffect: (effect: () => () => void, next: unknown[]) => {
+    react: { useLayoutEffect: (effect: () => () => void, next: unknown[]) => {
       if (next.every((value, index) => value === dependencies[index])) return;
       cleanup?.(); dependencies = next; cleanup = effect();
     } },
-    "react-native": { AppState: app, Platform: { OS: "ios" }, Easing: { cubic: "cubic", out: (value: unknown) => value }, Animated: { Value, timing: (value: Value, config: Omit<typeof calls[number], "from">) => ({ start: () => { value.stopped = false; calls.push({ from: value.value, ...config }); } }) } },
+    "react-native": { AppState: app },
+    "react-native-reanimated": {
+      useSharedValue: (initial: number) => (ref ??= { current: new Value(initial) }).current,
+      cancelAnimation: (value: Value) => { value.stopped = true; },
+      withTiming: (toValue: number, config: { duration: number; easing: unknown }) => ({ toValue, ...config }),
+      Easing: { cubic: "cubic", out: (value: unknown) => value, bezier: (...points: number[]) => points },
+    },
+    "react-native-worklets": {
+      scheduleOnUI: <T extends unknown[]>(worklet: (...args: T) => void, ...args: T) => worklet(...args),
+    },
     "@/constants/motion": { motion },
     "@/hooks/useReducedMotion": { useReducedMotion: () => reduced },
   };
@@ -40,13 +55,14 @@ function harness(initialWatching = false) {
 
 test("quick Back and re-entry retarget the current light, with a faster exit", () => {
   const h = harness(); h.render(true);
-  expect(h.calls[0]).toMatchObject({ from: 0, toValue: 1, duration: 520, useNativeDriver: true });
+  expect(h.calls[0]).toMatchObject({ from: 0, toValue: 1, duration: motion.roomDim, easing: [0.30, 0, 0.35, 1] });
   h.value.value = 0.4; h.render(false);
-  expect(h.calls[1]).toMatchObject({ from: 0.4, toValue: 0, duration: 380 });
+  expect(h.calls[1]).toMatchObject({ from: 0.4, toValue: 0, duration: 320 });
   h.value.value = 0.2; h.render(true);
-  expect(h.calls[2]).toMatchObject({ from: 0.2, toValue: 1 });
+  expect(h.calls[2]).toMatchObject({ from: 0.2, toValue: 1, duration: 1376 });
   h.dispose(); expect(h.value.stopped).toBeTrue(); expect(h.listeners.size).toBe(0);
 });
+
 test("player updates and next-video renders cannot replay the room entrance", () => {
   const h = harness(); h.render(true); h.value.value = 1;
   h.render(true); h.render(true);

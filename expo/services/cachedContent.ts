@@ -14,7 +14,7 @@ export function createCachedContentService(client: CachedFeedReader) {
       if (result.status !== "success") {
         throw new Error(result.status === "network_error"
           ? "Frame is offline. Previously loaded uploads remain available."
-          : "Video data is unavailable. Check your YouTube key and quota in Settings → Your API keys.");
+          : "Video data is unavailable. Check your YouTube key and quota in Settings → YouTube & Gemini.");
       }
       const feed = result.response.feeds.find((entry) => entry.source.providerSourceId === channelId);
       if (!feed || result.response.state === "unavailable") throw new Error("This source is unavailable. Check your YouTube key or try again later.");

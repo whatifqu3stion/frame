@@ -1,9 +1,13 @@
+import { confirmUser } from "@/services/notifyUser";
+import { sourceParticipationLabel } from "@/domain/sourceParticipation";
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import { PREVIEW_LIBRARY_ENABLED } from "@/preview/mode";
 import { makePreviewLibrary } from "@/preview/library";
 import { isLongFormVideo } from "@/domain/contentPolicy";
 import TextField from "@/components/TextField";
 import ChoiceOption from "@/components/ChoiceOption";
+import InfoButton from "@/components/InfoButton";
 import DisclosureIndicator from "@/components/motion/DisclosureIndicator";
 import { byokYouTube } from "@/services/byok";
 import type { ChannelBrowseOptions, ChannelPage } from "@/services/byokYouTube";
@@ -19,7 +23,7 @@ import Image from "@/components/MediaImage";
 import { useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Check, Plus, RotateCcw, Search } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Alert, AppState, FlatList, StyleSheet, Switch, View } from "react-native";
+import { AppState, FlatList, Platform, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import VideoCard from "@/components/VideoCard";
@@ -36,7 +40,7 @@ export default function ChannelScreen() {
   const followLock = useRef(false);
   const [followBusy, setFollowBusy] = useState(false);
   const [expandedDescriptionId, setExpandedDescriptionId] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ruleHelpId, setRuleHelpId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
@@ -57,7 +61,10 @@ export default function ChannelScreen() {
   const ruleLock = useRef(false);
   const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], queryFn: () => listTodaySourceRules(activeProfileId), networkMode: "always", staleTime: Infinity });
   const sourceRule = rulesQuery.data?.find((rule) => rule.sourceId === id) ?? defaultTodaySourceRule(activeProfileId, id);
-  const libraryOnly = sourceRule.mutedUntil === LIBRARY_ONLY_UNTIL;
+  const libraryOnly = (sourceRule.mutedUntil ?? 0) > Date.now();
+  const snoozed = libraryOnly && sourceRule.mutedUntil !== LIBRARY_ONLY_UNTIL;
+  const ruleHelpOpen = ruleHelpId === id;
+  const ruleDisabled = ruleBusy || !rulesQuery.data || rulesQuery.isError;
   const personal = activeProfile?.role !== "managed";
   const changeParticipation = async () => {
     if (ruleLock.current || !personal) return;
@@ -71,7 +78,11 @@ export default function ChannelScreen() {
     if (ruleLock.current || !personal || !rulesQuery.data) return;
     ruleLock.current = true; setRuleBusy(true);
     try {
-      if (await changeSourceRule({ ...sourceRule, favorite: !sourceRule.favorite, updatedAt: Date.now() })) setFeedback(sourceRule.favorite ? "Favorite removed. Today’s selection stays the same." : "Favorited for future daily selections. Today stays the same.");
+      if (await changeSourceRule({ ...sourceRule, favorite: !sourceRule.favorite, updatedAt: Date.now() })) {
+        if (sourceRule.favorite) setFeedback("Favorite removed. Today’s selection stays the same.");
+        else if (libraryOnly) setFeedback("Favorite saved. Include this source in Today to give it priority.");
+        else setFeedback("Favorite saved for future selections.");
+      }
     } catch { setFeedback("Your favorite setting couldn’t save. Try again."); }
     finally { ruleLock.current = false; setRuleBusy(false); }
   };
@@ -120,15 +131,30 @@ export default function ChannelScreen() {
     followLock.current = true; setFollowBusy(true); setFeedback(null);
     try {
       if (following) { await unfollowChannel(channel.id); setFeedback("Source unfollowed. You can follow it again here."); }
-      else if (requirePurchase("creators")) { await followChannel({ ...channel, followedAt: Date.now(), source: "manual" }); setFeedback("Source followed"); done("commit"); }
-    } catch {
-      Alert.alert("Source unchanged", "Owner authorization was cancelled or the source could not be updated.");
+      else if (requirePurchase("creators")) { await followChannel({ ...channel, followedAt: Date.now(), source: "manual" }); setFeedback(`Following ${channel.title}.`); done("commit"); }
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Couldn’t update this source. Try again.");
     } finally { followLock.current = false; setFollowBusy(false); }
   }, [channel, followChannel, following, requirePurchase, touch, unfollowChannel]);
 
   const retryUploads = useCallback((): void => {
     void videosQuery.refetch();
   }, [videosQuery]);
+
+  const ruleControl = (label: string, value: boolean, change: () => Promise<void>, help = false) => (
+    <View style={styles.settingRow}>
+      <Pressable onPress={() => void change()} disabled={ruleDisabled} accessible={false} aria-hidden
+        focusable={false} tabIndex={-1} style={styles.ruleLabel}>
+        <Text style={type.body}>{label}</Text>
+      </Pressable>
+      {help && <InfoButton label="How sources work in Today" expanded={ruleHelpOpen} onPress={() => setRuleHelpId(ruleHelpOpen ? null : id)} />}
+      <View style={styles.ruleSpace} />
+      <Switch value={value} disabled={ruleDisabled} onValueChange={() => void change()}
+        accessibilityLabel={label} hitSlop={8}
+        trackColor={{ false: palette.inkMuted, true: palette.active }}
+        {...(Platform.OS === "web" ? { activeThumbColor: palette.surfaceHigh, thumbColor: palette.surfaceHigh } : {})} />
+    </View>
+  );
 
   const header = (
     <>
@@ -137,12 +163,16 @@ export default function ChannelScreen() {
           <View style={styles.avatar}>
             <Image source={channel?.thumbnailUrl ? { uri: channel.thumbnailUrl } : null} style={styles.avatarImage} contentFit="cover" cachePolicy="none" recyclingKey={channel?.id} />
           </View>
-          <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? (videosQuery.isLoading && canUseLibrary ? "Loading source…" : "Source details unavailable")}</Text>
+          <View style={styles.nameRow}>
+            <Text style={[type.title, styles.channelName]} accessibilityRole="header">{channel?.title ?? (videosQuery.isLoading && canUseLibrary ? "Loading source…" : "Source details unavailable")}</Text>
+            {channel?.description ? <InfoButton label={`About ${channel.title}`} expanded={expandedDescriptionId === id} onPress={() => setExpandedDescriptionId(expandedDescriptionId === id ? null : id)} /> : null}
+          </View>
         </View>
+        {channel?.description && expandedDescriptionId === id ? <Text style={styles.description}>{channel.description}</Text> : null}
         <View style={styles.headerActions}>
         {channel ? (
-          <Pressable
-            onPress={() => { if (following) Alert.alert("Unfollow source?", "New videos from this source will stop appearing in Today. Saved videos stay in your library.", [{ text: "Cancel", style: "cancel" }, { text: "Unfollow", onPress: () => { void toggleFollow(); } }]); else void toggleFollow(); }}
+          <PrimaryAction depth={!following && palette.primaryButtonDepth}
+            onPress={() => { if (following) confirmUser(`Unfollow ${channel.title}?`, "Its videos will leave Today. Your saved videos stay in your library.", "Unfollow", (accepted) => { if (accepted) void toggleFollow(); }, true); else void toggleFollow(); }}
             disabled={followBusy}
             style={({ pressed }) => [styles.followBtn, following && styles.followBtnActive, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -152,30 +182,24 @@ export default function ChannelScreen() {
           >
             <OutcomeIcon key={`${activeProfileId}:${id}`} confirmed={following} busy={followBusy} size={18} color={following ? palette.active : palette.onDark} idle={<Plus size={15} color={palette.onDark} strokeWidth={1.8} />}><Check size={15} color={palette.active} strokeWidth={1.8} /></OutcomeIcon>
             <Text style={[styles.followText, { color: following ? palette.active : palette.onDark }]}>{followBusy ? "Updating…" : following ? "Following" : "Follow source"}</Text>
-          </Pressable>
+          </PrimaryAction>
         ) : null}
-          {channel?.description ? <Pressable onPress={() => setExpandedDescriptionId(expandedDescriptionId === id ? null : id)} accessibilityRole="button" accessibilityState={{ expanded: expandedDescriptionId === id }} style={styles.inlineAction}>
-            <Text style={styles.retryText}>About this source</Text><DisclosureIndicator expanded={expandedDescriptionId === id} color={palette.accent} />
-          </Pressable> : null}
+
         </View>
-        {channel?.description && expandedDescriptionId === id ? <Text style={styles.description}>{channel.description}</Text> : null}
+
         {following && personal ? <View style={styles.settingsSection}>
-          <Pressable onPress={() => setSettingsOpen(!settingsOpen)} accessibilityRole="button" accessibilityState={{ expanded: settingsOpen }} style={styles.disclosureRow}>
-            <View style={styles.flex}><Text style={type.label}>Source settings</Text><Text style={type.bodySoft}>{libraryOnly ? "Library only" : "Included in Today"}{sourceRule.favorite ? " · Favorite" : ""}</Text></View>
-            <DisclosureIndicator expanded={settingsOpen} color={palette.inkSoft} />
-          </Pressable>
-          {settingsOpen ? <View style={styles.settingsBody}>
-            <View style={styles.settingRow}>
-              <View style={styles.flex}><Text style={type.label}>Include in Today</Text><Text style={type.bodySoft}>{libraryOnly ? "Off. Browse this source here anytime." : "On. Videos can appear in your daily selection."}</Text></View>
-              <Switch value={!libraryOnly} onValueChange={() => { void changeParticipation(); }} disabled={ruleBusy || !rulesQuery.data} accessibilityLabel="Include in Today" trackColor={{ true: palette.active }} />
-            </View>
-            <View style={styles.settingRow}>
-              <View style={styles.flex}><Text style={type.label}>Favorite source</Text><Text style={type.bodySoft}>{libraryOnly ? "Takes effect in Today when you include this source." : "Prioritize this source when others have waited equally long."}</Text></View>
-              <Switch value={sourceRule.favorite === true} onValueChange={() => { void changeFavorite(); }} disabled={ruleBusy || !rulesQuery.data} accessibilityLabel="Favorite source" trackColor={{ true: palette.active }} />
-            </View>
-            <Text style={type.bodySoft}>Turning Today off removes this source from today’s selection. Turning it on or changing a favorite applies to future selections.</Text>
-            {rulesQuery.isError ? <Pressable accessibilityRole="button" onPress={() => { void rulesQuery.refetch(); }} style={styles.inlineAction}><Text style={styles.retryText}>Settings couldn’t load. Retry</Text></Pressable> : null}
-          </View> : null}
+          {rulesQuery.data && !rulesQuery.isError ? <>
+            {ruleControl("Include in Today", !libraryOnly, changeParticipation, true)}
+            {snoozed && <Text style={styles.ruleNote}>{sourceParticipationLabel(sourceRule.mutedUntil, Date.now())}</Text>}
+            <View style={styles.ruleDivider} />
+            {ruleControl("Favorite source", sourceRule.favorite === true, changeFavorite)}
+            {ruleHelpOpen && <View style={styles.ruleHelp}>
+              <Text style={type.bodySoft}>Turn this off to remove the source from Today immediately. It stays in your library. Turn it on for future selections.</Text>
+              <Text style={type.bodySoft}>Favorites get priority in future selections when included sources have waited equally long.</Text>
+            </View>}
+          </> : rulesQuery.isError ? (
+            <Pressable accessibilityRole="button" onPress={() => { void rulesQuery.refetch(); }} style={styles.inlineAction}><Text style={styles.retryText}>Today settings couldn’t load. Retry</Text></Pressable>
+          ) : <Text accessibilityLiveRegion="polite" style={styles.ruleNote}>Checking Today settings…</Text>}
         </View> : null}
       </View>
       {feedback ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text> : null}
@@ -193,7 +217,7 @@ export default function ChannelScreen() {
           </View>
           <ChoiceOption label="Past year only" role="checkbox" selected={recent} onPress={() => setRecent(!recent)} />
           <Text style={type.bodySoft}>Only videos of four minutes or longer are shown.</Text>
-          <Pressable accessibilityRole="button" disabled={!searchText.trim() || videosQuery.isFetching} accessibilityState={{ disabled: !searchText.trim() || videosQuery.isFetching, busy: videosQuery.isFetching }} onPress={submitSearch} style={[styles.searchButton, (!searchText.trim() || videosQuery.isFetching) && styles.disabled]}><Text style={styles.searchButtonText}>{videosQuery.isFetching ? "Searching…" : "Search videos"}</Text></Pressable>
+          <PrimaryAction depth={palette.primaryButtonDepth} accessibilityRole="button" disabled={!searchText.trim() || videosQuery.isFetching} accessibilityState={{ disabled: !searchText.trim() || videosQuery.isFetching, busy: videosQuery.isFetching }} onPress={submitSearch} style={[styles.searchButton, (!searchText.trim() || videosQuery.isFetching) && styles.disabled]}><Text style={styles.searchButtonText}>{videosQuery.isFetching ? "Searching…" : "Search videos"}</Text></PrimaryAction>
         </View> : null}
         {browse.query ? <Text style={type.bodySoft}>For “{browse.query}”{browse.duration === "long" ? " · 20+ min" : browse.duration === "medium" ? " · 4–20 min" : ""}{browse.recent ? " · Past year" : ""}</Text> : null}
         {browse.query || browse.pageToken ? <Pressable accessibilityRole="button" onPress={() => { setBrowse({}); setPreviousPages([]); setSearchText(""); setDuration("any"); setRecent(false); }} style={styles.inlineAction}><Text style={styles.retryText}>Back to recent uploads</Text></Pressable> : null}
@@ -253,7 +277,8 @@ function createStyles(palette: FramePalette, type: FrameType) {
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   avatar: { width: 56, height: 56, borderRadius: radii.card, backgroundColor: palette.surfaceDeep, flexShrink: 0, overflow: "hidden" },
   avatarImage: { width: "100%", height: "100%" },
-  channelName: { flex: 1, minWidth: 0 },
+  nameRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center" },
+  channelName: { flexShrink: 1, minWidth: 0 },
   description: { ...type.bodySoft, marginTop: spacing.md, maxWidth: 640 },
 
   followBtn: { minHeight: 48, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
@@ -264,9 +289,12 @@ function createStyles(palette: FramePalette, type: FrameType) {
   headerActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
   inlineAction: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", paddingVertical: spacing.sm },
   settingsSection: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-  disclosureRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
-  settingsBody: { gap: spacing.md, paddingBottom: spacing.md },
-  settingRow: { flexDirection: "row", alignItems: "center", gap: spacing.lg, minHeight: 64 },
+  settingRow: { flexDirection: "row", alignItems: "center", minHeight: 48 },
+  ruleLabel: { flexShrink: 1, minWidth: 0, minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm },
+  ruleSpace: { flex: 1, minWidth: spacing.sm },
+  ruleDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
+  ruleNote: { ...type.bodySoft, paddingBottom: spacing.sm },
+  ruleHelp: { gap: spacing.sm, paddingBottom: spacing.md, maxWidth: 540 },
   videoSection: { paddingHorizontal: spacing.lg, marginTop: spacing.lg, marginBottom: spacing.md, gap: spacing.sm },
   videoToolbar: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.md },
   searchBody: { gap: spacing.md, paddingBottom: spacing.md },

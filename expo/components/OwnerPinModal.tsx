@@ -1,8 +1,10 @@
+import { notifyUser } from "@/services/notifyUser";
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { LockKeyhole, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -49,20 +51,20 @@ export default function OwnerPinModal() {
     if (pin.length < 4 || busy || remainingSeconds > 0) return;
     setBusy(true);
     try { await submitOwnerAuthorization(pin); setPin(""); }
-    catch { Alert.alert("Couldn’t verify PIN", "Try again. Protected controls remain locked."); }
+    catch { notifyUser("Couldn’t verify PIN", "Try again. Protected controls remain locked."); }
     finally { setBusy(false); }
   };
 
   return (
     <>
-    <Sheet visible={ownerPinPromptOpen} onClose={close}>
+    <Sheet label="Owner access" visible={ownerPinPromptOpen} onClose={close}>
           <View style={styles.headerRow}>
             <View style={styles.icon}><LockKeyhole size={20} color={palette.active} /></View>
             <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cancel PIN entry">
               <X size={18} color={palette.inkMuted} />
             </Pressable>
           </View>
-          <Text style={styles.heading}>Owner access</Text>
+          <Text accessibilityRole="header" style={styles.heading}>Owner access</Text>
           <Text style={styles.body}>Enter the Owner PIN to continue. It protects settings in Frame only.</Text>
           <TextField
             value={pin}
@@ -82,7 +84,7 @@ export default function OwnerPinModal() {
           />
           {ownerPinPromptError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{ownerPinPromptError}</Text> : null}
           {remainingSeconds > 0 ? <Text style={styles.cooldown}>Try again in {remainingSeconds} seconds.</Text> : null}
-          <Pressable
+          <PrimaryAction depth={palette.primaryButtonDepth}
             onPress={() => { void submit(); }}
             disabled={pin.length < 4 || busy || remainingSeconds > 0}
             style={({ pressed }) => [styles.button, (pin.length < 4 || remainingSeconds > 0) && styles.disabled, pressed && styles.pressed]}
@@ -91,7 +93,7 @@ export default function OwnerPinModal() {
             testID="owner-pin-submit"
           >
             {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.buttonText}>Continue</Text>}
-          </Pressable>
+          </PrimaryAction>
           <Pressable disabled={busy} onPress={() => { setPin(""); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
             <Text style={styles.forgotText}>Forgot PIN?</Text>
           </Pressable>

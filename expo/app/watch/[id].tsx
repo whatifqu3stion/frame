@@ -1,4 +1,4 @@
-import { ArtworkDestination, ArtworkPoster } from "@/providers/ArtworkTransitionProvider";
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import PlaybackArtwork from "@/components/motion/PlaybackArtwork";
 import CompletionArtwork from "@/components/motion/CompletionArtwork";
@@ -24,10 +24,11 @@ import { AccessibilityInfo, ActivityIndicator, Alert, AppState, BackHandler, Lin
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
+import WatchPlayerLayout from "@/components/WatchPlayerLayout";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
-import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
+import { darkPalette, palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { expireVideo } from "@/domain/metadataRetention";
 import { createPlayerAttempt, playerLifecycle } from "@/domain/playerLifecycle";
 import { nextSessionStep } from "@/domain/sessionFlow";
@@ -46,7 +47,6 @@ const RESUME_WRITE_INTERVAL_MS = 15000;
 const ALLOWANCE_CHECKPOINT_INTERVAL_MS = 15000;
 const FINAL_PROGRESS_DELAY_MS = 250;
 const KEEP_AWAKE_TAG = "frame-video-playback";
-const LANDSCAPE_RAIL_WIDTH = 64;
 const CONTROL_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
 const DARK_CONTROL_RIPPLE = { color: "rgba(250,249,246,0.16)", borderless: false } as const;
 const LIGHT_CONTROL_RIPPLE = { color: "rgba(21,30,27,0.12)", borderless: false } as const;
@@ -211,7 +211,10 @@ function WatchScreen() {
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
   const accessVideo = needsManagedSourceVerification ? verifiedVideo ?? undefined : baseVideo;
-  const [retentionClock, setRetentionClock] = useState<number>(Date.now());
+  const [lastRetentionCheck, setRetentionClock] = useState<number>(Date.now());
+  // A lookup may finish between periodic checks. Evaluate it at its local
+  // arrival time so fresh details can unlock playback immediately.
+  const retentionClock = Math.min(Date.now(), Math.max(lastRetentionCheck, metadataQuery.dataUpdatedAt));
   useEffect(() => {
     const timer = setInterval(() => setRetentionClock(Date.now()), 60_000);
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") setRetentionClock(Date.now()); });
@@ -256,18 +259,6 @@ function WatchScreen() {
   const navigationLockedRef = useRef<boolean>(false);
   const isFullscreenRef = useRef<boolean>(false);
   const todayWatchedRef = useRef<boolean>(false);
-
-  const isLandscape = width > height;
-  const isImmersiveLandscape = isLandscape && (Platform.OS !== "web" || width < 900);
-  const landscapeAvailableWidth = Math.max(
-    160,
-    width - insets.left - insets.right - LANDSCAPE_RAIL_WIDTH - spacing.sm,
-  );
-  const landscapeAvailableHeight = Math.max(90, height - insets.top - insets.bottom);
-  const landscapePlayerHeight = Math.min(landscapeAvailableHeight, (landscapeAvailableWidth * 9) / 16);
-  const landscapePlayerWidth = Math.min(landscapeAvailableWidth, (landscapePlayerHeight * 16) / 9);
-  const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
-  const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
 
   const saveTimedResume = useRef<() => Promise<void>>(async () => {});
   const sessionTimer = useSessionTimer(activeProfileId, savedSession?.id, savedSession?.targetMinutes ?? null, id,
@@ -416,6 +407,8 @@ function WatchScreen() {
     void clearOrientationRequest("fullscreen");
   }, []);
 
+  const pauseOnBlur = useRef(pauseAndPersist);
+  useEffect(() => { pauseOnBlur.current = pauseAndPersist; }, [pauseAndPersist]);
   useFocusEffect(useCallback(() => {
     setIsScreenFocused(true);
     void setOrientationRequest("watch", ScreenOrientation.OrientationLock.DEFAULT);
@@ -423,14 +416,14 @@ function WatchScreen() {
       playerRef.current?.exitFullscreen();
       isFullscreenRef.current = false;
       setIsFullscreen(false);
-      pauseAndPersist();
+      pauseOnBlur.current();
       setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
       setPlayerReady(false);
       setIsScreenFocused(false);
       void clearOrientationRequest("fullscreen");
       void clearOrientationRequest("watch");
     };
-  }, [pauseAndPersist]));
+  }, []));
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -828,7 +821,7 @@ function WatchScreen() {
   const hasMessage = timedSessionBlocked || !longFormAllowed || contentBlocked || allowanceBlocked || Boolean(showPlayerError) || showEnded;
 
   const stage = (
-    <ArtworkDestination id={id} ready={showPlayer || hasMessage} posterOpacity={0.35}><View style={[styles.playerStage, hasMessage && styles.messageStage]}>
+    <View style={{ flex: 1 }}><View style={[styles.playerStage, hasMessage && styles.messageStage]}>
       {shouldMountPlayer ? (
         <View
           style={[styles.playerEmbed, !showPlayer && styles.playerEmbedHidden]}
@@ -859,7 +852,7 @@ function WatchScreen() {
           <Text style={styles.endTitle}>{metadataQuery.isFetching ? "Checking video length…" : "Four minutes or longer."}</Text>
           <Text style={styles.allowanceBody}>{durationMessage}</Text>
           {durationPolicy === "unverified" && !runtimeDurationRejected ? <Pressable disabled={metadataQuery.isFetching} accessibilityRole="button" style={styles.darkOutlineButton} onPress={() => { void metadataQuery.refetch(); }}><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Checking…" : "Verify video details"}</Text></Pressable> : null}
-          <Pressable onPress={goToSaved} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Saved</Text></Pressable>
+          <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={goToSaved} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Saved</Text></PrimaryAction>
         </View>
       ) : contentBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
@@ -869,7 +862,7 @@ function WatchScreen() {
           <View style={styles.stateActions}>
             {contentAccessStatus.kind === "ownerReview" && needsManagedSourceVerification ? <Pressable disabled={metadataQuery.isFetching} accessibilityState={{ busy: metadataQuery.isFetching, disabled: metadataQuery.isFetching }} onPress={() => { void metadataQuery.refetch(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Verifying…" : "Retry verification"}</Text></Pressable> : null}
             {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>{accessAction.busy ? "Working…" : "Request approval"}</Text></Pressable> : null}
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <PrimaryAction depth={darkPalette.primaryButtonDepth} disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></PrimaryAction> : null}
           </View>
           <Pressable onPress={goToToday} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Today</Text></Pressable>
         </View>
@@ -880,14 +873,14 @@ function WatchScreen() {
           <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" || allowanceStatus.kind === "restricted" ? allowanceStatus.reason : "Your place is saved. You can still browse Frame and manage your settings."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={goToToday} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Today</Text></Pressable>
-            <Pressable onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></Pressable>
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></PrimaryAction>
           </View>
         </View>
       ) : timedSessionBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
           <Text style={styles.endTitle} accessibilityRole="header">{sessionTimer.error ? "Session time couldn’t save." : !savedSession?.targetMinutes ? "Choose a session duration." : "Your session time is complete."}</Text>
           <Text style={styles.allowanceBody}>{sessionTimer.error ? "Your video is paused. Return to the session and try again." : !savedSession?.targetMinutes ? "Open this session to choose how long you want to watch." : sessionTimer.run.ended ? "Open the session when you’re ready to plan more time." : sessionTimer.canFinish ? "Your place is kept. You can stop here or finish this video without starting another." : "This session’s time has ended. Return to your session to begin again."}</Text>
-          {sessionTimer.canFinish && playbackState !== "ended" ? <Pressable style={styles.lightStateButton} accessibilityRole="button" onPress={() => { void sessionTimer.finish().then((allowed) => { if (allowed) { setStartAt(currentTimeRef.current); setPlaybackState("unstarted"); setPlayerReady(false); setPlayerKey(attempt.restart()); } }).catch(failClosedAllowance); }}><Text style={styles.lightButtonText}>Finish this video</Text></Pressable> : null}
+          {sessionTimer.canFinish && playbackState !== "ended" ? <PrimaryAction depth={darkPalette.primaryButtonDepth} style={styles.lightStateButton} accessibilityRole="button" onPress={() => { void sessionTimer.finish().then((allowed) => { if (allowed) { setStartAt(currentTimeRef.current); setPlaybackState("unstarted"); setPlayerReady(false); setPlayerKey(attempt.restart()); } }).catch(failClosedAllowance); }}><Text style={styles.lightButtonText}>Finish this video</Text></PrimaryAction> : null}
           <Pressable style={styles.darkOutlineButton} accessibilityRole="button" onPress={() => { void sessionTimer.end().then(closePlayer).catch(failClosedAllowance); }}><Text style={styles.darkButtonText}>End session</Text></Pressable>
           <Pressable style={styles.skipButton} accessibilityRole="button" onPress={() => { pauseAndPersist(); router.replace({ pathname: "/session/[id]", params: { id: savedSessionId! } }); }}><Text style={styles.skipButtonText}>Open session</Text></Pressable>
         </View>
@@ -895,7 +888,7 @@ function WatchScreen() {
 
       {longFormAllowed && !timedSessionBlocked && !contentBlocked && !allowanceBlocked && (!playerReady || allowanceStatus === null || contentAccessStatus === null) && !playerError && !showEnded ? (
         <View style={[styles.stateSurface, StyleSheet.absoluteFillObject]} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
-          <ArtworkPoster id={id}><PlaybackArtwork key={id} uri={video.thumbnailUrl} /></ArtworkPoster>
+          <PlaybackArtwork key={id} uri={video.thumbnailUrl} />
           <ActivityIndicator color={palette.wall} />
           <Text style={styles.playerStatusText}>{isOnline === false ? "You’re offline" : resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
         </View>
@@ -925,10 +918,10 @@ function WatchScreen() {
             </Pressable>
           </View>
           {isSession ? (
-            <Pressable onPress={() => { void playNext(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={() => { void playNext(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
               <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-            </Pressable>
+            </PrimaryAction>
           ) : null}
         </View>
       ) : null}
@@ -947,15 +940,15 @@ function WatchScreen() {
               <RotateCcw size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>Watch again</Text>
             </Pressable>
-            <Pressable onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
               <Text style={styles.lightButtonText}>{nextSessionId ? "Continue" : "Done for now"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-            </Pressable>
+            </PrimaryAction>
           </View>
           {nextSessionId ? <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for now</Text></Pressable> : null}
         </View>
       ) : null}
-    </View></ArtworkDestination>
+    </View></View>
   );
 
   if (hasMessage) {
@@ -991,11 +984,9 @@ function WatchScreen() {
     );
   }
 
-  if (isImmersiveLandscape) {
-    return (
-      <View style={[styles.landscapeScreen, { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left }]}>
-        <StatusBar style="light" hidden={isFullscreen} />
-        <View style={styles.landscapeRail}>
+  return (
+    <WatchPlayerLayout width={width} height={height} insets={insets} fullscreen={isFullscreen}
+      landscapeControls={<>
           <Pressable
             onPress={closePlayer}
             hitSlop={CONTROL_HIT_SLOP}
@@ -1008,17 +999,8 @@ function WatchScreen() {
             <ChevronLeft color={palette.wall} size={23} />
           </Pressable>
           {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.landscapeAllowance}>{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)}</Text> : null}
-        </View>
-        <View style={styles.landscapeStageArea}>
-          <View style={{ width: landscapePlayerWidth, height: landscapePlayerHeight }}>{stage}</View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.screen}>
-      <StatusBar style="light" hidden={isFullscreen} />
+      </>}
+      chrome={
       <View style={[styles.watchChrome, { paddingTop: insets.top }]}>
         <Pressable
           onPress={closePlayer}
@@ -1033,12 +1015,8 @@ function WatchScreen() {
           <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
         {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)} viewing time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
-      </View>
-
-      <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>
-        <View style={{ width: portraitPlayerWidth, height: portraitPlayerHeight }}>{stage}</View>
-      </View>
-
+      </View>}
+      details={
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
         {video.channelTitle ? <Text style={[type.caption, { color: watchPalette.inkSoft }]}>{video.channelTitle}</Text> : null}
         <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
@@ -1077,8 +1055,8 @@ function WatchScreen() {
             <Text style={[type.caption, styles.channelLinkLabel]}>View source →</Text>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </View>
+      </ScrollView>}
+    >{stage}</WatchPlayerLayout>
   );
 }
 
@@ -1102,7 +1080,6 @@ const styles = StyleSheet.create({
   },
   closeLabel: { ...type.label, color: palette.wall },
   fullscreenStatus: { ...type.caption, flexShrink: 1, textAlign: "right", color: palette.wall, marginRight: spacing.sm },
-  portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center" },
   playerStage: { width: "100%", height: "100%", backgroundColor: watchPalette.stage, overflow: "hidden" },
   playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: watchPalette.stage },
   playerEmbedHidden: { opacity: 0 },
@@ -1126,11 +1103,8 @@ const styles = StyleSheet.create({
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
   lightStateButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radii.control, overflow: "hidden" },
   lightButtonText: { ...type.label, flexShrink: 1, textAlign: "center", color: palette.ink },
-  landscapeScreen: { flex: 1, flexDirection: "row" },
-  landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
   landscapeAllowance: { ...type.caption, color: palette.wall, fontSize: 10, textAlign: "center", marginTop: spacing.md, width: 56 },
   landscapeClose: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: watchPalette.border, backgroundColor: watchPalette.surface, borderRadius: radii.control, overflow: "hidden" },
-  landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
   content: { padding: spacing.page, paddingTop: spacing.lg },
   videoTitle: { color: palette.wall },
   detailLabel: { marginTop: spacing.md, color: watchPalette.inkSoft },

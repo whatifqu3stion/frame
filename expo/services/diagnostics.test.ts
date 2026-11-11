@@ -27,7 +27,7 @@ test("production Android diagnostics opens and shares only after an explicit pre
   const walk = (node: any) => { if (Array.isArray(node)) return node.forEach(walk); if (!node?.props) return; nodes.push(node); walk(node.props.children); };
   walk(route.type(route.props));
   expect(shared.length).toBe(0);
-  const share = nodes.find(node => node.type === "Pressable" && node.props.children?.props?.children === "Share diagnostic report");
+  const share = nodes.find(node => node.props.accessibilityRole === "button" && node.props.children?.props?.children === "Share diagnostic report");
   expect(Boolean(share)).toBe(true);
   share.props.onPress();
   await Promise.resolve();

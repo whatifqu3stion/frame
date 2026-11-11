@@ -1,10 +1,12 @@
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import Pressable from "@/components/motion/ChoicePressable";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { Check, Plus, Play } from "lucide-react-native";
-import { useMemo } from "react";
+import PersonalizedPreview from "@/components/motion/PersonalizedPreview";
+import { useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -16,6 +18,8 @@ type Feedback = { ok: boolean; message: string };
 type Props = {
   suggestion: WeeklyPickSourceSuggestion;
   interestName: string;
+  reveal?: boolean;
+  onRevealed?(): void;
   followed: boolean;
   busy: boolean;
   disabled?: boolean;
@@ -25,17 +29,14 @@ type Props = {
   onDismiss(): void;
 };
 
-export default function WeeklyPickCard({ suggestion, interestName, followed, busy, disabled = false, feedback, onPreview, onFollow, onDismiss }: Props) {
+export default function WeeklyPickCard({ suggestion, interestName, reveal = false, onRevealed, followed, busy, disabled = false, feedback, onPreview, onFollow, onDismiss }: Props) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const media = suggestion.featuredMedia;
   const duration = media?.durationSeconds ? formatDuration(media.durationSeconds) : null;
 
-  return (
-    <View style={styles.card} testID={`weekly-pick-${suggestion.providerSourceId}`}>
-      {media?.thumbnailUrl ? (
-        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.previewAction}>
-          <MediaMount><View style={styles.preview}>
+  const firstArrival = useRef(reveal).current;
+  const artwork = media?.thumbnailUrl ? <View style={styles.preview}>
           <Image
             source={{ uri: media.thumbnailUrl }}
             style={styles.previewImage}
@@ -45,7 +46,13 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
             accessibilityLabel={`Featured video from ${suggestion.displayName}`}
           />
           {duration ? <View style={styles.durationBadge}><Text style={styles.durationText}>{duration}</Text></View> : null}
-          </View></MediaMount>
+          </View> : null;
+
+  return (
+    <View style={styles.card} testID={`weekly-pick-${suggestion.providerSourceId}`}>
+      {media?.thumbnailUrl ? (
+        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.previewAction}>
+          {firstArrival ? <PersonalizedPreview animate onPresented={() => onRevealed?.()} image={artwork}>{null}</PersonalizedPreview> : <MediaMount>{artwork}</MediaMount>}
         </Pressable>
       ) : null}
 
@@ -78,7 +85,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
           </Pressable>
         ) : null}
 
-        <Pressable
+        <PrimaryAction depth={palette.primaryButtonDepth}
           onPress={onFollow}
           disabled={followed || busy || disabled}
           style={({ pressed }) => [styles.followButton, followed && styles.followedButton, pressed && !followed && styles.pressed]}
@@ -89,7 +96,7 @@ export default function WeeklyPickCard({ suggestion, interestName, followed, bus
         >
           <OutcomeIcon confirmed={followed} busy={busy} size={17} color={followed ? palette.active : palette.onAccent} idle={<Plus size={17} color={palette.onAccent} strokeWidth={2.2} />}><Check size={17} color={palette.active} strokeWidth={2.2} /></OutcomeIcon>
           <Text style={[styles.followText, followed && styles.followedText]}>{busy ? "Adding…" : followed ? "Followed" : "Follow source"}</Text>
-        </Pressable>
+        </PrimaryAction>
 
         <Pressable
           onPress={onDismiss}

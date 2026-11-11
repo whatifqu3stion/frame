@@ -5,9 +5,11 @@ import DisclosureIndicator from "@/components/motion/DisclosureIndicator";
 import ChoiceOption from "@/components/ChoiceOption";
 import MotionView from "@/components/motion/MotionView";
 import Pressable from "@/components/motion/ChoicePressable";
+import { isPointerActivation } from "@/components/motion/pointerActivation";
 import { Check, ShieldCheck, Trash2, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { confirmUser } from "@/services/notifyUser";
+import { StyleSheet, View } from "react-native";
 import MediaImage from "@/components/MediaImage";
 import { isMetadataCurrent } from "@/domain/metadataRetention";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -20,7 +22,7 @@ type Props = {
   expanded: string | null;
   onExpand(value: string | null): void;
   onModeChange(mode: ManagedContentMode): void;
-  onReview(request: ManagedApprovalRequest, decision: "approve" | "deny"): void;
+  onReview(request: ManagedApprovalRequest, decision: "approve" | "deny", pointer: boolean): void;
   onInspect(request: ManagedApprovalRequest, action: "preview" | "refresh"): void;
   onRevoke(kind: "video" | "source", targetId: string): void;
 };
@@ -40,16 +42,9 @@ export default function ManagedContentAccessEditor({ value, busy, expanded, onEx
     return collectionPage(entries, approvalQuery, approvalPage, (item) => `${item.title} ${item.meta}`);
   }, [value.policy.mode, value.approvedVideos, value.approvedSources, approvalQuery, approvalPage]);
   const approvalCount = value.policy.mode === "selectedVideos" ? value.approvedVideos.length : value.approvedSources.length;
-  const confirmRevoke = (kind: "video" | "source", id: string, title: string): void => Alert.alert("Remove approval?", `“${title}” will no longer be approved for this profile. It can be requested and approved again.`, [{ text: "Cancel", style: "cancel" }, { text: "Remove approval", style: "destructive", onPress: () => onRevoke(kind, id) }]);
+  const confirmRevoke = (kind: "video" | "source", id: string, title: string): void => confirmUser("Remove approval?", `“${title}” will no longer be approved for this profile. You can approve it again later.`, "Remove approval", (accepted) => { if (accepted) onRevoke(kind, id); }, true);
   return (
     <View style={styles.root}>
-      <Text style={styles.intro}>These choices limit what can play inside Frame. They do not rate content or block other apps.</Text>
-      <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Content access">
-        <ChoiceOption label="Selected Videos" selected={value.policy.mode === "selectedVideos"} disabled={busy} onPress={() => onModeChange("selectedVideos")} style={styles.modeButton} />
-        <ChoiceOption label="Approved Sources" selected={value.policy.mode === "approvedSources"} disabled={busy} onPress={() => onModeChange("approvedSources")} style={styles.modeButton} />
-      </View>
-      <Text style={styles.explanation}>{value.policy.mode === "selectedVideos" ? "Only individual videos approved by the Owner can play." : "Videos can play only when their source is approved by the Owner."}</Text>
-
       <Text style={styles.sectionLabel}>Requests · {value.requests.length}</Text>
       {value.requests.length > 20 || requestQuery ? <TextField accessibilityLabel="Find an approval request" placeholder="Find a request" value={requestQuery} editable={!busy} onChangeText={(query) => { setRequestQuery(query); setRequestPage(0); setExpanded(null); }} /> : null}
       <PageControls label="Requests" page={requests.page} pages={requests.pages} total={requests.total} busy={busy} onChange={(page) => { setRequestPage(page); setExpanded(null); }} />
@@ -61,21 +56,27 @@ export default function ManagedContentAccessEditor({ value, busy, expanded, onEx
           </Pressable>
           {expanded === `${request.kind}:${request.targetId}` ? <MotionView enter style={{ gap: spacing.sm, padding: spacing.md }}>
             <Text style={type.bodySoft}>{request.kind === "video" ? "Approve this video for this profile. Its viewing limits still apply." : "Approve videos from this source for this profile. Its viewing limits still apply."}</Text>
-            {request.kind === "source" ? <Text style={type.caption}>Request context · source approval covers videos from this creator</Text> : null}
             {isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /> : null}{request.kind === "source" && request.description ? <Text style={type.bodySoft}>{request.description}</Text> : null}{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Refresh them here before approving. You can still preview the original or decline the request.</Text>}
+            <View style={styles.decisions}>
+              <Pressable accessibilityRole="button" onPress={event => onReview(request, "approve", isPointerActivation(event))} disabled={busy || !isMetadataCurrent(request.fetchedAt, Date.now())} accessibilityState={{ disabled: busy || !isMetadataCurrent(request.fetchedAt, Date.now()), busy }} style={[styles.decision, (busy || !isMetadataCurrent(request.fetchedAt, Date.now())) && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.kind}: ${request.title}`}><Check size={16} color={palette.success} /><Text style={styles.decisionText}>{request.kind === "video" ? "Approve video" : "Approve source"}</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={event => onReview(request, "deny", isPointerActivation(event))} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Decline request for ${request.title}`}><X size={16} color={palette.danger} /><Text style={styles.decisionText}>Decline request</Text></Pressable>
+            </View>
+            <Text style={type.caption}>A declined request can be made again.</Text>
             <View style={styles.decisions}>
               <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy, busy }} onPress={() => onInspect(request, "preview")} style={styles.decision}><Text style={styles.decisionText}>{request.kind === "video" ? "Preview original video" : "Preview source"}</Text></Pressable>
               <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy, busy }} onPress={() => onInspect(request, "refresh")} style={styles.decision}><Text style={styles.decisionText}>{busy ? "Working…" : "Refresh details"}</Text></Pressable>
             </View>
-            <Text style={type.caption}>Preview opens outside Frame with Owner authorization. Return here to decide; nothing is approved automatically.</Text>
-            <View style={styles.decisions}>
-              <Pressable accessibilityRole="button" onPress={() => onReview(request, "approve")} disabled={busy || !isMetadataCurrent(request.fetchedAt, Date.now())} accessibilityState={{ disabled: busy || !isMetadataCurrent(request.fetchedAt, Date.now()), busy }} style={[styles.decision, (busy || !isMetadataCurrent(request.fetchedAt, Date.now())) && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.kind}: ${request.title}`}><Check size={16} color={palette.success} /><Text style={styles.decisionText}>{request.kind === "video" ? "Approve video" : "Approve source"}</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => onReview(request, "deny")} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Decline request for ${request.title}`}><X size={16} color={palette.danger} /><Text style={styles.decisionText}>Decline request</Text></Pressable>
-            </View>
-            <Text style={type.caption}>Declining removes this request without adding an approval. It can be requested again.</Text>
+            <Text style={type.caption}>Preview opens outside Frame. Return here to decide.</Text>
           </MotionView> : null}
         </View>
       ))}
+
+      <Text style={styles.intro}>Choose how the Owner approves viewing in Frame. Changes to content access apply immediately.</Text>
+      <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Content access">
+        <ChoiceOption label="Selected Videos" selected={value.policy.mode === "selectedVideos"} disabled={busy} onPress={() => onModeChange("selectedVideos")} style={styles.modeButton} />
+        <ChoiceOption label="Approved Sources" selected={value.policy.mode === "approvedSources"} disabled={busy} onPress={() => onModeChange("approvedSources")} style={styles.modeButton} />
+      </View>
+      <Text style={styles.explanation}>{value.policy.mode === "selectedVideos" ? "Only individual videos approved by the Owner can play." : "Videos can play only when their source is approved by the Owner."}</Text>
 
       <Text style={styles.sectionLabel}>{value.policy.mode === "selectedVideos" ? `Selected videos · ${value.approvedVideos.length}` : `Approved sources · ${value.approvedSources.length}`}</Text>
       {approvalCount > 20 || approvalQuery ? <TextField accessibilityLabel="Find an existing approval" placeholder="Find an approval" value={approvalQuery} editable={!busy} onChangeText={(query) => { setApprovalQuery(query); setApprovalPage(0); }} /> : null}

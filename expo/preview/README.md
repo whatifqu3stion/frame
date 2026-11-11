@@ -9,3 +9,5 @@ Release and native builds cannot activate this preview. Keep its small adapters 
 The Today viewing-time chart also shows seven explicitly labelled sample totals in this mode. These totals are generated in memory by `viewingHistory.ts`; they never overwrite a profile’s recorded playback history.
 
 The sample watch screen includes **Preview ending** to review the production artwork-ending treatment. This is explicitly a design preview: it does not play media or record viewing time.
+
+With the sample library loaded, open the welcome preview, choose interests, and tap **See my picks**. The rehearsal uses the app’s print-room scene and gallery with fictional stages advanced locally. Back cancels the rehearsal and **Show sample picks now** skips it. Real generation follows provider callbacks.

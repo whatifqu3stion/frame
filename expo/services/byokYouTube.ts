@@ -208,7 +208,7 @@ export function createByokYouTube(transport: ProviderTransport, keys: ProviderKe
         if (filter.id && source.providerSourceId !== filter.id) throw new ProviderError("invalid_response");
         return { status: "success", data: { source, ...(resolvedVideo ? { video: resolvedVideo } : {}), provenance: "provider", fetchedAt: now() } };
       } catch (error) {
-        return { status: error instanceof ProviderError && error.kind === "quota" ? "quota_exhausted" : "temporarily_unavailable", message: error instanceof ProviderError ? error.message : "Secure key storage is unavailable. Try again on your device." };
+        return { status: error instanceof ProviderError ? error.kind === "quota" ? "quota_exhausted" : error.kind === "access" || error.kind === "missing_key" ? "unauthorized" : error.kind === "network" ? "network_error" : "temporarily_unavailable" : "temporarily_unavailable", message: error instanceof ProviderError ? error.message : "Secure key storage is unavailable. Try again on your device." };
       }
     },
     async getCachedFeeds(sourceIds: readonly string[]): Promise<SourceFeedClientResult> {

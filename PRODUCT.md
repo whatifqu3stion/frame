@@ -23,7 +23,7 @@ playback. The first day may be partial. A failed read must remain an error rathe
 than implying zero viewing.
 
 The Today section keeps the existing selection and profile boundaries, uses the
-incumbent visual system, and puts the explanation behind “About this time.” See
+incumbent visual system, and puts the explanation behind the Viewing time info button. See
 [implementation and verification notes](expo/docs/VIEWING_TIME.md) for accounting
 details and limits.
 

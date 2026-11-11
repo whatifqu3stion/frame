@@ -13,7 +13,7 @@ import { CUSTOM_INTEREST_MAX_LENGTH, createCustomInterest, interestTopicFromId }
 import { useScreenAction } from "@/hooks/useScreenAction";
 import { useApp } from "@/providers/AppProvider";
 
-export default function CustomInterestInput({ selectedIds, onAdd, disabled = false }: { selectedIds: readonly string[]; onAdd(id: string): Promise<boolean>; disabled?: boolean }) {
+export default function CustomInterestInput({ selectedIds, onAdd, disabled = false, compact = false }: { selectedIds: readonly string[]; onAdd(id: string): Promise<boolean>; disabled?: boolean; compact?: boolean }) {
   const { palette, type } = useFrameTheme();
   const { activeProfileId } = useApp();
   const { busy, run } = useScreenAction(`${activeProfileId}:custom-interest`);
@@ -30,8 +30,8 @@ export default function CustomInterestInput({ selectedIds, onAdd, disabled = fal
     const acknowledge = feedback.capture();
     await run(() => onAdd(topic.id), (changed) => { if (!changed) { setMessage("This interest wasn’t added. Try again."); return; } acknowledge("selection"); setDraft(""); setAdded(true); setMessage("Interest added."); }, () => setMessage("Couldn’t save this interest. Try again."));
   };
-  return <View style={{ gap: spacing.sm, marginTop: spacing.xl }}>
-    <InlineHelp label="Add a custom interest">
+  return <View style={{ gap: spacing.sm, marginTop: compact ? 0 : spacing.xl }}>
+    <InlineHelp label={compact ? "Add your own topic" : "Add a custom interest"}>
     <Text style={type.bodySoft}>Avoid personal or sensitive details. Topics are sent to Gemini when you generate picks.</Text>
     <TextField accessibilityLabel="Custom interest" placeholder="e.g. Japanese joinery or deep-sea ecology" placeholderTextColor={palette.inkMuted} value={draft} onChangeText={(value) => { setDraft(value); setMessage(""); setAdded(false); }} maxLength={CUSTOM_INTEREST_MAX_LENGTH} editable={!busy && !disabled} returnKeyType="done" onSubmitEditing={() => { void add(); }}  testID="custom-interest-input" />
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: disabled || busy || !draft.trim(), busy }} disabled={disabled || busy || !draft.trim()} onPress={() => { void add(); }} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: spacing.sm, opacity: disabled || busy || (!draft.trim() && !added) ? 0.5 : 1 }}><OutcomeIcon confirmed={added} busy={busy} color={palette.active} idle={<Plus size={18} color={palette.active} />}><Check size={18} color={palette.active} /></OutcomeIcon><Text style={[type.label, { color: palette.active }]}>{busy ? "Adding…" : added ? "Interest added" : "Add interest"}</Text></Pressable>

@@ -11,7 +11,7 @@ export default function InlineHelp({ label, children }: { label: string; childre
   const [open, setOpen] = useState(false);
   const { palette, type } = useFrameTheme();
   return <View>
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+    <Pressable accessibilityRole="button" aria-expanded={open} accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
       <Text style={[type.label, { color: palette.active, flexShrink: 1 }]}>{label}</Text>
       <DisclosureIndicator expanded={open} color={palette.active} />
     </Pressable>

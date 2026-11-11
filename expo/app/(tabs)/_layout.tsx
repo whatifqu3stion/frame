@@ -11,7 +11,7 @@ import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function TabLayout() {
-  const { palette } = useFrameTheme();
+  const { palette, isDark } = useFrameTheme();
   const insets = useSafeAreaInsets();
   const { sidebar, fontScale, bottomInset, bottomBarHeight } = useNavigationLayout();
 
@@ -22,13 +22,13 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: "transparent" },
-        tabBarActiveTintColor: palette.active,
+        tabBarActiveTintColor: sidebar ? palette.active : isDark ? palette.accentSoft : palette.accentDeep,
         tabBarActiveBackgroundColor: sidebar ? palette.activeSoft : "transparent",
         tabBarInactiveTintColor: sidebar ? palette.inkMuted : palette.inkSoft,
         tabBarShowLabel: true,
         tabBarPosition: sidebar ? "left" : "bottom",
         tabBarLabelPosition: sidebar ? "beside-icon" : "below-icon",
-        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, lineHeight: 16, color, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
+        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, lineHeight: 16, color: sidebar ? color : palette.ink, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: sidebar ? 64 * fontScale : 48 },
         tabBarBackground: sidebar ? undefined : () => <TabBarGlass />,
         tabBarStyle: {

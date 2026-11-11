@@ -224,7 +224,7 @@ Featured images retain a 16:9 content area inside the matte mount; its padding s
 
 ## Elevation & Depth
 
-Tonal layering and fine rules carry everyday depth. Session programme surfaces also use a fine, static neutral grain behind their content. Featured media and programmes are flat at rest. Sheets retain the existing native `softShadow` (recorded in the sidecar as React Native properties); the tab bar explicitly has zero elevation. This is not a global ban on existing native shadows. Do not introduce web box-shadow replicas.
+Tonal layering and fine rules carry everyday depth. Session programme surfaces also use a fine, static neutral grain behind their content. Featured media and programmes are flat at rest. Sheets retain the existing native `softShadow` (recorded in the sidecar as React Native properties); the tab bar explicitly has zero elevation. This is not a global ban on existing native shadows. Use the theme’s crisp edge for primary actions.
 
 ## Shapes
 
@@ -244,11 +244,13 @@ Use the observed radius scale above: square video corners, nearly square 2-unit 
 | `Sheet` | Native modal, safe-area padding, keyboard avoidance and scrollable contents with modal accessibility. Uses `surfaceHigh`, `lg` padding and existing soft shadow. |
 | Tab navigation | Today, Sources, Saved and Settings retain labels and native tab semantics; selected icon sits on activeSoft. SurfaceHigh bar, hairline top border and safe-area-aware bottom inset. Hidden legacy routes are not new tabs. |
 
-The shared `ProgrammeGrain` is restricted to the current-session card, session detail header, and confirmed first-save moment in onboarding. It repeats a bundled 128-unit tile with 1×/2×/3× density assets, clips to the card radius and is excluded from touch and accessibility. Per-pixel alpha is capped at 32/255; layer opacity is 0.22 in light mode and 0.16 in dark mode. Text and controls paint above it. The original deterministic generator and provenance ship with the assets. Main backgrounds, controls and video remain untextured.
+The session card, session header and first-save acknowledgement use a bundled grain tile under their content. Primary actions keep a solid fill. In light mode a 2-unit umber shadow falls below the control. In dark mode a 2-unit reflection, tinted with the active accent, catches the upper edge. Both edges are crisp and settle flat on press.
 
 Motion uses `expo/constants/motion.ts`: 180 ms choices, 220 ms state changes, 360 ms confirmations, 520 ms artwork, 560–740 ms chart assembly, 720 ms first selection, and 680 ms final ending. These express distance and consequence rather than impose an app-wide duration cap. Row continuity uses a damped spring (230 stiffness, 26 damping, mass 1). Selected-control labels and hit targets remain stable. Native navigation and sheet presentation retain OS ownership. Reduce Motion settles spatial effects immediately while retaining clear state feedback. Static grain and loading placeholders never loop.
 
-Onboarding opens with the supplied four-corner mark beside the Caslon Frame wordmark. Its corners settle inward by five logical units over 640 ms in the active accent color. This identity appears only on the first setup screen; controls remain usable throughout. The entrance runs once for a fresh setup (or an explicitly opened welcome preview), never on Back or a restored draft. It waits for the motion preference, remains static under Reduce Motion, and settles on interruption. Original mark: “Fullscreen” by Andrejs Kirma, from the Noun Project; supplied by the project owner.
+Onboarding opens with the supplied four-corner mark beside the Caslon Frame wordmark. Its corners settle inward by five logical units over 1,600 ms in the active accent color. This identity appears only on the first setup screen; controls remain usable throughout. The entrance runs once for a fresh setup (or an explicitly opened welcome preview), never on Back or a restored draft. It waits for the motion preference, remains static under Reduce Motion, and settles on interruption. Original mark: “Fullscreen” by Andrejs Kirma, from the Noun Project; supplied by the project owner.
+
+The first setup screen leads with “Video, at your pace.” and explains the daily selection, chosen creators, saved videos, and sessions with a clear ending. The introduction remains visible above API-key setup, without a timer or a separate welcome step. Setup proceeds through API keys, interests, sources, and the first selection. The existing Owner-only key editor verifies and securely saves keys on the first step; Gemini remains optional, and “Set up keys later” remains available. Navigation waits during key operations. Existing drafts migrate to their corresponding stage without losing saved videos.
 
 Touch feedback belongs to accepted choices and completed actions, with stronger confirmation reserved for genuine milestones. The device-wide Settings switch controls custom feedback across profiles. Web, inactive or stale contexts, no-op results, and bursts are suppressed. Navigation, automatic playback changes, erasure, typing and native picker gestures remain quiet. See `expo/docs/MOTION_AND_HAPTICS_REVIEW.md` for exact scope and hardware verification gates.
 
@@ -301,7 +303,7 @@ Onboarding explicitly explains the value of Frame through familiar creators, a b
 
 ### Frame-led brand language
 
-Lead with “Worth watching. At your pace.” Frame-authored onboarding, offers, everyday controls, and recovery messages use Frame’s voice without YouTube names, logos, or branded URL examples. Use “@creator” as the source-input example and “Open original video” for external playback. This is a copy and identity decision, not a change to supported providers. Preserve provider identifiers and URLs in integrations, creator-supplied metadata, the official embedded player, and accurate Terms/Privacy disclosures. The external player and account authorization screens may display their own branding.
+Lead onboarding with “Video, at your pace.” Frame-authored onboarding, offers, everyday controls, and recovery messages use Frame’s voice without YouTube names, logos, or branded URL examples. Use “@creator” as the source-input example and “Open original video” for external playback. This is a copy and identity decision, not a change to supported providers. Preserve provider identifiers and URLs in integrations, creator-supplied metadata, the official embedded player, and accurate Terms/Privacy disclosures. The external player and account authorization screens may display their own branding.
 
 
 ### September 30 field and state polish
@@ -393,6 +395,8 @@ Verification: 247 automated tests pass, including import draft expiry and select
 
 ChoiceOption now owns the label, reserved check, quiet selection backing, wrapping, and 52-unit minimum target for interests, appearance, daily allowances, and Saved filters. Interests retain their grouped ruled treatment and switch to one column for narrow windows or larger text. Navigation segments, action buttons, switches, and rich subscription rows keep their distinct purposes. Text fields retain their established treatment.
 
+Sources uses a compact filter variant for All, Included, and Library only: a 48-unit minimum target, a reserved leading check, a visible selected outline, and intrinsic wrapping labels. Other choice rows retain their trailing marks. Labels use an automatic flex basis rather than a zero-basis flex shorthand, so auto-sized Android controls cannot collapse the text. The native Yoga layout reproduction confirmed the old zero-width label and the corrected intrinsic width at 280, 320, 371, and 680 units. Browser filtering, scoped tests, TypeScript, and lint passed; Android rendering and TalkBack acceptance remain in the smoke plan.
+
 The bounded collection and reading widths apply through loaded, loading, and empty list states. Import's action dock shares its reading width. Today and Saved feedback follows the collection width and reserves its measured height in scrolling content. Main tab pages, import, and sheets honor horizontal safe-area insets. Chapters allow full titles, size timestamps intrinsically, and stack timestamp/title above 1.3 font scale. Existing save, ordering, and ending motion remains unchanged.
 
 Source audit: remaining issues were duplicated choice styling, unbounded primary pages, fixed tab geometry, chapter text constraints, landscape sheet gutters, and stale help instructions. Prior handoff fixes already expose resume, Managed request entry, exact-session navigation, and temporary import selection recovery. Nested-sheet focus remains a device acceptance item, not a verified defect. The iOS configuration remains phone-only; this pass does not enable iPad support.
@@ -447,14 +451,43 @@ The session detail cover gives its own video artwork priority: one generous squa
 
 ### Viewing-room lighting — October 31, 2026
 
-Entering a video dims the surrounding room from warm umber to the existing dark
-watch surface over 520 ms, using the artwork handoff’s easing and timing. Dark
-mode begins closer to the final shade. The brightest starting shade remains
-dark enough for readable light text throughout. Only a background plane changes
-opacity; video, controls and captions retain full opacity. This is one entrance
-per visit to the player, not a repeated effect for loading, pausing or advancing
-a session. Return retargets the room light over 380 ms while navigation remains
-in charge; a shared-artwork return immediately reveals the original library.
-Nothing waits for the lighting. Reduce Motion and backgrounding settle directly,
-and cold deep links start in the settled viewing room. No new dependency, sound,
-overlay on the video, or playback permission change. See `expo/docs/MOTION_REVIEW.md`.
+The room lighting, not the artwork, owns video entry. This supersedes the
+measured artwork flight above: no enlargement, shrinking return, poster zoom,
+or modal movement. Cards navigate immediately and the video stays in its final
+position. The background dims over 1.72 seconds on a (0.30, 0, 0.35, 1) curve.
+Light mode begins at warm umber `#56483D` and dark mode at `#2D2925`.
+Both settle at charcoal `#202021`. Text remains readable throughout; controls and video retain
+full opacity. Loading, pausing, and advancing a session do not replay the dim.
+
+Back immediately restores the library; the persistent lighting value retargets
+over 320 ms. Re-entering mid-restore dims from the current light, with duration
+proportional to the distance left to charcoal. Nothing waits for lighting or thumbnail
+measurement. Reduce Motion and backgrounding settle directly, and cold deep
+links start settled. No new dependency, sound, video overlay, or playback
+permission change. See `expo/docs/MOTION_REVIEW.md`.
+
+### Android fullscreen layout — October 31, 2026
+
+Android landscape playback now gives the official player the full watch viewport,
+without Frame's former 64-unit left control rail or media safe-area padding.
+Frame chrome and system bars hide; Android system Back and the official player's
+fullscreen controls remain the exit paths. Portrait restores the regular controls.
+The player keeps the same component position through rotation and fullscreen,
+rather than being torn down by separate portrait/landscape branches. True
+fullscreen is edge-to-edge before rotation completes. iOS inline landscape retains
+its safe controls. The official player owns aspect-ratio fitting; Frame does not
+crop, stretch, or overlay the video. Native acceptance is recorded in the smoke plan.
+
+### Onboarding clarity — October 31, 2026
+
+Setup retains its four stages: keys, interests, a source, and the first selection. The graphic carries visible progress; the accessible progress indicator also names the stage and position, replacing duplicate stage captions. The introduction keeps “Video, at your pace.” and a brief explanation, followed directly by Connect YouTube. Key-creation guidance and optional Gemini setup expand on demand. Provider charges, device sharing, storage limitations, and validation limits remain explicit; no automatic generation is added.
+
+Persistent next actions name the destination. Keys and interests can be deferred; an empty source step offers Finish for now rather than promising a selection. Missing-key recovery keeps the typed source and returns directly from keys, including Android Back. Source lookup stays disabled until the key status is usable. Daily selection size sits with followed sources, not interests. The final selection keeps real content, saves, and recovery states; headings wrap naturally instead of forcing line breaks. Existing Settings key management, draft migration, profile boundaries, and saved destinations remain intact. Native keyboard, TalkBack, and device-size acceptance remain in the smoke plan.
+
+### Review refinements — November 1, 2026
+
+Today keeps its viewing-history graphic compact and uses one section boundary rather than stacked rules. Whole weekday columns fit ordinary phones; narrower windows and larger text expose Earlier days / Later days controls, with at least 48-unit targets and keyboard focus scrolling. Video source, title, and duration precede the artwork, and each Watch action names its video accessibly. The decorative gallery mark is an open frame without a checkmark.
+
+Continue watching displays the resume timestamp rather than publication age. Session duration names the planned limit, distinct from recorded Viewing time; Saved's session destination has a directional cue. Sources explains Today inclusion beside its filters and makes status subordinate to creator names. Source search defines sources as YouTube channels. Key setup expands into numbered provider-specific steps and official guides without changing storage or generation behavior. Shared guidance disclosures expose expanded state on web as well as native.
+
+The follow-up pass keeps today's recorded time visible on constrained phones, with a Last 7 days disclosure for the full chart. Default collapse applies below 360 units wide, or below 600 wide with a height under 740 or font scale over 1.3; ordinary phones and desktop retain the full week. Narrow video actions form two deliberate paired rows with a visible More label. More opens the shared sheet on every platform; snooze choices stay inside that sheet, dismissal retains Undo, and failed mutations remain visible for retry. Other Today notices use a browser dialog on web instead of React Native Web's empty Alert implementation. The session builder now uses Session duration consistently. Source counts emphasize current inclusion, keeping capacity in contextual help.

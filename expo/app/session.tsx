@@ -1,10 +1,11 @@
+import PlaybackAction from "@/components/PlaybackAction";
 import Text from "@/components/FrameText";
 import MotionView from "@/components/motion/MotionView";
 import SelectionArtwork from "@/components/motion/SelectionArtwork";
 import ProgrammeArtwork from "@/components/ProgrammeArtwork";
 import { motion } from "@/constants/motion";
 import Heading from "@/components/Heading";
-import InlineHelp from "@/components/InlineHelp";
+import InfoDisclosure from "@/components/InfoDisclosure";
 import { resetSessionRun } from "@/db/database";
 import { isLongFormVideo } from "@/domain/contentPolicy";
 import { boundedCollection } from "@/constants/layout";
@@ -20,7 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
 import { router, useLocalSearchParams, useNavigation, type Href } from "expo-router";
-import { Search, ChevronDown, ChevronUp, Play, Save, X } from "lucide-react-native";
+import { Search, ChevronDown, ChevronUp, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -223,17 +224,17 @@ export default function SessionBuilder() {
         maxLength={64}
       />
       <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-        <Text style={type.label}>Viewing time</Text>
+        <InfoDisclosure label="How session timing works" anchor={<Text style={type.label}>Session duration</Text>}>
+          <Text style={type.bodySoft}>Only playback counts. At your limit, Frame pauses and offers to finish the current video. Profile limits still apply.</Text>
+          {budgetMinutes ? <Text style={type.bodySoft}>{sessionBudgetSummary(runtime, budgetMinutes)}</Text> : null}
+        </InfoDisclosure>
         <View accessibilityRole="radiogroup" accessibilityLabel="Session duration" style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
           {SESSION_TARGET_MINUTES.map((minutes) => <Pressable key={minutes ?? "none"} disabled={isSaving} accessibilityRole="radio" aria-checked={budgetMinutes === minutes} accessibilityState={{ checked: budgetMinutes === minutes }} onPress={() => { setBudgetMinutes(minutes); setCustomMinutes(String(minutes)); }} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, backgroundColor: budgetMinutes === minutes ? palette.activeSoft : "transparent" }}><Text style={[type.label, { color: budgetMinutes === minutes ? palette.active : palette.inkMuted }]}>{minutes} min</Text></Pressable>)}
         </View>
         <Text style={type.bodySoft}>Custom minutes · 1–1440</Text>
         <TextField accessibilityLabel="Custom session duration in minutes" placeholder="Custom minutes (1–1440)" keyboardType="number-pad" value={customMinutes} onChangeText={(value) => { setCustomMinutes(value); setBudgetMinutes(normalizeSessionTarget(Number(value))); }} maxLength={4} />
         {budgetMinutes === null ? <Text style={[type.bodySoft, { color: palette.danger }]}>Choose a whole number of minutes from 1 to 1440.</Text> : null}
-        <InlineHelp label="How session timing works">
-          <Text style={type.bodySoft}>Only playback counts. At your limit, Frame pauses and offers to finish the current video. Profile limits still apply.</Text>
-          {budgetMinutes ? <Text style={type.bodySoft}>{sessionBudgetSummary(runtime, budgetMinutes)}</Text> : null}
-        </InlineHelp>
+
       </View>
       {selected.length ? (
         <View style={styles.tray}>
@@ -309,17 +310,16 @@ export default function SessionBuilder() {
       {hydratedProfile === activeProfileId && selected.length > 0 ? (
         <View style={[styles.footer, boundedCollection, { paddingLeft: spacing.lg + insets.left, paddingRight: spacing.lg + insets.right, paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.summary}>
-            <Text style={type.label}>{budgetMinutes ? `Viewing time: ${budgetMinutes} min` : "Choose a viewing time"}</Text>
+            <Text style={type.label}>{budgetMinutes ? `Session duration: ${budgetMinutes} min` : "Choose a session duration"}</Text>
             <Text style={type.bodySoft}>Queue: {selected.length} video{selected.length === 1 ? "" : "s"} · {durationSummary}</Text>
           </View>
           <Pressable onPress={() => { void save(); }} disabled={isSaving} style={({ pressed }) => [styles.saveBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" accessibilityLabel="Save session" accessibilityState={{ busy: isSaving, disabled: isSaving }} testID="save-session">
             <Save size={16} color={palette.accent} strokeWidth={1.8} />
             <Text style={styles.saveText}>Save session</Text>
           </Pressable>
-          <Pressable onPress={() => { void saveAndBegin(); }} disabled={isSaving} style={({ pressed }) => [styles.beginBtn, (pressed || isSaving) && styles.pressed]} accessibilityRole="button" testID="begin-session">
-            <Play size={16} color={palette.onDark} strokeWidth={1.8} fill={palette.onDark} />
+          <PlaybackAction onPress={() => { void saveAndBegin(); }} disabled={isSaving} style={[styles.beginBtn, isSaving && styles.pressed]} accessibilityRole="button" testID="begin-session">
             <Text style={styles.beginText}>{isSaving ? "Saving…" : "Save & begin"}</Text>
-          </Pressable>
+          </PlaybackAction>
         </View>
       ) : null}
     </KeyboardAvoidingView>

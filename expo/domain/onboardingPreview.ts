@@ -1,5 +1,12 @@
 import type { DiscoveryResult, WeeklyPickSourceSuggestion } from "../types";
 
+/** Keep the edition's editorial order, giving its first watchable, explained pick the feature. */
+export function featureFirstPick(pool: readonly WeeklyPickSourceSuggestion[]) {
+  const index = pool.findIndex((pick) => pick.featuredMedia && pick.fetchedAt && pick.recommendationReason?.trim());
+  if (index <= 0) return pool;
+  return [pool[index], ...pool.slice(0, index), ...pool.slice(index + 1)];
+}
+
 /** Page through a fixed publication; following never silently backfills a batch. */
 export function onboardingPreviewPage(pool: readonly WeeklyPickSourceSuggestion[], followedIds: readonly string[], requestedPage: number) {
   const followed = new Set(followedIds);

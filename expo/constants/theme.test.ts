@@ -67,3 +67,11 @@ test("room lighting keeps text readable throughout entry and return in both them
     }
   }
 });
+
+test("both themes dim toward the same charcoal wall", () => {
+  const room = context.exports.watchPalette;
+  expect(room.wall).toBe("#202021");
+  expect(room.stage).toBe(room.wall);
+  expect(luminance(rgb(room.wall))).toBeLessThan(luminance(rgb(room.darkLitWall)));
+  expect(luminance(rgb(room.darkLitWall))).toBeLessThan(luminance(rgb(room.litWall)));
+});

@@ -40,7 +40,7 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
   const pauseLabel = value.pausedUntil === INDEFINITE_PAUSE ? "Paused until resumed" : value.pausedUntil && value.pausedUntil > Date.now() ? `Paused until ${new Date(value.pausedUntil).toLocaleString()}` : "Not paused";
   return (
     <View style={styles.wrap}>
-      <Text style={styles.intro}>These limits apply only inside Frame. Device time changes can affect schedules.</Text>
+      <Text style={styles.intro}>Set playback hours and breaks for this profile. Schedules use the device’s local time.</Text>
       <ControlSection title="Viewing window" body="Allow playback only during one daily window." enabled={Boolean(value.allowedWindow)} onToggle={(enabled) => setWindow("allowedWindow", enabled, { startMinute: 7 * 60, endMinute: 20 * 60 })} styles={styles}>
         {value.allowedWindow ? <View style={styles.timeRow}><ClockTimePicker label="Starts" minuteOfDay={value.allowedWindow.startMinute} onChange={(minute: number) => setMinute("allowedWindow", "startMinute", minute)} onValidityChange={(valid) => updateValidity("allowedWindow.startMinute", valid)} /><ClockTimePicker label="Ends" minuteOfDay={value.allowedWindow.endMinute} onChange={(minute: number) => setMinute("allowedWindow", "endMinute", minute)} onValidityChange={(valid) => updateValidity("allowedWindow.endMinute", valid)} /></View> : null}
       </ControlSection>
@@ -55,7 +55,7 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
       <View style={styles.pauseCard}>
         <PauseCircle size={19} color={palette.active} /><View style={styles.flex}><Text style={styles.title}>Pause Frame</Text><Text style={styles.body}>{pauseLabel}</Text></View>
       </View>
-      <Text style={styles.body}>Choose a pause below, then Save to apply it. Resuming also takes effect when you Save.</Text>
+      <Text style={styles.body}>Save to apply or end a pause.</Text>
       <View style={styles.pauseActions}>
         <PauseButton label="1 hour" onPress={() => { onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 }); touch.selection(); }} styles={styles} />
         <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); if (value.pausedUntil !== tomorrow.getTime()) { onChange({ ...value, pausedUntil: tomorrow.getTime() }); touch.selection(); } }} styles={styles} />
@@ -67,7 +67,7 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
 }
 
 function ControlSection({ title, body, enabled, onToggle, styles, children }: { title: string; body: string; enabled: boolean; onToggle: (enabled: boolean) => void; styles: ReturnType<typeof createStyles>; children?: React.ReactNode }) {
-  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={`${title} ${enabled ? "on" : "off"}`} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
+  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={title} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
 }
 function NumberField({ label, value, onChange, styles }: { label: string; value: number; onChange: (text: string) => void; styles: ReturnType<typeof createStyles> }) {
   return <View style={styles.flex}><Text style={styles.fieldLabel}>{label}</Text><TextField value={String(value)} onChangeText={onChange} keyboardType="number-pad" maxLength={3} containerStyle={{ marginTop: spacing.sm }} style={styles.numberInput} accessibilityLabel={label} /></View>;

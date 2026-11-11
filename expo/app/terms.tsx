@@ -1,8 +1,10 @@
+import Heading from "@/components/Heading";
 import Text from "@/components/FrameText";
 import { useApp } from "@/providers/AppProvider";
 import { Link } from "expo-router";
 import { useMemo } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { notifyUser } from "@/services/notifyUser";
+import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
@@ -43,19 +45,18 @@ export default function TermsScreen() {
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={type.caption}>Frame</Text>
-      <Text accessibilityRole="header" style={styles.title}>Terms of Use</Text>
+      <Heading level={2} style={styles.title}>Terms of Use</Heading>
       <Text style={styles.updated}>Effective October 20, 2026</Text>
       <Text style={styles.intro}>By using Frame, you agree to use the app lawfully and respect the services and content it helps you access.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text accessibilityRole="header" style={styles.heading}>{section.title}</Text>
+          <Heading style={styles.heading}>{section.title}</Heading>
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}
       <View style={styles.section}>
-        <Text accessibilityRole="header" style={styles.heading}>Service help</Text>
-        {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => Alert.alert("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
+        <Heading style={styles.heading}>Service help</Heading>
+        {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => notifyUser("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
       </View>
       <Link href="/settings/privacy" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open device data controls</Text></Pressable></Link>
       {googleConfigured || googleConnected ? <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Manage Google connection</Text></Pressable></Link> : null}

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { onboardingDestination, onboardingSelection } from "./onboarding";
+import { resolvedOnboardingFilm, interestPickWatchItem, onboardingDestination, onboardingNextAction, onboardingSelection } from "./onboarding";
+import type { SourceResolution, WeeklyPickSourceSuggestion } from "../types";
 import { defaultTodaySourceRule } from "./today";
 import { METADATA_MAX_AGE_MS } from "./metadataRetention";
 import type { TodaySnapshotItem } from "../models/today";
@@ -9,6 +10,43 @@ function item(id: string, extra: Partial<TodaySnapshotItem> = {}): TodaySnapshot
   return { id, profileId: "owner", periodKey: "2026-09-29", position: 0, disposition: "pending", dispositionAt: null, snoozedUntil: null, sourceId: "source", sourceTitle: "Source", channelId: "source", channelTitle: "Source", title: id, thumbnailUrl: "", publishedAt: "2026-09-28T00:00:00Z", durationSeconds: 600, fetchedAt: now - 1000, isLivestream: false, isUpcomingPremiere: false, ...extra };
 }
 describe("onboarding first value", () => {
+  test("next actions name their destination and allow setup without optional choices", () => {
+    expect(onboardingNextAction("welcome", 0, false)).toEqual({ label: "Set up connections", finish: false, target: "keys" });
+    expect(onboardingNextAction("keys", 0, false)).toEqual({ label: "Choose my interests", finish: false });
+    expect(onboardingNextAction("keys", 0, false, 0, "source")).toEqual({ label: "Back to your source", finish: false, target: "source" });
+    expect(onboardingNextAction("keys", 0, false, 0, "your-frame")).toEqual({ label: "Back to my picks", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("source", 0, false)).toEqual({ label: "See my picks", finish: false });
+    expect(onboardingNextAction("source", 0, false, 0, null, true)).toEqual({ label: "Finish for now", finish: true });
+    expect(onboardingNextAction("source", 1, false, 0, null, true)).toEqual({ label: "See my selection", finish: false });
+    expect(onboardingNextAction("source", 0, true, 0, null, true)).toEqual({ label: "Preview selection", finish: false });
+    expect(onboardingNextAction("your-frame", 0, false)).toEqual({ label: "Explore Sources", finish: true });
+    expect(onboardingNextAction("your-frame", 1, false)).toEqual({ label: "Open Today", finish: true });
+    expect(onboardingNextAction("your-frame", 1, false, 1)).toEqual({ label: "Open Saved", finish: true });
+    expect(onboardingNextAction("your-frame", 1, true, 1)).toEqual({ label: "Back to Settings", finish: true });
+  });
+  test("interest picks use verified long-form metadata without claiming Today membership", () => {
+    const pick: WeeklyPickSourceSuggestion = { provider: "youtube", providerSourceId: "creator", displayName: "An artist", description: "", thumbnailUrl: null, handle: null, fetchedAt: now, interestId: "design", publicationPeriod: { start: "2026-09-28", end: "2026-10-04" }, recommendationReason: null, featuredMedia: { provider: "youtube", providerMediaId: "abcdefghijk", title: "A studio visit", description: "", thumbnailUrl: null, durationSeconds: 560, publishedAt: null, isLivestream: false, isUpcomingPremiere: false } };
+    expect(interestPickWatchItem(pick, "owner", now)).toMatchObject({ profileId: "owner", id: "abcdefghijk", sourceId: "creator" });
+    expect(interestPickWatchItem(pick, "owner", now)).not.toHaveProperty("periodKey");
+    expect(interestPickWatchItem({ ...pick, fetchedAt: now - METADATA_MAX_AGE_MS }, "owner", now)).toBeNull();
+    expect(interestPickWatchItem({ ...pick, featuredMedia: { ...pick.featuredMedia!, durationSeconds: 60 } }, "owner", now)).toBeNull();
+  });
+  test("a pasted film can open from its verified source preview before following", () => {
+    const resolved: SourceResolution = {
+      source: { provider: "youtube", providerSourceId: "creator", handle: null, displayName: "Studio", description: "", thumbnailUrl: null },
+      video: { provider: "youtube", providerMediaId: "abcdefghijk", title: "A studio visit", description: "", thumbnailUrl: null, publishedAt: null,
+        durationSeconds: 560, madeForKids: true, isLivestream: false, isUpcomingPremiere: false },
+      fetchedAt: now, provenance: "provider",
+    };
+    const film = resolvedOnboardingFilm(resolved, "owner", now);
+    expect(film).toMatchObject({ id: "abcdefghijk", sourceId: "creator", profileId: "owner", madeForKids: true });
+    expect(film).not.toHaveProperty("periodKey");
+    expect(resolvedOnboardingFilm({ ...resolved, fetchedAt: now - METADATA_MAX_AGE_MS }, "owner", now)).toBeNull();
+    for (const change of [{ durationSeconds: 20 }, { isUpcomingPremiere: true }, { isLivestream: true }]) {
+      expect(resolvedOnboardingFilm({ ...resolved, video: { ...resolved.video!, ...change } }, "owner", now)).toBeNull();
+    }
+    expect(resolvedOnboardingFilm({ ...resolved, video: undefined }, "owner", now)).toBeNull();
+  });
   test("ends in content when sources exist, and a useful starting point otherwise", () => {
     expect(onboardingDestination(2, false)).toBe("/(tabs)");
     expect(onboardingDestination(0, false)).toBe("/(tabs)/sources");

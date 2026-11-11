@@ -16,7 +16,7 @@ describe("library metadata boundaries", () => {
     for (const path of ["../app/watch/[id].tsx","../app/(tabs)/saved.tsx"]) expect(await text(path)).not.toContain("https://i.ytimg.com/vi/");
   });
   test("all metadata-bearing playback entry points preserve fetch time", async () => {
-    for (const path of ["../components/VideoCard.tsx","../components/AddChannelModal.tsx","../app/(tabs)/index.tsx","../app/session/[id].tsx"]) expect(await text(path)).toContain("fetchedAt:");
+    for (const path of ["../components/VideoCard.tsx","../components/AddChannelModal.tsx","../app/(tabs)/index.tsx","../hooks/useSessionPlayback.ts"]) expect(await text(path)).toContain("fetchedAt:");
     expect(await text("../app/watch/[id].tsx")).toContain("expireVideo(baseVideo, retentionClock)");
   });
   test("refresh only updates existing records and cannot rewrite action timestamps", async () => {

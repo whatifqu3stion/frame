@@ -1,3 +1,4 @@
+import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import { boundedReading } from "@/constants/layout";
 import { useQueryClient } from "@tanstack/react-query";
@@ -126,8 +127,8 @@ function GoogleImportContent() {
     return (
       <View style={styles.centered}>
         <Text style={styles.emptyTitle}>Google isn’t connected.</Text>
-        <Text style={styles.emptyBody}>Return to Sources or Settings to connect, then choose subscriptions.</Text>
-        <Pressable onPress={() => router.back()} style={styles.secondaryButton} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Go back</Text></Pressable>
+        <Text style={styles.emptyBody}>Open connection settings to see the import options for this device.</Text>
+        <Pressable onPress={() => router.replace("/settings/google")} style={styles.secondaryButton} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Connection settings</Text></Pressable>
       </View>
     );
   }
@@ -144,15 +145,12 @@ function GoogleImportContent() {
       contentContainerStyle={styles.content}
       ListHeaderComponent={(
         <View style={styles.intro}>
-          <Text style={styles.title}>Bring your sources along.</Text>
+          <Text style={styles.title}>Choose channels</Text>
           <Text style={styles.body}>Choose the subscriptions to follow for {activeProfile?.name ?? "this profile"}.</Text>
           <Text style={[styles.body, { marginTop: spacing.sm }]}>Selections are kept for a short time while Frame is open, so you can leave and come back.</Text>
           <Text style={[type.label, { marginTop: spacing.md }]}>Search loaded subscriptions</Text>
           <TextField value={query} onChangeText={setQuery} placeholder="Source name" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search loaded subscriptions" containerStyle={{ marginTop: spacing.sm }} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
-          <View style={styles.counterRow}>
-            <Text style={styles.counter}>{selectedIds.size} selected</Text>
-            <Text style={styles.capacity}>{availableSlots} spaces available</Text>
-          </View>
+
 
         </View>
       )}
@@ -187,10 +185,10 @@ function GoogleImportContent() {
     />
     <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}><Text style={styles.counter} accessibilityLiveRegion="polite">{selectedIds.size} selected · {availableSlots} spaces available</Text>
           {feedback ? <View accessibilityLiveRegion="polite" style={[styles.feedback, feedback.ok ? styles.feedbackGood : styles.feedbackBad]}><Text style={styles.feedbackText}>{feedback.message}</Text></View> : null}
-          {importComplete ? <Pressable onPress={() => router.replace({ pathname: "/(tabs)/sources", params: { showFollowed: "1" } })} style={styles.primaryButton} accessibilityRole="button"><Text style={styles.primaryButtonText}>Open followed sources</Text></Pressable> :
-          <Pressable onPress={() => { void importSelected(); }} disabled={selectedIds.size === 0 || importing} style={[styles.primaryButton, (selectedIds.size === 0 || importing) && styles.primaryButtonDisabled]} accessibilityRole="button" testID="google-import-confirm">
+          {importComplete ? <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => router.replace({ pathname: "/(tabs)/sources", params: { showFollowed: "1" } })} style={styles.primaryButton} accessibilityRole="button"><Text style={styles.primaryButtonText}>Open followed sources</Text></PrimaryAction> :
+          <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => { void importSelected(); }} disabled={selectedIds.size === 0 || importing} style={[styles.primaryButton, (selectedIds.size === 0 || importing) && styles.primaryButtonDisabled]} accessibilityRole="button" testID="google-import-confirm">
             {importing ? <ActivityIndicator color={palette.onDark} /> : <><Import size={17} color={palette.onDark} /><Text style={styles.primaryButtonText}>Add {selectedIds.size || "selected"} to Frame</Text></>}
-          </Pressable>}
+          </PrimaryAction>}
     </View>
     </KeyboardAvoidingView>
   );

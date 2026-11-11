@@ -3,8 +3,9 @@ import { useNavigationLayout } from "@/hooks/useNavigationLayout";
 import { boundedReading } from "@/constants/layout";
 import { useApprovalRequestCounts } from "@/hooks/useApprovalRequestCounts";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { useRef, useState } from "react";
+import { notifyUser } from "@/services/notifyUser";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import Heading from "@/components/Heading";
 import SettingsRow from "@/components/SettingsRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,23 +22,22 @@ export default function SettingsScreen() {
   const keyStatus = useProviderKeyStatus();
   const insets = useSafeAreaInsets();
   const { bottomBarHeight } = useNavigationLayout();
-  const { activeProfileId, interests, prefs, googleConnected, googleConfigured, requestOwnerAuthorization } = useApp();
+  const { activeProfileId, activeProfile, profiles, prefs, googleConnected, googleConfigured, requestOwnerAuthorization } = useApp();
   const requestCounts = useApprovalRequestCounts();
-  const pendingCount = Object.values(requestCounts.data ?? {}).reduce((total, count) => total + count, 0);
+  const [reviewProfileId, setReviewProfileId] = useState<string | null>(null);
+  const profileTrigger = useRef<HTMLElement | null>(null);
   const [profileControlsOpen, setProfileControlsOpen] = useState(false);
   const { busy, run } = useScreenAction(activeProfileId);
-  const openProfiles = () => {
+  const openProfiles = (reviewId: string | null = null) => {
+    if (Platform.OS === "web" && document.activeElement instanceof HTMLElement) profileTrigger.current = document.activeElement;
     void run(() => requestOwnerAuthorization(), (authorized) => {
-      if (authorized) setProfileControlsOpen(true);
-    }, () => Alert.alert("Couldn’t open profiles", "Try again. Protected settings remain locked."));
+      if (authorized) { setReviewProfileId(reviewId); setProfileControlsOpen(true); }
+    }, () => notifyUser("Couldn’t open profiles", "Try again. Protected settings remain locked."));
   };
   const open = (section: SettingsSection) => router.push({ pathname: "/settings/[section]", params: { section } });
-  const interestSummary = interests.length
-    ? `${interests.slice(0, 2).map((item) => item.name).join(", ")}${interests.length > 2 ? ` and ${interests.length - 2} more` : ""}`
-    : "Choose topics for weekly source picks";
-  const keySummary = keyStatus.isPending ? "Checking setup…"
+  const keySummary = activeProfile?.role !== "owner" ? "The Owner manages keys for this device" : keyStatus.isPending ? "Checking setup…"
     : keyStatus.isError ? "Setup status unavailable"
-    : !keyStatus.data?.available ? (Platform.OS === "web" ? "Key setup is available in the mobile app" : "Secure storage unavailable · Tap to retry")
+    : !keyStatus.data?.available ? (Platform.OS === "web" ? "API keys · Set up on your phone" : "Secure storage unavailable")
     : !keyStatus.data.youtube ? "YouTube key needed · Gemini optional"
     : keyStatus.data.gemini ? "YouTube & Gemini configured" : "YouTube configured · Gemini optional";
   const appearanceSummary = `${prefs.theme === "ink" ? "Dark" : "Light"} · ${accentOptions.find((option) => option.id === prefs.accent)?.label ?? "Default accent"}`;
@@ -46,24 +46,27 @@ export default function SettingsScreen() {
     <View style={styles.page}>
       <ScreenHeader title="Settings" />
       <View style={styles.group}>
-      <Heading style={[type.heading, styles.groupTitle]}>Your experience</Heading>
-      <SettingsRow title="Profiles & boundaries" summary={pendingCount ? `${pendingCount} ${pendingCount === 1 ? "request" : "requests"} to review · Viewing limits & Owner PIN` : "Viewing limits, approvals & Owner PIN"} onPress={openProfiles} busy={busy} testID="open-profile-controls" />
-      <SettingsRow title={SETTINGS_TITLES.today} summary={`Up to ${prefs.todayVideoCount} ${prefs.todayVideoCount === 1 ? "video" : "videos"} per day`} onPress={() => open("today")} testID="settings-today" />
-      <SettingsRow title={SETTINGS_TITLES.interests} summary={interestSummary} onPress={() => open("interests")} testID="settings-interests" />
-      <SettingsRow title={SETTINGS_TITLES.appearance} summary={appearanceSummary} onPress={() => open("appearance")} testID="settings-appearance" />
+        <Heading style={[type.heading, styles.groupTitle]}>Your viewing</Heading>
+        <SettingsRow title={SETTINGS_TITLES.today} summary={`Up to ${prefs.todayVideoCount} ${prefs.todayVideoCount === 1 ? "video" : "videos"} in Today${activeProfile?.role === "managed" ? "" : " · Weekly interests"}`} onPress={() => open("today")} testID="settings-today" />
+        <SettingsRow title={SETTINGS_TITLES.appearance} summary={appearanceSummary} onPress={() => open("appearance")} testID="settings-appearance" />
       </View>
       <View style={styles.group}>
-      <Heading style={[type.heading, styles.groupTitle]}>Connections</Heading>
-      <SettingsRow title={SETTINGS_TITLES.keys} summary={keySummary} onPress={() => open("keys")} testID="settings-keys" />
-      {googleConnected || googleConfigured ? <SettingsRow title={SETTINGS_TITLES.google} summary={googleConnected ? "Connected · Choose subscriptions" : "Import subscriptions · Optional"} onPress={() => open("google")} testID="settings-google" /> : null}
+        <Heading style={[type.heading, styles.groupTitle]}>Profiles &amp; connections</Heading>
+        {profiles.filter((profile) => profile.role === "managed" && (requestCounts.data?.[profile.id] ?? 0) > 0).map((profile) => {
+          const count = requestCounts.data![profile.id];
+          return <SettingsRow key={profile.id} title={`Review ${count === 1 ? "request" : "requests"} for ${profile.name}`} summary={`${count} awaiting Owner review`} onPress={() => openProfiles(profile.id)} busy={busy} />;
+        })}
+        <SettingsRow title="Profiles & viewing limits" summary={Platform.OS === "web" ? "Manage profiles here. Set daily limits and review requests on your phone." : "Daily time limits, approval requests and the Owner PIN"} onPress={() => openProfiles()} busy={busy} testID="open-profile-controls" />
+        <SettingsRow title={SETTINGS_TITLES.keys} summary={keySummary} onPress={() => open("keys")} testID="settings-keys" />
+        {googleConnected || googleConfigured ? <SettingsRow title={SETTINGS_TITLES.google} summary={googleConnected ? "Google connected · Choose subscriptions" : "Choose channels from your Google account"} onPress={() => open("google")} testID="settings-google" /> : null}
       </View>
       <View style={styles.group}>
-        <Heading style={[type.heading, styles.groupTitle]}>Privacy & support</Heading>
-        <SettingsRow title={SETTINGS_TITLES.privacy} summary="Policies & device data" onPress={() => open("privacy")} testID="settings-privacy" />
-        <SettingsRow title={SETTINGS_TITLES.about} summary="Using Frame, storage & support" onPress={() => open("about")} testID="settings-about" />
+        <Heading style={[type.heading, styles.groupTitle]}>Support</Heading>
+        <SettingsRow title={SETTINGS_TITLES.about} summary="Using Frame, setup and troubleshooting" onPress={() => open("about")} testID="settings-about" />
+        <SettingsRow title={SETTINGS_TITLES.privacy} summary="Local data, privacy policy and terms" onPress={() => open("privacy")} testID="settings-privacy" />
       </View>
     </View>
-    <ProfileControlsModal visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
+    <ProfileControlsModal returnFocusTarget={profileTrigger.current} initialReviewId={reviewProfileId} visible={profileControlsOpen} onClose={() => setProfileControlsOpen(false)} />
   </ScrollView>;
 }
 

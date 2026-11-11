@@ -33,21 +33,21 @@ usage access or cloud synchronization.
 ## Display and data meaning
 
 The first read or recorded interval establishes `startedAt`. Dates before its
-local date have a null value and display a dash and “Not recorded.” Dates on or
+local date show an empty baseline and read “Not recorded” when selected. Dates on or
 after it default to zero when no interval exists. Zero means no playback was
 recorded; it is not proof that a whole day was observed. The first date may be
 partial, and there is no historical backfill.
 
 Today is selected initially. Selecting a day changes the date and value readout;
-the selected label is underlined as well as accented. Positive values below a
+the selected weekday has a compact accent backing. Recorded zero has a short mark on the baseline. Positive values below a
 minute display “<1 min”; later values use whole minutes, rounded down, or hours
 and minutes. The vertical scale adapts to the largest displayed total. Seven day
 targets each retain a minimum width of 44 layout units; narrower plots scroll
 horizontally and initially reveal the latest date.
 
 Each day exposes its full date, total or missing state, and selection state to
-accessibility APIs. “About this time” contains the scope, start date, and local
-storage explanation. Loading and failed reads have distinct states; failure offers
+accessibility APIs. The info button beside “Viewing time” explains the scope and includes the start date
+when the week contains untracked days. Loading and failed reads have distinct states; failure offers
 “Try again” without silently replacing stored history. The chart reloads on focus,
 app activation, and each minute while focused and active.
 

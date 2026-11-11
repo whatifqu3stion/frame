@@ -32,7 +32,8 @@ describe("pre-design release handoff", () => {
 
   test("reset disclosure includes Managed content state", async () => {
     const settings = await text("../components/SettingsDetails.tsx");
-    expect(settings).toContain("playback and content boundary");
-    expect(settings).toContain("usage record, request, and library item");
+    expect(settings).toContain("viewing limits and schedules");
+    expect(settings).toContain("usage records, content approvals and pending requests");
+    expect(settings).toContain("all profiles, libraries and both API keys");
   });
 });

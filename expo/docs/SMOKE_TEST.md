@@ -338,3 +338,50 @@ Use a real iPhone and a representative Android phone; include an Android expande
 - Timed sessions count only playback across pause/buffering/background/reopen, with a 5-second persistence checkpoint. Seek forward/backward without changing time used. At expiry Finish this video must resume the same video and position, never override profile controls or advance.
 - Preserve schema-11 sessions and Owner commitments during upgrade; custom session durations and timer state survive restart. New Owner flexible limits change immediately; existing commitments still delay relaxation by 24 hours.
 - Exercise 500 library sources with 100 active in Today, finite 20-row source paging, and a large session plan.
+
+## Source filter labels — Android regression
+
+- In Sources → Followed with sources present, confirm All, Included, and Library only render readable labels, not just check marks. Switch through all three; labels and check positions remain stable and the source list matches the selected filter.
+- Check light/dark themes, narrow portrait and landscape windows, and font scales 1.0, 1.3, and 2.0. Filter controls wrap rather than clipping text, remain at least 48 dp tall, and retain a visible selected outline and check.
+- During loading and bulk changes, filters are disabled and announce their labels, checked state, and disabled state with TalkBack. Test full-width interest/appearance choices and bulk source selection too: their trailing marks must remain aligned after the shared intrinsic-label sizing fix.
+
+## Onboarding clarity — native acceptance
+
+- Fresh setup and replay: graphic-only visible progress, spoken stage/position, keyboard focus on stage changes, safe-area gutters, wrapping headings and footer actions at large text sizes.
+- With both keys, select interests and choose Find my picks. Only this explicit action may spend quota. Verify a finite, topic-matched set with reviewed featured videos, Watch and Follow; Back and cached reads must not generate again. Test no matching topics, empty editions, a failed review and one explicit recovery. Skip with no keys opens Sources. Add a creator I know instead preserves manual lookup and Today’s first-save flow. Replay finishes in Settings.
+- Open the welcome, then tap Set up connections. Verify YouTube before entering Gemini; check a device with one or both keys already saved, explicit deferral, secure-storage errors and Owner authorization. No generation occurs during verification. Check Back and missing-key recovery return to the intended stage.
+- Bring each smaller print forward. Its title, creator, reason, Watch and Follow must all change together without autoplay or new generation. A single-pick group must not show invented companion prints. Paging should feature the first pick of the new group.
+- Enter a source without a YouTube key. Find source stays disabled. Set up YouTube key returns to the first stage; Back to your source and Android Back both restore the exact input without revisiting interests. Do not log or capture real API keys.
+- Check daily selection size beneath followed sources, native keyboard avoidance, background cancellation, and back/forward draft restoration on iOS and Android. Browser checks do not establish secure-storage or native accessibility acceptance.
+## Still video entry and room lighting
+
+- [ ] From Today, Saved, a source, and a session, open a video: no thumbnail enlargement, poster zoom, or modal slide. The player and Close action are available without waiting for the room to dim.
+- [ ] Light mode gently dims from warm umber; dark mode dims from its existing wall with no brighter flash. Media and controls never fade with the wall.
+- [ ] Back, quick re-entry, next video, loading/ready/error, and orientation changes do not produce duplicate posters or replay lighting within the same watch visit.
+- [ ] On iOS/Android, verify Reduce Motion, background/resume, deep links, hardware/interactive Back, readable controls, and release-build frame pacing. Browser sample artwork cannot validate native playback.
+
+## Android edge-to-edge playback
+
+- [ ] Rotate a playing video in both directions. Android landscape has no Frame control rail or safe-area padding around the player. The same WebView remains mounted, playback position is preserved, and the status/navigation bars hide.
+- [ ] Tap YouTube fullscreen in portrait, wait for rotation, exit fullscreen, and rotate back. No player teardown, left-side strip, blank player, or duplicated playback. Portrait restores Frame controls and system bars.
+- [ ] Test gesture and three-button navigation, a camera-cutout device, and a tablet. System Back remains available (swipe to reveal system navigation if hidden); the first Back exits YouTube fullscreen, and the next closes Frame's watch screen.
+- [ ] The official player controls remain unobstructed. Aspect-ratio bars are expected for videos that do not match the display; do not crop or stretch videos to remove them.
+- [ ] Background/resume, error, end-of-video, and allowance/session expiry restore readable controls and system bars. Confirm iOS landscape still provides its safe-area Close control.
+
+## Independent-review refinements — November 1, 2026
+
+- [ ] Today at 390 px shows all seven whole weekdays; at 320 px, Earlier days / Later days reach both ends without clipped labels. Keyboard focus and touch scrubbing reveal the selected date. Repeat on native at font scales 1.0, 1.3, and 2.0; targets remain at least 48 dp and navigation wraps.
+- [ ] Video identity precedes artwork. Watch announces its video title; Saved's Continue watching shows Resume at the saved timestamp, while unwatched videos retain publication age. Session duration refers to the planned limit, not recorded history.
+- [ ] About this time, About Today inclusion, and provider guidance announce collapsed/expanded state. Check web keyboard, VoiceOver, and TalkBack. Source filters retain readable labels, source status is subordinate, and Saved's session destination has a directional cue.
+- [ ] Expand YouTube and Gemini setup. Follow the numbered steps and official guide links using test-owned provider projects. Do not capture keys. Validate successful save, provider denial, and generation errors on device; web preview intentionally cannot securely save keys.
+- [ ] Confirm the open-frame mark has no decorative checkmark, and Today has no adjacent duplicate section rules. Check light/dark themes and native large text. Browser samples establish layout only, not Android rendering, secure storage, provider access, or actual playback.
+
+Automated regressions cover whole-column chart geometry and reachability, shared disclosure state, resume metadata in all card variants, and Today content order/contextual Watch actions. Browser sample-library checks cover 320×740, 390×844, and 1280×900 layouts; native acceptance remains pending.
+
+### Follow-up critique fixes
+
+- [ ] At 320×740, Today shows today's recorded total with a Last 7 days disclosure; all four first-video actions fit in two deliberate rows. Expand/collapse the week, navigate dates, and rotate. At390×844 with normal text the week remains expanded by default. Repeat with large text and native orientation changes.
+- [ ] More opens Video options on web, iOS and Android. Dismiss removes only the selected video; Undo restores it. Snooze opens within the same sheet, Back/Escape returns to options, and Close exits. Tomorrow and custom future dates update the selection and produce confirmation. Keyboard focus returns sensibly after close.
+- [ ] Simulate dismiss/snooze storage failures and stale items: an inline message remains in the sheet, actions unlock, and retry works. During writes, close/back and duplicate actions are blocked. Switch profile and verify no old-profile options or result appears.
+- [ ] Session builder field and footer both say Session duration. Source count says N included in Today; capacity remains in About Today inclusion.
+- [ ] Today refresh, playback denial, save, session and Undo errors show messages in the web preview as well as native. Browser notices use a real browser dialog; unrelated screens' native Alert calls are outside this patch.

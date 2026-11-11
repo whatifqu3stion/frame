@@ -35,7 +35,7 @@ export function createTodayService(repository: TodayRepository, feedReader: Toda
       const feedResult = await feedReader.getCachedFeeds(participatingIds);
       if (feedResult.status !== "success") {
         const state = feedResult.status === "network_error" ? "network_error" : feedResult.status === "missing_configuration" ? "unavailable" : "unavailable";
-        return { state, snapshot: existing ? { ...existing, freshness: "offline" } : null, message: state === "network_error" ? "Frame couldn’t reach YouTube. Your local inbox was not changed." : "Video data is unavailable. Check your YouTube key and quota in Settings → Your API keys." };
+        return { state, snapshot: existing ? { ...existing, freshness: "offline" } : null, message: state === "network_error" ? "Frame couldn’t reach YouTube. Your local inbox was not changed." : "Video data is unavailable. Check your YouTube key and quota in Settings → YouTube & Gemini." };
       }
 
       const response = feedResult.response;

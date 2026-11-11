@@ -1,4 +1,5 @@
 import Text from "@/components/FrameText";
+import InlineHelp from "@/components/InlineHelp";
 import Heading from "@/components/Heading";
 import { useFeedback } from "@/hooks/useFeedback";
 import ChoiceOption from "@/components/ChoiceOption";
@@ -27,29 +28,30 @@ type GroupedInterestChoicesProps = {
   selectedIds: readonly string[];
   onToggle(id: string): void;
   busy?: boolean;
+  collapsible?: boolean;
   accessibilityLabel?: string;
   testIDPrefix?: string;
 };
 
-export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle, busy = false, accessibilityLabel, testIDPrefix }: GroupedInterestChoicesProps) {
+export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle, busy = false, collapsible = false, accessibilityLabel, testIDPrefix }: GroupedInterestChoicesProps) {
   const { type } = useFrameTheme();
   const { width, fontScale } = useWindowDimensions();
   const singleColumn = width < 360 || fontScale > 1.3;
-  return <View style={styles.groups} accessibilityLabel={accessibilityLabel}>
+  return <View style={collapsible ? undefined : styles.groups} accessibilityLabel={accessibilityLabel}>
     {selectedIds.some((id) => id.startsWith("custom:")) ? <View>
       <Heading level={headingLevel} style={type.heading}>Your specific interests</Heading>
       {selectedIds.filter((id) => id.startsWith("custom:")).map((id) => <ChoiceOption key={id} label={interestTopicFromId(id)?.name ?? "Interest"} selected role="checkbox" variant="ruled" onPress={() => onToggle(id)} disabled={busy} accessibilityHint="Remove this interest from future weekly selections." />)}
     </View> : null}
-    {INTEREST_GROUPS.map((group) => <View key={group.label}>
-      <Heading level={headingLevel} style={type.heading}>{group.label}</Heading>
-      <View style={styles.choices}>
-        {INTEREST_LIBRARY.filter((interest) => (group.ids as readonly string[]).includes(interest.id)).map((interest) => {
-          const selected = selectedIds.includes(interest.id);
-          const disabled = busy;
-          return <ChoiceOption key={interest.id} label={interest.name} selected={selected} role="checkbox" variant="ruled" onPress={() => onToggle(interest.id)} disabled={disabled} testID={testIDPrefix ? `${testIDPrefix}-${interest.id}` : undefined} style={[styles.choice, singleColumn && { flexBasis: "100%" }]} />;
-        })}
-      </View>
-    </View>)}
+    {INTEREST_GROUPS.map((group) => {
+      const topics = INTEREST_LIBRARY.filter((topic) => (group.ids as readonly string[]).includes(topic.id));
+      const count = topics.filter((topic) => selectedIds.includes(topic.id)).length;
+      const choices = <View style={styles.choices}>{topics.map((topic) => (
+        <ChoiceOption key={topic.id} label={topic.name} selected={selectedIds.includes(topic.id)} role="checkbox" variant="ruled" onPress={() => onToggle(topic.id)} disabled={busy} testID={testIDPrefix ? `${testIDPrefix}-${topic.id}` : undefined} style={[styles.choice, singleColumn && { flexBasis: "100%" }]} />
+      ))}</View>;
+      return collapsible
+        ? <InlineHelp key={group.label} label={`${group.label}${count ? ` · ${count} selected` : ""}`}>{choices}</InlineHelp>
+        : <View key={group.label}><Heading level={headingLevel} style={type.heading}>{group.label}</Heading>{choices}</View>;
+    })}
   </View>;
 }
 

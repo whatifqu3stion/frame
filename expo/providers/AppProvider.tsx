@@ -1,3 +1,5 @@
+import { sourceParticipationLabel } from "@/domain/sourceParticipation";
+import { notifyUser } from "@/services/notifyUser";
 import { normalizeTodayVideoCount } from "@/domain/todayPreference";
 import { defaultPrefs, loadProfilePreferences } from "@/storage/preferencesStorage";
 import { assertLongFormVideo } from "@/domain/contentPolicy";
@@ -358,7 +360,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const requestOwnerAuthorization = useCallback(async (fresh: boolean = false): Promise<boolean> => {
     if (!readyRef.current) return false;
     if (ownerPinProtectionError) {
-      Alert.alert("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
+      notifyUser("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
       return false;
     }
     if (!fresh && authorizationSessionRef.current.isAuthorized()) return true;
@@ -407,7 +409,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       authorizationResolverRef.current?.(false);
       authorizationResolverRef.current = null;
       pinVerificationRef.current = false;
-      Alert.alert("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
+      notifyUser("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
       return;
     }
     pinVerificationRef.current = false;
@@ -522,7 +524,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       createdProfile = await profileRepository.createManaged(name, allowance);
       await writeProfileStorage(AsyncStorage, "preferences", createdProfile.id, JSON.stringify({ ...defaultPrefs, hasCompletedOnboarding: true }));
       setProfiles(await profileRepository.list());
-      return { ok: true, message: `${createdProfile.name} is ready with explicit Daily Frame time.` };
+      return { ok: true, message: allowance.mode === "dailyLimit" ? `${createdProfile.name} has a daily viewing limit of ${allowance.minutes} minutes.` : `${createdProfile.name} has unlimited viewing time.` };
     } catch (error) {
       if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that Managed profile." };
@@ -582,7 +584,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!profile) return { ok: false, message: "That profile is no longer available." };
     try {
       const status = await viewingAllowanceService.setAllowance(profile, allowance);
-      if ("pendingChange" in status && status.pendingChange) return { ok: true, message: "This Owner relaxation will take effect after the 24-hour waiting period." };
+      if ("pendingChange" in status && status.pendingChange) return { ok: true, message: `Your new daily limit takes effect ${new Date(status.pendingChange.activatesAt).toLocaleString()}. Your current limit applies until then.` };
       return { ok: true, message: allowance.mode === "unlimited" ? "Daily viewing is now Unlimited." : `Daily viewing is now ${allowance.minutes} minutes.` };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t update that allowance." };
@@ -740,7 +742,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         queryClient.invalidateQueries({ queryKey: ["library", profile.id] }),
         queryClient.invalidateQueries({ queryKey: ["today", profile.id] }),
       ]);
-      return { ok: true, message: decision === "approve" ? "Request approved." : "Request removed." };
+      return { ok: true, message: decision === "approve" ? `Approved ${current.title} for ${profile.name}.` : `Declined ${profile.name}’s request for ${current.title}.` };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t review that request." };
     }
@@ -1126,7 +1128,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
       queueSourceLeaseReconciliation("local_change");
     },
-    onSuccess: async (_, { profileId }) => { await queryClient.invalidateQueries({ queryKey: ["library", profileId] }); await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }); await queryClient.invalidateQueries({ queryKey: ["today", profileId] }); },
+    onSuccess: async (_, { profileId }) => { await queryClient.invalidateQueries({ queryKey: ["today-rules", profileId] }); await queryClient.invalidateQueries({ queryKey: ["library", profileId] }); await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }); await queryClient.invalidateQueries({ queryKey: ["today", profileId] }); },
   });
 
   const unfollowMutation = useMutation({
@@ -1137,7 +1139,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (profile?.role === "managed") await managedContentAccessService.revokeSource(profile, id);
       queueSourceLeaseReconciliation("local_change");
     },
-    onSuccess: async (_, { profileId }) => { await queryClient.invalidateQueries({ queryKey: ["library", profileId] }); await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }); await queryClient.invalidateQueries({ queryKey: ["today", profileId] }); },
+    onSuccess: async (_, { profileId }) => { await queryClient.invalidateQueries({ queryKey: ["today-rules", profileId] }); await queryClient.invalidateQueries({ queryKey: ["library", profileId] }); await queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }); await queryClient.invalidateQueries({ queryKey: ["today", profileId] }); },
   });
 
   const createSession = useCallback(
@@ -1330,9 +1332,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
         }
       }
       await invalidateLibrary();
+      if (result.ok && profile?.role !== "managed") {
+        try {
+          const rules = await queryClient.fetchQuery({ queryKey: ["today-rules", activeProfileId], queryFn: () => listTodaySourceRules(activeProfileId), staleTime: 0 });
+          const rule = rules.find((item) => item.sourceId === resolution.source.providerSourceId);
+          const status = sourceParticipationLabel(rule?.mutedUntil, Date.now());
+          return { ok: true, message: `Following ${resolution.source.displayName}. ${(rule?.mutedUntil ?? 0) <= Date.now() ? "Today can pick from this source starting with your next selection" : status}.` };
+        } catch { return result; }
+      }
       return result;
     },
-    [activeProfileId, invalidateLibrary, authorizeProtectedAction, hasOwnerPin, profiles],
+    [activeProfileId, invalidateLibrary, authorizeProtectedAction, hasOwnerPin, profiles, queryClient],
   );
 
   const wipeAllData = useCallback(async (): Promise<void> => {

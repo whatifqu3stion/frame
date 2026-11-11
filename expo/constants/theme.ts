@@ -36,10 +36,11 @@ export type FramePalette = {
   onProgrammeSoft: string;
   programmeRule: string;
   programmeGrainOpacity: number;
+  primaryButtonDepth: ViewStyle;
 };
 
 type AccentTokens = Pick<FramePalette, "accent" | "accentDeep" | "accentSoft" | "active" | "activeSoft">;
-type PaletteBase = Omit<FramePalette, keyof AccentTokens | "onAccent" | "onDanger">;
+type PaletteBase = Omit<FramePalette, keyof AccentTokens | "primaryButtonDepth" | "onAccent" | "onDanger">;
 
 const lightBase: PaletteBase = {
   wall: "#F3F0EA", surface: "#F8F5EF", surfaceDeep: "#E9E4DB", surfaceHigh: "#FFFDFA", surfaceDim: "#DED7CC", surfaceBright: "#FFFEFB",
@@ -74,8 +75,21 @@ export const accentOptions: readonly { id: AccentMode; label: string }[] = [
   { id: "blue", label: "Mineral blue" }, { id: "green", label: "Mineral green" }, { id: "rose", label: "Muted rose" },
 ];
 
+export function primaryActionDepth(isDark: boolean, accent: AccentMode): ViewStyle {
+  const colors = accentTokens[accent][isDark ? "dark" : "light"];
+  const cast = isDark ? `${colors.accentSoft}99` : "rgba(90, 74, 58, 0.36)";
+  const offset = isDark ? -2 : 2;
+  let primaryButtonDepth: ViewStyle = { boxShadow: `0px ${offset}px 0px 0px ${cast}` };
+  // Outset shadows require Android 9. Use a crisp edge on earlier devices.
+  if (Platform.OS === "android" && Number(Platform.Version) < 28) {
+    primaryButtonDepth = isDark ? { borderTopWidth: 2, borderTopColor: cast } : { borderBottomWidth: 2, borderBottomColor: cast };
+  }
+  return primaryButtonDepth;
+}
+
 export function createPalette(isDark: boolean, accent: AccentMode): FramePalette {
-  return { ...(isDark ? darkBase : lightBase), ...accentTokens[accent][isDark ? "dark" : "light"], onAccent: isDark ? darkBase.wall : lightBase.onDark, onDanger: isDark ? darkBase.wall : lightBase.onDark };
+  const colors = accentTokens[accent][isDark ? "dark" : "light"];
+  return { ...(isDark ? darkBase : lightBase), ...colors, primaryButtonDepth: primaryActionDepth(isDark, accent), onAccent: isDark ? darkBase.wall : lightBase.onDark, onDanger: isDark ? darkBase.wall : lightBase.onDark };
 }
 
 export const lightPalette: FramePalette = createPalette(false, "blue");
@@ -85,16 +99,16 @@ export const darkPalette: FramePalette = createPalette(true, "blue");
 export const palette = lightPalette;
 
 export const watchPalette = {
-  litWall: "#443A31",
-  darkLitWall: "#24201C",
-  wall: "#181512",
-  stage: "#0D0C0B",
+  litWall: "#56483D",
+  darkLitWall: darkBase.surfaceHigh,
+  wall: "#202021",
+  stage: "#202021",
   surface: "#24201C",
   surfaceHigh: "#302922",
   ink: "#F4F0ED",
   inkSoft: "rgba(244, 240, 237, 0.76)",
   inkMuted: "rgba(244, 240, 237, 0.68)",
-  accent: "#8FB7CA",
+  accent: "#9AC0D2",
   accentSoft: "#C7DEE7",
   mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(244, 240, 237, 0.22)",
