@@ -15,10 +15,11 @@ export default function SettingsDetailScreen() {
   if (!isSettingsSection(key)) {
     return <Redirect href="/(tabs)/settings" />;
   }
+  const topicEditor = key === "topics" || key === "priorities";
   return <>
     <Stack.Screen options={{
       title: SETTINGS_TITLES[key],
-      headerLeft: navigation.canGoBack() ? undefined : () => <Pressable onPress={() => router.replace("/(tabs)/settings")} accessibilityRole="button" accessibilityLabel="Back to Settings" style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginRight: spacing.md }}><ArrowLeft size={20} color={palette.ink} /><Text style={[type.label, { color: palette.ink }]}>Settings</Text></Pressable>,
+      headerLeft: navigation.canGoBack() ? undefined : () => <Pressable onPress={() => router.replace(topicEditor ? "/settings/interests" : "/(tabs)/settings")} accessibilityRole="button" accessibilityLabel={topicEditor ? "Back to Weekly interests" : "Back to Settings"} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginRight: spacing.md }}><ArrowLeft size={20} color={palette.ink} /><Text style={[type.label, { color: palette.ink }]}>{topicEditor ? "Weekly interests" : "Settings"}</Text></Pressable>,
     }} />
     <SettingsDetails key={key} section={key} />
   </>;

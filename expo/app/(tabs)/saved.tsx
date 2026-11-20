@@ -1,3 +1,4 @@
+import CollectionPager, { collectionPage, SESSION_PAGE_SIZE } from "@/components/CollectionPager";
 import SectionTabs from "@/components/SectionTabs";
 import { isLongFormVideo } from "@/domain/contentPolicy";
 import { expireVideo } from "@/domain/metadataRetention";
@@ -61,6 +62,7 @@ export default function SavedScreen() {
   const planning = section === "sessions";
   const helpOpen = helpProfile === activeProfileId;
   const [showOtherSessions, setShowOtherSessions] = useState(false);
+  const [sessionPage, setSessionPage] = useState(0);
   const [criteria, setCriteria] = useState<SavedFilterCriteria>({ profileId: activeProfileId, query: "", filter: "all" });
   const { query: searchQuery, filter: viewingFilter } = resolveSavedCriteria(criteria, activeProfileId);
   const filteredSaved = useMemo(() => filterSavedLibrary(savedVideos, resumeList, searchQuery, viewingFilter), [resumeList, savedVideos, searchQuery, viewingFilter]);
@@ -80,6 +82,8 @@ export default function SavedScreen() {
   // Resume rows arrive newest first, including videos that were never saved.
   const latestResume = continueWatching[0];
   const currentSession = sessions.find((item) => item.orderedVideoIds.length > 0 && sessionPosition(item) < item.orderedVideoIds.length) ?? sessions[0] ?? null;
+  const otherSessions = sessions.filter(item => item.id !== currentSession?.id);
+  const currentSessionPage = collectionPage(sessionPage, otherSessions.length);
   const draft = sessionDraft?.name || sessionDraft?.orderedVideoIds.length || sessionDraft?.targetMinutes ? sessionDraft : null;
   const hasActiveFilter = searchQuery.trim().length > 0 || viewingFilter !== "all";
   const searchOpen = searchProfile === activeProfileId || hasActiveFilter;
@@ -184,7 +188,7 @@ export default function SavedScreen() {
           <Pressable onPress={openSessionBuilder} style={({ pressed }) => [styles.createAnother, pressed && styles.pressed]} accessibilityRole="button"><Plus size={16} color={palette.active} /><Text style={[type.label, { color: palette.active }]}>Create another session</Text></Pressable>
         ) : null}
         {sessions.length > 1 ? <Pressable onPress={() => setShowOtherSessions((value) => !value)} style={styles.otherSessions} accessibilityRole="button" accessibilityState={{ expanded: showOtherSessions }}><Text style={type.label}>{showOtherSessions ? "Hide other sessions" : `Other sessions · ${sessions.length - 1}`}</Text></Pressable> : null}
-        {showOtherSessions ? <MotionView enter>{sessions.filter((item) => item.id !== currentSession?.id).map((item) => {
+        {showOtherSessions ? <MotionView enter><CollectionPager page={currentSessionPage} count={otherSessions.length} onChange={setSessionPage} />{otherSessions.slice(currentSessionPage * SESSION_PAGE_SIZE, (currentSessionPage + 1) * SESSION_PAGE_SIZE).map((item) => {
           const count = item.orderedVideoIds.length;
           const position = sessionPosition(item);
           const coverId = item.orderedVideoIds[position] ?? item.orderedVideoIds[0];

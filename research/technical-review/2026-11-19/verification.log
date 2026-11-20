@@ -1,0 +1,699 @@
+$ bun run typecheck && bun run lint && bun run test
+$ tsc --noEmit
+$ expo lint
+
+/Users/j/Documents/frame-app/frame-app/expo/src/integrations/supabase/types.ts
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+✖ 1 problem (0 errors, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+$ bun test --pass-with-no-tests
+bun test v1.4.5 (a7733435c)
+
+components/WatchPlayerLayout.test.ts:
+(pass) Android landscape gives the player the full viewport without a left rail or safe-area padding [44.43ms]
+(pass) rotation and fullscreen keep the player at the same reconciliation path [16.75ms]
+(pass) fullscreen is edge-to-edge before rotation completes, with no Frame controls over the player [7.37ms]
+(pass) portrait restores chrome and system bars; iOS landscape retains safe controls [5.99ms]
+
+components/ProfileControlsModal.test.ts:
+(pass) a protected review reports its result before the list refresh, and fades only successful pointer decisions [16.48ms]
+(pass) web and unavailable secure storage explain the allowance prerequisite without a dead navigation action [0.82ms]
+(pass) native allowance entry without a PIN offers the working PIN setup route [0.38ms]
+(pass) native allowance entry with a PIN opens the picker and saves the chosen profile limit [2.96ms]
+(pass) a paused profile's saved daily limit can be retried without opening an editor with a substitute value [8.85ms]
+(pass) Add profile explains both roles before opening their editors and keeps managed creation on supported devices [1.28ms]
+(pass) a pending-request shortcut opens the requested managed profile only with Owner access and a supported PIN [6.44ms]
+
+components/ManagedContentAccessEditor.test.ts:
+(pass) the actual approval editor renders bounded pages and searches across the entire library [12.67ms]
+
+components/ReviewRefinements.test.ts:
+(pass) primary actions show depth only at rest and retain their press styling [3.04ms]
+(pass) playback press gives touch feedback and retains tint and focus without displacement in Reduce Motion [6.15ms]
+(pass) inline guidance exposes its expanded state on web and native [2.20ms]
+(pass) filter motion keeps the choices present on entry and removes displacement for keyboard and Reduce Motion [6.73ms]
+(pass) gallery brings real companions forward without watching or following on selection [9.11ms]
+(pass) only the current promoted poster can settle after loading, including a return to the same pick [25.32ms]
+(pass) discovery frames animate only pending reviews while visible, respect Reduce Motion, and stop on cleanup [12.74ms]
+(pass) every saved-card layout prioritizes resume time over publication age [20.41ms]
+(pass) Today names the film before its artwork and gives Watch a contextual label [4.68ms]
+(pass) narrow Today uses four paired action cells, including a visible More label [3.39ms]
+(pass) video options dismiss or open snooze inside the same sheet, with error and busy states [11.51ms]
+(pass) section selection acknowledges changed tabs once and leaves selected or disabled tabs silent [2.06ms]
+(pass) Today size haptic follows persistence, suppressing duplicate presses and failed writes [8.00ms]
+
+constants/theme.test.ts:
+(pass) readable text across Frame appearances > light blue has at least 4.5:1 contrast for text roles [0.30ms]
+(pass) readable text across Frame appearances > light green has at least 4.5:1 contrast for text roles [0.06ms]
+(pass) readable text across Frame appearances > light rose has at least 4.5:1 contrast for text roles [0.04ms]
+(pass) readable text across Frame appearances > dark blue has at least 4.5:1 contrast for text roles [0.04ms]
+(pass) readable text across Frame appearances > dark green has at least 4.5:1 contrast for text roles [0.04ms]
+(pass) readable text across Frame appearances > dark rose has at least 4.5:1 contrast for text roles [0.03ms]
+(pass) viewing-room text remains readable on each dark surface [0.07ms]
+(pass) room lighting keeps text readable throughout entry and return in both themes [0.33ms]
+(pass) both themes dim toward the same charcoal wall [0.02ms]
+
+db/libraryRetention.test.ts:
+(pass) version 5 library retention > adds unknown provenance, expires provider data and retains every personal record [4.27ms]
+(pass) version 5 library retention > rolls back a failed additive migration completely [1.30ms]
+(pass) version 5 library retention > copying metadata to Saved or progress cannot renew its fetch date [0.07ms]
+
+db/managedContentAccessMigration.test.ts:
+(pass) Managed content access schema > keeps policy, approvals, and requests profile-scoped and cascade-deletable [5.36ms]
+(pass) Managed content access schema > rejects invalid modes and request kinds [7.12ms]
+
+db/sessionPersistence.test.ts:
+(pass) version 7 Session persistence > upgrades version 6 without losing order or profile ownership, then survives restart [4.76ms]
+(pass) version 7 Session persistence > migration rolls back cleanly and can be retried [4.60ms]
+(pass) version 9 upgrade preserves legacy resumes and persists explicit session provenance [4.31ms]
+(pass) version 11 preserves legacy sessions, drafts and muted sources; new choices survive reopening [4.58ms]
+(pass) version 11 migration rolls back all additive columns on failure [4.78ms]
+(pass) version 12 preserves targets and commitments, persists timer runs and rejects stale checkpoints [7.74ms]
+(pass) Today admission remains capped while extra followed sources stay in the library [6.00ms]
+
+db/profileIsolationC1.test.ts:
+(pass) Stage C1 profile-owned local state > same IDs remain independent for follows, Today actions/snoozes, Saved, progress, Sessions, rules, playback controls and content approvals [5.52ms]
+(pass) Stage C1 profile-owned local state > legacy unscoped interests/appearance/searches migrate once to Owner without leaking to other roles [0.29ms]
+
+db/migrations.test.ts:
+(pass) database version 1 migration > repairs early native version 12 metadata columns without losing bookmarks or progress [2.79ms]
+(pass) database version 1 migration > reopens legacy empty first selections and keeps established profiles’ daily selections [4.58ms]
+(pass) database version 1 migration > executes fresh schema creation against SQLite [4.30ms]
+(pass) database version 1 migration > executes representative legacy migration without losing records [5.39ms]
+(pass) database version 1 migration > creates every profile-aware table for a fresh schema [0.05ms]
+(pass) database version 1 migration > assigns representative legacy records to the stable Owner [0.07ms]
+(pass) database version 1 migration > does no work when initialization is repeated at the latest version [0.04ms]
+(pass) database version 1 migration > rolls back a failed migration before setting the version [0.10ms]
+(pass) database version 1 migration > migrates version 1 profiles additively without changing profile-owned content [4.26ms]
+(pass) database version 1 migration > migrates existing Managed allowance and usage into profile-wide storage [4.14ms]
+(pass) database version 1 migration > supports Managed create, rename, reorder, and cascade delete without touching Owner [4.41ms]
+(pass) database version 1 migration > allows two profiles to save the same video independently [4.23ms]
+(pass) database version 1 migration > stores finite Today snapshots with profile isolation and transactional cascade [4.35ms]
+(pass) database version 1 migration > allows two profiles to follow the same source independently [4.23ms]
+
+db/savedConsolidation.test.ts:
+(pass) one canonical Saved library > merges duplicates and later-only links per profile, retaining original dates and provenance [6.02ms]
+(pass) one canonical Saved library > chooses valid metadata as one bundle, never future dates or an older duplicate [8.21ms]
+(pass) one canonical Saved library > a failure after the merge and legacy cleanup rolls back all rows and the schema [1.57ms]
+(pass) one canonical Saved library > expired and unknown legacy metadata stays expired without losing bookmark dates [1.37ms]
+(pass) one canonical Saved library > repeated saves are idempotent and unsaving cannot resurrect a legacy duplicate or change another profile [1.54ms]
+(pass) one canonical Saved library > Saved, playback, Sessions and Today use the same collection with no Later write path [2.53ms]
+
+domain/discoveryQuality.test.ts:
+(pass) quality admission requires several known long-form examples and a representative sample [0.14ms]
+(pass) subjective reviews must cite real eligible evidence and consistently clear the quality bar [0.14ms]
+
+domain/sourceParticipation.test.ts:
+(pass) source participation planning > rejects a bulk inclusion above the cap before making changes [0.17ms]
+(pass) source participation planning > keeps favorites and other rules, skips unchanged and unknown sources [0.02ms]
+(pass) source participation planning > does not reuse another profile’s rules [0.02ms]
+(pass) source participation planning > handles expired snoozes as included and turns temporary exclusions permanent [0.02ms]
+
+domain/viewingChartLayout.test.ts:
+(pass) only constrained phone layouts default to compact history [0.01ms]
+(pass) ordinary phone widths show all seven full-sized days when they fit [0.04ms]
+(pass) narrow and large-text charts display only whole days with accessible targets [0.13ms]
+(pass) first and latest dates remain reachable in an overflowing chart [0.01ms]
+
+domain/managedReview.test.ts:
+(pass) Owner request evidence > canonical preview links cannot redirect to arbitrary sites [0.07ms]
+(pass) Owner request evidence > refresh keeps profile, scope, target, and request ordering [0.04ms]
+(pass) Owner request evidence > missing, expired, and future provider timestamps never refresh the clock [0.03ms]
+(pass) Owner request evidence > cannot replace a request with another source or video [0.03ms]
+(pass) Owner request evidence > source refresh uses source evidence and clears old video runtime [0.01ms]
+
+domain/metadataRetention.test.ts:
+(pass) local Today metadata retention > expires precisely at thirty days and rejects unknown or future dates [0.02ms]
+(pass) local Today metadata retention > scrubs only metadata while preserving profile, order and every action [0.05ms]
+(pass) local Today metadata retention > expired pending items are hidden without turning them into watched or dismissed [0.04ms]
+(pass) local Today metadata retention > real SQLite cleanup preserves both profiles and is idempotent [0.30ms]
+
+domain/todayFeedback.test.ts:
+(pass) Today result feedback > a save timeout can dismiss only the confirmation that scheduled it [0.04ms]
+(pass) Today result feedback > saving B after dismissing A replaces A's Undo with the Saved action [0.02ms]
+(pass) Today result feedback > adding to or creating a session opens the exact resulting session [0.03ms]
+(pass) Today result feedback > snoozing another item cannot retain an earlier dismissal action [0.14ms]
+(pass) Today result feedback > clearing a message removes its target while dismissal preserves restoration details [0.01ms]
+
+domain/fullReset.test.ts:
+(pass) full-reset recovery > erases protected, database, and key-value state before restoring clean Owner selection [0.08ms]
+(pass) full-reset recovery > never reports recovery complete after an incomplete destructive step [0.05ms]
+
+domain/feedback.test.ts:
+(pass) context-bound touch feedback > a persisted action can confirm once, using its semantic strength [0.07ms]
+(pass) context-bound touch feedback > unchanged results stay silent and cannot be replayed as successes [0.01ms]
+(pass) context-bound touch feedback > disabled enabled suppresses feedback at completion [0.01ms]
+(pass) context-bound touch feedback > disabled active suppresses feedback at completion
+(pass) context-bound touch feedback > disabled native suppresses feedback at completion
+(pass) context-bound touch feedback > navigation, profile changes or backgrounding invalidate pending work [0.01ms]
+(pass) context-bound touch feedback > rapid controls share a burst limit without suppressing the next deliberate action [0.01ms]
+(pass) context-bound touch feedback > a long-delayed completion never causes a surprise pulse
+(pass) context-bound touch feedback > an unavailable actuator cannot fail a product action [0.15ms]
+
+domain/sessionFlow.test.ts:
+(pass) finite Session position and estimates > keeps larger time-based plans ordered with a storage safety bound [0.04ms]
+(pass) finite Session position and estimates > keeps the current item through reorder and chooses the next slot after removal [0.03ms]
+(pass) finite Session position and estimates > finished remains finished through edit, with explicit restart [0.02ms]
+(pass) finite Session position and estimates > does not pretend missing or invalid durations are known [0.06ms]
+(pass) default session names avoid collisions after deletion and renaming [0.03ms]
+(pass) planning target reports overruns and unknown durations without inventing a fit [0.03ms]
+(pass) candidate budgets handle exact fits, overruns, sub-minute slack and unknown evidence [0.18ms]
+(pass) remaining session runtime uses only this session's current progress, clamped to known duration [0.07ms]
+
+domain/progressWriter.test.ts:
+(pass) failed checkpoint remains visible and retryable until a successful commit [0.16ms]
+(pass) retry cannot overwrite a newer queued checkpoint [0.06ms]
+(pass) completion failure recovers without breaking subsequent writes [0.05ms]
+
+domain/exitConfirmation.test.ts:
+(pass) keep editing and repeated Back preserve work; discard proceeds once [0.04ms]
+(pass) an expired alert cannot navigate after authorization loss, save, or profile replacement [0.02ms]
+
+domain/actionGate.test.ts:
+(pass) a repeated tap cannot begin a second action [0.04ms]
+(pass) leaving and returning cannot revive an old completion or release a new action [0.01ms]
+(pass) a confirmation from a previous screen cannot start a destructive action [0.02ms]
+
+domain/onboardingPreview.test.ts:
+(pass) featuring a reviewed video from a later batch preserves every other pick in publication order [0.04ms]
+(pass) disabled, loading, failed, and unpublished previews stay distinct [0.07ms]
+(pass) configuration, offline, and maintenance offer their actual recovery [0.02ms]
+(pass) following removes a pick without silently backfilling; next skips followed batches [0.07ms]
+(pass) an empty batch is distinct from an exhausted or unpublished pool [0.03ms]
+(pass) a shorter retry response clamps old pagination and preserves real source data [0.04ms]
+
+domain/videoRecovery.test.ts:
+(pass) recovery accepts only current matching media with verified source identity [0.04ms]
+
+domain/todayPreference.test.ts:
+(pass) Today size defaults safely for existing profiles and clamps corrupt preferences [0.04ms]
+
+domain/pendingWatch.test.ts:
+(pass) onboarding retains the video id without trusting query metadata or session context [0.04ms]
+
+domain/interests.test.ts:
+(pass) Round 2B interest compatibility > defines the exact canonical display order
+(pass) Round 2B interest compatibility > maps every replaced legacy interest [0.02ms]
+(pass) Round 2B interest compatibility > canonicalizes legacy storage, removes unknowns, deduplicates, and sorts [0.08ms]
+(pass) Round 2B interest compatibility > accepts zero interests and unlimited selections while keeping selected items removable [0.06ms]
+(pass) Round 2B interest compatibility > eight custom additions leave library topics available and legacy topics removable [0.11ms]
+(pass) Round 2B interest compatibility > custom topics round-trip through profile IDs with no count cap and retain specific Unicode labels [2.69ms]
+(pass) Round 2B interest compatibility > large selections rotate through a bounded weekly focus without losing interests or growing output [2.84ms]
+(pass) Round 2B interest compatibility > does no Weekly Picks work for zero interests and caps weekly display at three total [0.02ms]
+(pass) up to three selected priorities stay in the twelve-topic focus while others rotate [0.10ms]
+
+domain/managedContentAccess.test.ts:
+(pass) Managed content access > defaults new Managed profiles to fail-closed Selected Videos [0.04ms]
+(pass) Managed content access > does not apply Managed restrictions to Standard profiles
+(pass) Managed content access > allows only exact selected videos in Selected Videos mode [0.02ms]
+(pass) Managed content access > allows only exact source IDs in Approved Sources mode [0.01ms]
+(pass) Managed content access > builds local requests for the active mode without private account data [0.05ms]
+
+domain/onboardingDraft.test.ts:
+(pass) restores the setup stage and first-save IDs without accepting malformed data [0.44ms]
+(pass) setup drafts stay profile-local and are erased with profile data [0.13ms]
+(pass) restores the Google Cloud instruction, never credential fields or unrecognized progress [0.04ms]
+(pass) an interrupted creator setup restores only the recognized YouTube identity [0.60ms]
+(pass) restores the connection detour only on its matching setup step [0.03ms]
+(pass) restores legacy progress in the keys-first flow without losing saves [0.02ms]
+(pass) inserting key setup preserves each version-two stage and saved videos [0.02ms]
+(pass) new drafts restore directly and reject unknown versions or out-of-range stages [0.09ms]
+
+domain/playerLifecycle.test.ts:
+(pass) player loading and restrictions > starts loading only after both authorization checks resolve and permit playback [0.03ms]
+(pass) player loading and restrictions > does not time out ready, ended, failed, departed, or unresolved players [0.02ms]
+(pass) player loading and restrictions > revoking eligibility stops a load; approval permits a fresh load
+(pass) explicit replay intent > normal load and retry never request autoplay [0.02ms]
+(pass) explicit replay intent > a replay waits for its own ready event and plays only once [0.02ms]
+(pass) explicit replay intent > leaving, backgrounding, blocking, or failing cancels pending replay
+(pass) explicit replay intent > a departed async restart cannot act after its persistence finishes
+
+domain/ownerAuthorization.test.ts:
+(pass) Owner authorization visit > authorizes one visit and relocks explicitly [0.04ms]
+(pass) Owner authorization visit > allows a protected visit when no PIN exists
+(pass) Owner authorization visit > routes every protected Managed action through Owner authorization [0.03ms]
+(pass) Owner authorization visit > all sensitive entry points reject cancellation and failed authorization without a mutation [0.10ms]
+(pass) Owner authorization visit > ignores an in-flight authorization after the profile switches [0.05ms]
+(pass) Owner authorization visit > PIN change and removal require the current verifier even during a recent visit [0.09ms]
+(pass) Owner authorization visit > starts a cooldown after five incorrect entries and allows a later retry [0.02ms]
+
+domain/profiles.test.ts:
+(pass) local profile rules > normalizes a valid unique name [0.03ms]
+(pass) local profile rules > rejects empty, long, and case-insensitively duplicate names [0.01ms]
+(pass) local profile rules > permits a Standard profile to keep its current normalized name
+(pass) local profile rules > reorders Managed profiles without changing identities or moving the Owner [0.05ms]
+(pass) local profile rules > restores a valid Standard or Managed profile and falls back to the Owner otherwise [0.02ms]
+
+domain/onboarding.test.ts:
+(pass) onboarding first value > next actions name their destination and allow setup without optional choices [0.06ms]
+(pass) onboarding first value > interest picks use verified long-form metadata without claiming Today membership [0.07ms]
+(pass) onboarding first value > a pasted film can open from its verified source preview before following [0.06ms]
+(pass) onboarding first value > completing or replaying setup lands on Today and scopes discovery to its viewer [0.01ms]
+(pass) onboarding first value > keeps a just-saved card visible without bringing back previously handled videos [0.08ms]
+(pass) onboarding first value > never reveals another profile, an unfollowed source, or expired metadata [0.03ms]
+(pass) onboarding first value > does not duplicate a saved card in the reveal [0.01ms]
+
+domain/savedLibrary.test.ts:
+(pass) local Saved library filtering > searches title and source case-insensitively without changing order [0.11ms]
+(pass) local Saved library filtering > treats progress over five seconds as in progress and keeps progress attached [0.02ms]
+(pass) local Saved library filtering > combines search and status without mutating the local inputs [0.06ms]
+(pass) local Saved library filtering > does not expose another profile's transient search or filter during a switch [0.02ms]
+(pass) local Saved library filtering > completed videos with cleared resume remain in All, not In progress [0.02ms]
+(pass) local Saved library filtering > ignores invalid progress and never introduces resume-only videos [0.03ms]
+
+domain/collectionPage.test.ts:
+(pass) every approval remains reachable in bounded pages of a large library [0.17ms]
+(pass) search, empty results and removal from the final page keep a reachable page [0.07ms]
+
+domain/contentPolicy.test.ts:
+(pass) four-minute boundary rejects short-form and unknown duration and accepts exactly four minutes [0.05ms]
+(pass) explicit Shorts links are rejected including mobile and encoded paths [0.03ms]
+(pass) playback requires current identity-matched evidence and the newest evidence wins [0.05ms]
+(pass) owner approval and available viewing time never mount a player without duration clearance [0.02ms]
+
+domain/artworkGeometry.test.ts:
+(pass) artwork navigation geometry > preserves the source centre and aspect ratio across different screen offsets [0.03ms]
+(pass) artwork navigation geometry > rejects unmeasured and nonfinite artwork [0.03ms]
+(pass) chart scrubbing > clamps pointer excursions and respects scrolled plot coordinates [0.02ms]
+
+domain/supportDiagnostics.test.ts:
+(pass) support report identifies the installed build and platform without collecting app state [0.04ms]
+(pass) support report describes failed storage and preview state without inventing success [0.02ms]
+
+domain/sessionTimer.test.ts:
+(pass) session usage counts playback only across pause, buffering, background and restart [0.07ms]
+(pass) expiry permits one explicit finish of the video that was playing, then ends [0.06ms]
+(pass) seeking does not consume time and a new run has its own allowance [0.02ms]
+(pass) precise quarter-second enforcement publishes only visible minute or permission changes [0.22ms]
+
+domain/nativeIntent.test.ts:
+(pass) System link recovery > keeps ordinary app launches on Today [0.05ms]
+(pass) System link recovery > preserves supported watch links and query parameters
+(pass) System link recovery > explains unsupported or malformed links without navigating externally [0.02ms]
+
+domain/orientationPolicy.test.ts:
+(pass) browsing and playback orientation > uses the device default when no screen owns orientation [0.01ms]
+(pass) browsing and playback orientation > honors an app request even when its value is zero
+(pass) browsing and playback orientation > fullscreen wins regardless of request insertion order [0.02ms]
+(pass) browsing and playback orientation > leaving fullscreen and playback restores each remaining owner [0.01ms]
+
+domain/productShell.test.ts:
+(pass) Round 1C product shell > exposes exactly four tabs with Today as the default [0.02ms]
+(pass) Round 1C product shell > keeps player and legacy recovery routes reachable [0.01ms]
+(pass) Round 1C product shell > routes every playback origin through the centralized watch allowance boundary [0.02ms]
+(pass) Round 1C product shell > uses the active profile for Saved, Continue Watching, and interests [0.02ms]
+(pass) Round 1C product shell > supports each truthful finite Today state [0.03ms]
+(pass) Round 1C product shell > onboarding, Today, Discover, and interest selection do not initiate search [0.22ms]
+
+domain/playerBridge.test.ts:
+(pass) native player bridge boundary > preserves valid playback and lifecycle messages [0.06ms]
+(pass) native player bridge boundary > rejects malformed messages instead of coercing them into playback state [0.02ms]
+
+domain/today.test.ts:
+(pass) finite Today selection > uses a local 4 a.m. period boundary [0.06ms]
+(pass) finite Today selection > is deterministic and enforces overall and per-source limits [0.34ms]
+(pass) finite Today selection > caps the overall snapshot at twelve across many sources [0.11ms]
+(pass) finite Today selection > applies source rules and inactive-source filtering locally [0.05ms]
+(pass) finite Today selection > excludes watched, dismissed, saved, session, and partially watched media [0.06ms]
+(pass) finite Today selection > prioritizes overdue snoozes, keeps future returns hidden, and preserves profile visibility [0.08ms]
+(pass) finite Today selection > successful actions mark handled while failed actions stay visible [0.06ms]
+(pass) Today gives every eligible source one turn before second videos [0.07ms]
+(pass) less recently shown sources get a turn ahead of frequent publishers [0.11ms]
+(pass) library-only sources are excluded from new and visible snapshots without affecting follows [0.05ms]
+(pass) short-form cannot enter Today or reappear from legacy snapshots, snoozes, or permissive rules [0.03ms]
+(pass) favorites break equal-wait ties, but never leapfrog an older waiting source [0.05ms]
+(pass) even many prolific favorites cannot starve quieter sources over successive days [0.57ms]
+(pass) personal selection size reserves snoozes, shares sources fairly and cannot exceed twelve [0.21ms]
+
+domain/googleImportDraft.test.ts:
+(pass) recent navigation restores query, selected IDs and pagination together [0.02ms]
+(pass) old and future import pages are not reused [0.01ms]
+(pass) partial imports and changed capacity preserve only still-actionable selections [0.03ms]
+
+domain/todayTimezone.test.ts:
+(pass) Today local clock boundaries > spring-forward period is 23 hours and changes at local 4 a.m. [20.71ms]
+(pass) Today local clock boundaries > fall-back period is 25 hours and changes at local 4 a.m. [16.29ms]
+(pass) Today local clock boundaries > uses the device timezone, including non-hour offsets [34.66ms]
+
+domain/playbackOperations.test.ts:
+(pass) stop during ledger startup cleans up before next play starts [0.26ms]
+(pass) invalid intent never starts and failed startup does not poison stops [0.07ms]
+(pass) delayed storage does not move the pause timestamp forward [0.07ms]
+
+domain/resumeSession.test.ts:
+(pass) resume keeps only the recorded session when the same video appears elsewhere [0.03ms]
+(pass) a deleted session or changed cursor falls back to standalone playback [0.02ms]
+(pass) legacy and standalone resumes never infer a session from matching media
+
+domain/viewingHistory.test.ts:
+(pass) distinguishes unrecorded days, zero playback, and fractional minutes [0.51ms]
+(pass) splits playback at local midnight and serializes overlapping writes [0.10ms]
+(pass) separates profiles, limits retention, and clears with profile data [0.24ms]
+(pass) corrupt history stays an error instead of becoming a false zero [0.04ms]
+(pass) unlimited playback records only playing intervals and stops idempotently [0.41ms]
+(pass) an awareness storage failure never alters playback authorization [0.06ms]
+
+domain/providerKeyStatus.test.ts:
+(pass) pending and failed key reads cannot be mistaken for missing or usable credentials [0.04ms]
+(pass) storage recovery distinguishes a phone failure from an unsupported browser [0.01ms]
+
+domain/scheduleSummary.test.ts:
+(pass) Schedule explanation > detects a daytime viewing window entirely covered by quiet hours [0.17ms]
+(pass) Schedule explanation > detects fully blocked overnight windows [0.09ms]
+(pass) Schedule explanation > retains a one-minute opening and treats touching boundaries correctly [0.37ms]
+(pass) Schedule explanation > explains partial overlap and retains separate pause and allowance gates [0.13ms]
+(pass) Schedule explanation > shows validation instead of summarizing invalid windows
+
+domain/playbackControls.test.ts:
+(pass) Managed playback controls > handles daytime and overnight windows without treating equal times as all day [0.02ms]
+(pass) Managed playback controls > fails closed for invalid stored controls and honors finite and indefinite pauses [0.15ms]
+(pass) Managed playback controls > resets a continuous session only after the configured break [0.03ms]
+(pass) Managed playback controls > persists session use, blocks at the limit, and restores after the break [0.40ms]
+(pass) Managed playback controls > keeps profiles isolated and never applies Managed schedules to Standard profiles [0.05ms]
+
+domain/viewingAllowance.test.ts:
+(pass) per-profile viewing allowance > keeps usage isolated by stable profile id [0.20ms]
+(pass) per-profile viewing allowance > counts only active playback [0.08ms]
+(pass) per-profile viewing allowance > persists once on pause, background, player exit, and repeated stop events [0.06ms]
+(pass) per-profile viewing allowance > resets on a forward local day and never resets on a backward date [0.06ms]
+(pass) per-profile viewing allowance > blocks playback at zero across service restarts [0.05ms]
+(pass) per-profile viewing allowance > claims five-minute and one-minute warnings only once per local day [0.07ms]
+(pass) per-profile viewing allowance > delays only Owner increases and disabling for 24 hours [0.20ms]
+(pass) per-profile viewing allowance > applies Standard changes immediately and leaves unlimited profiles unchanged [0.08ms]
+(pass) a new flexible Owner limit changes immediately while existing commitments cannot be bypassed [0.08ms]
+
+domain/motionContinuity.test.ts:
+(pass) the personalized first reveal waits for a visible route and is consumed once [0.03ms]
+(pass) hidden async completions settle without replaying when navigating Back [0.01ms]
+(pass) repeated completion and preference changes do not manufacture new feedback
+(pass) a rapid reorder preserves the current visual position before settling [0.02ms]
+(pass) invalid row measurements safely settle without an invalid native transform
+(pass) a completion notice mounted out of view never celebrates on return
+
+hooks/useStudyReveal.test.ts:
+(pass) a study resumes its remaining delay and reveal without restarting [3.94ms]
+(pass) queued completion is invalidated when hidden; returning completes once [3.10ms]
+(pass) Reduce Motion settles invisibly but acknowledges only the visible stage [2.29ms]
+(pass) unmount rejects an already queued study completion [1.88ms]
+
+hooks/usePlaybackStall.test.ts:
+(pass) continuous buffering recovers once after twenty seconds, despite progress rerenders [1.22ms]
+(pass) playback resuming or losing permission/visibility cancels recovery; the next stall gets its own grace period [0.90ms]
+(pass) retry and unmount reject callbacks from a departed player [0.78ms]
+(pass) the timeout uses the latest connectivity message without extending the deadline [0.86ms]
+
+hooks/useRoomLighting.test.ts:
+(pass) quick Back and re-entry retarget the current light, with a faster exit [2.18ms]
+(pass) player updates and next-video renders cannot replay the room entrance [1.41ms]
+(pass) Reduce Motion settles an in-flight entrance and skips the exit [1.93ms]
+(pass) backgrounding settles; resuming and direct watch entry do not flash the light [3.48ms]
+(pass) final lights rise from the current level and replay reverses an unfinished rise [1.45ms]
+(pass) disabling the cue fixes the room at its lit level through film and ending [1.35ms]
+
+hooks/useOnboardingBack.test.ts:
+(pass) Android Back belongs to key setup while onboarding is underneath [1.56ms]
+
+preview/interestPicks.test.ts:
+(pass) sample picks match selected topics and never stand in for a real creator or video [0.40ms]
+
+scripts/security-dependencies.test.js:
+(pass) patched dependency boundaries > query-string keeps decoding ordinary and malformed inputs with the ESM decoder [2.93ms]
+(pass) patched dependency boundaries > Metro-compatible image-size default export reads real project assets [1.44ms]
+(pass) patched dependency boundaries > Metro loads image assets through its filename-based API [5.77ms]
+(pass) patched dependency boundaries > RSA accepts valid signatures but rejects extra nested DigestAlgorithm children [253.97ms]
+
+services/weeklyPicksClient.test.ts:
+(pass) Round 2C Weekly Picks client > missing configuration makes no request [0.10ms]
+(pass) Round 2C Weekly Picks client > zero interests make no request at the discovery-service boundary [0.06ms]
+(pass) Round 2C Weekly Picks client > constructs the normalized endpoint and sends only the apikey and canonical interests [1.92ms]
+(pass) Round 2C Weekly Picks client > rejects noncanonical interests before the network boundary [0.04ms]
+(pass) Round 2C Weekly Picks client > maps connectivity and timeout failures to network_error [5.74ms]
+(pass) Round 2C Weekly Picks client > maps fresh, cached, empty, maintenance, and unavailable states truthfully [0.22ms]
+(pass) Round 2C Weekly Picks client > maps authorization, request, server, and invalid-response failures calmly [0.01ms]
+(pass) Round 2C Weekly Picks client > rejects invalid JSON, malformed schema, and unexpected internal fields [0.18ms]
+(pass) Round 2C Weekly Picks client > rejects more than twelve candidates for one interest [0.07ms]
+(pass) Round 2C Weekly Picks client > source-suggestion mapping exposes only the approved public fields [0.05ms]
+(pass) Round 2C Weekly Picks client > selects at most three distinct sources while representing interests fairly [0.05ms]
+(pass) Round 2C Weekly Picks client > converts a pick into the existing cached follow contract [0.04ms]
+(pass) Round 2C Weekly Picks client > uses a stable Monday UTC key and advances only at the weekly boundary [0.02ms]
+
+services/byok.test.ts:
+(pass) BYOK credential lifecycle > stores providers separately and exposes only presence to UI [0.39ms]
+(pass) BYOK credential lifecycle > unavailable secure storage has no fallback [0.05ms]
+(pass) BYOK credential lifecycle > failed writes preserve the old key and reset fails on deletion failure [0.08ms]
+(pass) BYOK credential lifecycle > serializes save then erase so a late write cannot resurrect the credential [0.03ms]
+(pass) BYOK credential lifecycle > preserves a dotted AI Studio authorization key through secure storage [0.06ms]
+(pass) BYOK credential lifecycle > rejects URLs, whitespace, and header injection before writing [0.04ms]
+(pass) BYOK network boundary > Gemini HTTP failures identify the status without exposing raw errors or retrying [0.95ms]
+(pass) BYOK network boundary > recognizing a Gemini key does not imply generation access [0.13ms]
+(pass) BYOK network boundary > routes each key only to its provider and keeps credentials out of URLs/body [0.52ms]
+(pass) BYOK network boundary > missing keys make zero requests; raw provider errors never escape; no retries [0.09ms]
+(pass) BYOK network boundary > key removal aborts a stalled request and suppresses its late body [0.12ms]
+(pass) BYOK network boundary > pre-cancellation and malicious model paths cannot send a key [0.06ms]
+(pass) direct YouTube metadata > resolves a video to a verified channel; rejects arbitrary URLs without requests [0.43ms]
+(pass) direct YouTube metadata > hydrates bounded feeds, deduplicates simultaneous reads, and clears cache on key removal [0.70ms]
+(pass) direct YouTube metadata > rejects wrong channel identity and unsafe thumbnail URLs [0.12ms]
+(pass) explicit Gemini generation > YouTube verification failures are not all mislabeled as rejected access [2.32ms]
+(pass) explicit Gemini generation > reads spend no quota; generation verifies sources and reuses the weekly result [0.49ms]
+(pass) explicit Gemini generation > unverified and malformed model output never becomes a source [0.05ms]
+(pass) explicit Gemini generation > missing keys never generate and cancelled verification never persists [0.17ms]
+(pass) explicit Gemini generation > concurrent generation is rejected and failures are not retried automatically [0.15ms]
+(pass) explicit Gemini generation > unknown, uncertain, and fabricated-evidence candidates stay empty without automatic refill [1.60ms]
+(pass) explicit Gemini generation > custom and unlimited interests stay profile-local and cannot refresh an issued week [1.11ms]
+(pass) explicit Gemini generation > legacy or incomplete cached recommendations cannot bypass current quality admission [0.31ms]
+(pass) explicit Gemini generation > cancellation during quality review never publishes partial results [0.16ms]
+(pass) explicit Gemini generation > discovery inspection keeps short and unknown evidence, excludes foreign IDs, and bounds repeated page tokens [0.39ms]
+(pass) explicit Gemini generation > expired AI metadata is removed without touching keys or library data [0.16ms]
+(pass) discovery resilience and safe diagnostics > requests bounded structured output while keeping local quality checks [0.18ms]
+(pass) discovery resilience and safe diagnostics > late provider failures retain only reviewed picks without retries or refill [0.69ms]
+(pass) discovery resilience and safe diagnostics > cancellation or key changes after an accepted pick never save partial work [0.27ms]
+(pass) discovery resilience and safe diagnostics > first-request errors identify stage, model and HTTP status without caching an empty edition [0.12ms]
+(pass) discovery resilience and safe diagnostics > local save errors do not blame provider keys or leak raw exceptions [0.13ms]
+(pass) discovery resilience and safe diagnostics > invalid JSON transport responses are data failures, not network or access failures [0.05ms]
+(pass) discovery resilience and safe diagnostics > thought text is not parsed as a recommendation [0.02ms]
+(pass) discovery resilience and safe diagnostics > malformed provider envelopes consistently produce typed data errors [0.04ms]
+(pass) discovery resilience and safe diagnostics > rejected reviews remain bounded to 25 Gemini requests per attempt [0.65ms]
+(pass) personal channel search boundaries > transport rejects global video search, mixed results, empty queries, and extra search controls before network [0.10ms]
+(pass) personal channel search boundaries > channel discovery hydrates only returned channel IDs and never looks up videos [0.21ms]
+(pass) personal channel search boundaries > within-channel search fixes the scope and discards foreign-channel video hydration [0.34ms]
+(pass) personal channel search boundaries > older uploads use one explicit page, never recursively follow nextPageToken [0.13ms]
+(pass) unavailable key storage gives an honest native-app message without making a request [0.05ms]
+(pass) short and unknown videos never resolve, reach feeds, or appear in a channel page [0.93ms]
+(pass) Shorts links are rejected before network even if the ID could be a longer video [0.04ms]
+(pass) a larger research pool keeps twelve reviewed long-form sources, including mixed-format creators [0.61ms]
+(pass) empty editions have one explicit recovery after cooldown, persisted even when the recovery fails [0.41ms]
+(pass) discovery samples at most three pages to find long-form work behind recent Shorts [0.29ms]
+(pass) three reviewed discoveries are readable before the search finishes and survive cancellation [0.90ms]
+
+services/libraryRetentionSafety.test.ts:
+(pass) library metadata boundaries > every thumbnail surface opts out of unmanaged native disk caching [1.04ms]
+(pass) library metadata boundaries > expired thumbnails cannot be recreated from a saved ID [0.15ms]
+(pass) library metadata boundaries > all metadata-bearing playback entry points preserve fetch time [0.50ms]
+(pass) library metadata boundaries > refresh only updates existing records and cannot rewrite action timestamps [0.08ms]
+
+services/discoveryRun.test.ts:
+(pass) durable progress survives the presenting screen unsubscribing; duplicate starts do not spend again [0.29ms]
+(pass) empty results finish without inventing a ready selection [0.04ms]
+(pass) unexpected failures never expose provider payloads [0.03ms]
+(pass) quota failure retains published picks and an explicit later attempt can recover [0.06ms]
+(pass) failure reading committed results is a storage error, never a successful empty edition [0.03ms]
+
+services/playbackControlsSafety.test.ts:
+(pass) Managed playback control boundaries > composes controls with the existing daily allowance at status, start, checkpoint, stop, and profile switch [0.15ms]
+(pass) Managed playback control boundaries > protects mutations and fails closed before every player entry [0.20ms]
+
+services/sourceResolutionFlow.test.ts:
+(pass) manual shared-source mobile flow > accepts only supported source and individual-video inputs [0.06ms]
+(pass) manual shared-source mobile flow > resolution alone cannot follow; explicit confirmation saves to one profile and reconciles [0.15ms]
+(pass) manual shared-source mobile flow > uses the same source ceiling as Google import without mutating a full profile [0.05ms]
+(pass) library capacity is separate from the 100 participating Today sources [0.14ms]
+
+services/technicalRecovery.test.ts:
+(pass) actual watch handler rejects delayed authorization after pause [13.13ms]
+(pass) actual watch handler rejects delayed authorization after background [8.37ms]
+(pass) saveSessionDraft: failure reaches editor without poisoning profile/reset flushes [7.11ms]
+(pass) clearSessionDraft: failure reaches editor without poisoning profile/reset flushes [9.75ms]
+(pass) actual session edit commits once; validation/write failures leave old data [7.46ms]
+(pass) 500 missing videos use one profile-scoped query and expiry pass [8.88ms]
+(pass) a departed player cannot write its delayed final checkpoint using the next video's time [6.90ms]
+
+services/boundedRequest.test.ts:
+(pass) bounded lookup returns a completed response [0.19ms]
+(pass) a stalled body is bounded even when its work ignores abort [11.20ms]
+(pass) leaving lookup cancels immediately and aborts the request [0.08ms]
+(pass) already cancelled work never starts [0.05ms]
+
+services/cachedContent.test.ts:
+(pass) cache-only source shelves > uses one bounded shared read and preserves truthful stale/empty state [0.15ms]
+(pass) cache-only source shelves > rejects invalid IDs before any network work [0.03ms]
+(pass) cache-only source shelves > throws recoverable errors rather than replacing cached query data with an empty success [0.07ms]
+(pass) cache-only source shelves > a missing source never falls back to a provider lookup [0.04ms]
+
+services/betaSafety.test.ts:
+(pass) full-access BYOK boundaries > keeps billing disabled while launch discovery stays free [0.01ms]
+(pass) full-access BYOK boundaries > free access is independent of purchase status and does not pretend to be an entitlement [0.37ms]
+(pass) full-access BYOK boundaries > billing SDK and both purchase surfaces are absent; keys replace plans in Settings [0.90ms]
+(pass) full-access BYOK boundaries > legacy mobile content endpoints are removed, not hidden behind entitlement checks [0.14ms]
+
+services/managedContentAccessSafety.test.ts:
+(pass) Managed content access boundaries > gates every player mount, start, and checkpoint on current content approval [0.16ms]
+(pass) Managed content access boundaries > does not trust route-supplied source metadata for Approved Sources [0.11ms]
+(pass) Managed content access boundaries > protects Owner mutations with authorization and an established PIN [0.16ms]
+(pass) Managed content access boundaries > invalidates obsolete requests when the Owner changes access mode [0.18ms]
+(pass) Managed content access boundaries > keeps Managed Today and Sources finite and limited to active approvals [0.12ms]
+
+services/sourceLeaseCoordinator.test.ts:
+(pass) Round 3B local source lease coordination > multiple local profiles produce one source lease and one protected token [0.94ms]
+(pass) Round 3B local source lease coordination > releases only after the final local profile unfollows [0.15ms]
+(pass) Round 3B local source lease coordination > offline local actions succeed and pending work survives restart [0.14ms]
+(pass) Round 3B local source lease coordination > protected-storage failures never send an unrecoverable token or discard a release [0.10ms]
+(pass) Round 3B local source lease coordination > renews no more than once every seven days [0.07ms]
+(pass) Round 3B local source lease coordination > coalesces concurrent reconciliation [0.08ms]
+(pass) Round 3B local source lease coordination > unknown sources stay pending without another attempt in the same session [0.06ms]
+(pass) Round 3B local source lease coordination > disabled and unavailable service states never reject local reconciliation [0.11ms]
+
+services/thumbnailCleanup.test.ts:
+(pass) thumbnail cleanup lifecycle > coalesces overlapping calls and reports success only after both settle [0.14ms]
+(pass) thumbnail cleanup lifecycle > disk bridge errors do not skip memory cleanup and retry can recover [0.08ms]
+(pass) thumbnail cleanup lifecycle > false results and memory rejections never count as success [0.04ms]
+(pass) thumbnail cleanup lifecycle > web never invokes native cleanup or claims native success [0.03ms]
+(pass) thumbnail cleanup lifecycle > a later failed foreground attempt replaces earlier success [0.04ms]
+
+services/todaySafety.test.ts:
+(pass) Today playback and network safety > checks the existing daily allowance before opening playback [0.09ms]
+(pass) Today playback and network safety > marks Today watched only after allowance-approved playback actually starts [0.10ms]
+(pass) Today playback and network safety > the mobile cached-feed client has no provider, search, AI, or personal-data request path [0.09ms]
+
+services/todayService.test.ts:
+(pass) Today snapshot service > failed requests never finalize an empty snapshot [0.24ms]
+(pass) Today snapshot service > preserves the provider failure when the first selection has no local snapshot [0.04ms]
+(pass) Today snapshot service > first live selection accepts videos fetched after loading started and excludes future timestamps [0.19ms]
+(pass) Today snapshot service > no-source setup stays unfinalized and the first source generates immediately [0.07ms]
+(pass) Today snapshot service > a first empty read stays open until an imported source has a matching upload [0.10ms]
+(pass) Today snapshot service > checking again can populate the same sources after an empty cached feed [0.09ms]
+(pass) Today snapshot service > a profile with a previous selection can still finalize a quiet day [0.06ms]
+(pass) Today snapshot service > refresh preserves membership and order while updating existing metadata [0.11ms]
+(pass) Today snapshot service > offline refresh renders the persisted profile snapshot and keeps profiles isolated [0.07ms]
+(pass) legacy profiles over 100 sources keep their snapshot and receive actionable recovery without a feed request [0.12ms]
+(pass) library-only sources are not fetched and toggling participation never refills an existing day [0.11ms]
+(pass) favorite changes affect future selection only, including an explicit metadata refresh [0.10ms]
+(pass) selection size takes effect at the next daily boundary without refilling a handled day [0.12ms]
+
+services/recoveryAppearance.test.ts:
+(pass) fallback starts with system appearance then retains the last committed app appearance [0.03ms]
+
+services/weeklyEdition.test.ts:
+(pass) profile-local Weekly Picks edition > issues a stable finite edition, dismisses without backfill, and reveals only the fixed pool [0.84ms]
+(pass) profile-local Weekly Picks edition > isolates profiles and erases the edition with profile reset [0.14ms]
+(pass) profile-local Weekly Picks edition > never substitutes new candidates when a published source disappears [0.10ms]
+(pass) profile-local Weekly Picks edition > More like this cannot draw a new source from a midweek replacement pool [0.12ms]
+(pass) provisional onboarding preview > uses current interests without issuing or replacing the profile’s weekly edition [0.17ms]
+(pass) provisional onboarding preview > separates an empty publication from offline and paused service states [0.09ms]
+(pass) a new discovery policy replaces a legacy pool without carrying unreviewed source IDs forward [0.11ms]
+(pass) twelve weekly picks are paged in threes, persist position, and retain dismissals across a compatible upgrade [0.25ms]
+(pass) a short first page does not skip a source when another page becomes available [0.11ms]
+(pass) an edition opened during preparation grows its unseen pool without moving the first page [0.12ms]
+
+services/sourceFeedClient.test.ts:
+(pass) batched cached source feed client > carries the older source/media fetch date and negotiates the new response shape [0.29ms]
+(pass) batched cached source feed client > makes one bounded profile-agnostic cached read [0.10ms]
+(pass) batched cached source feed client > retries a network failure once, but not HTTP failures [302.96ms]
+(pass) batched cached source feed client > rejects malformed requests and responses before persistence [8.89ms]
+
+services/foundationSafety.test.ts:
+(pass) Round 1 network safety > interest selection never invokes search [0.10ms]
+(pass) Round 1 network safety > opening Today returns truthful unavailability without network work [0.11ms]
+(pass) Round 1 network safety > opening Discover with no interests performs no network work [0.15ms]
+(pass) Round 1 network safety > legacy onboarding search boundary is disabled centrally [0.08ms]
+(pass) Round 1 network safety > retired Google import and automatic following stay disabled without network work [0.05ms]
+
+services/startupRecovery.test.ts:
+(pass) failed database restoration stays blocked; retry restores the existing Managed profile [1.34ms]
+(pass) failed profile restoration stays blocked; retry restores the existing Managed profile [0.34ms]
+(pass) failed snapshot restoration stays blocked; retry restores the existing Managed profile [0.27ms]
+(pass) fresh setup is released only after successful restoration, and departed startup cannot publish [0.52ms]
+(pass) startup gate exposes retry instead of mounting navigation after failure [2.90ms]
+(pass) retry coalesces rapid presses and ready state prevents another initialization [2.56ms]
+(pass) preferences and Owner actions cannot proceed before profile restoration [4.08ms]
+
+services/googleImportPolicy.test.ts:
+(pass) selective Google import planning > deduplicates explicit choices and excludes sources already followed [0.06ms]
+(pass) selective Google import planning > reports overflow instead of silently exceeding the profile source cap [0.03ms]
+
+services/sourceLeaseClient.test.ts:
+(pass) Round 3B source lease client > sends only action and bounded anonymous source fields [0.47ms]
+(pass) Round 3B source lease client > rejects oversized requests before network access [0.07ms]
+(pass) Round 3B source lease client > maps disabled, unavailable, and offline outcomes without throwing [0.14ms]
+(pass) Round 3B source lease client > rejects responses that leak tokens or alter source identity [0.12ms]
+
+services/googleAuth.test.ts:
+(pass) selective Google subscription reads > requests one bounded authenticated page and maps safe source fields [0.51ms]
+(pass) selective Google subscription reads > returns partial data when malformed records are safely omitted [0.08ms]
+(pass) selective Google subscription reads > does not request with an invalid page token [0.04ms]
+[google] subscription request failed
+(pass) selective Google subscription reads > distinguishes expired authorization and offline failures [0.09ms]
+(pass) Google credential transport > rejects redirects and omits ambient cookies for every credential request [0.21ms]
+(pass) Google credential transport > does not disclose transport exception text in diagnostics or results [0.12ms]
+
+services/diagnostics.test.ts:
+(pass) production Android diagnostics opens and shares only after an explicit press [8.22ms]
+(pass) sample library cannot activate or read browser storage in native or release builds [2.07ms]
+
+services/sessionMetadata.test.ts:
+(pass) 500-item reads stay bounded and preserve order and missing entries [0.47ms]
+(pass) cancellation stops further batches and rejects stale results [0.15ms]
+(pass) storage failure is not reported as a successful empty session [0.04ms]
+
+services/notifyUser.test.ts:
+(pass) Today notices use browser dialogs on web and native alerts on phones [2.13ms]
+(pass) web decisions reach the caller for both acceptance and cancellation without a native alert [1.50ms]
+
+services/releaseHandoff.test.ts:
+(pass) BYOK release handoff > keeps the native acceptance guide aligned with the current feature contract [0.38ms]
+(pass) BYOK release handoff > the release checklist names the actual verification and build commands [0.17ms]
+(pass) BYOK release handoff > reset disclosure includes Managed content state [0.07ms]
+
+storage/profileStorage.test.ts:
+(pass) profile-scoped preferences > copies legacy preferences to the Owner without deleting the legacy value [0.09ms]
+(pass) profile-scoped preferences > keeps appearance and preferences independent between profiles [0.07ms]
+(pass) profile-scoped preferences > stores stable interest ids independently per profile and survives reload [0.06ms]
+(pass) profile-scoped preferences > clearing one profile leaves another profile intact [0.06ms]
+(pass) profile-scoped preferences > does not restore stale legacy data after the Owner explicitly clears data [0.05ms]
+(pass) clearing a profile removes its first-run watch intent and keeps other profiles isolated [0.04ms]
+(pass) custom interest selections and generated editions are isolated and cleared with their profile [0.06ms]
+
+storage/installationIdentityStorage.test.ts:
+(pass) device-wide installation accounting identity > generates exactly 32 random bytes as 64 lowercase hex and reuses it [0.53ms]
+(pass) device-wide installation accounting identity > is installation-scoped rather than profile-scoped and can be reset [0.10ms]
+
+storage/preferencesStorage.test.ts:
+(pass) only an absent preference record receives new-profile defaults [0.18ms]
+(pass) a failed read preserves saved preferences and a retry restores them [0.09ms]
+(pass) profiles saved before house lights have the cue enabled [0.03ms]
+
+storage/googleCredentialStorage.test.ts:
+(pass) profile-scoped Google credentials > moves the legacy credential to the stable Owner only [0.11ms]
+(pass) profile-scoped Google credentials > keeps credentials isolated and clears only one profile [0.07ms]
+
+storage/ownerPinStorage.test.ts:
+(pass) Owner PIN protected storage > accepts only four to six numeric digits [0.04ms]
+(pass) Owner PIN protected storage > stores a salted verifier without plaintext and verifies the PIN [0.41ms]
+(pass) Owner PIN protected storage > rejects a malformed protected record instead of treating it as no PIN [0.05ms]
+(pass) Owner PIN protected storage > changes and removes the verifier without leaving the prior PIN valid [0.14ms]
+(pass) persistent Owner PIN retry limits > retains failures across recreated services and rejects even the correct PIN during cooldown [0.17ms]
+(pass) persistent Owner PIN retry limits > serializes concurrent incorrect guesses before accepting another attempt [0.11ms]
+(pass) persistent Owner PIN retry limits > accepts legacy verifier records and fails closed when retry state cannot be saved [0.07ms]
+
+storage/activeProfileStorage.test.ts:
+(pass) active profile persistence > persists and restores the selected stable profile id [0.08ms]
+
+storage/localTabKeys.test.ts:
+(pass) hosted sites and production builds cannot enable preview credentials [0.03ms]
+(pass) a fresh tab cannot read a key verified in another tab [0.11ms]
+
+ 491 pass
+ 0 fail
+ 3912 expect() calls
+Ran 491 tests across 95 files. [1.67s]

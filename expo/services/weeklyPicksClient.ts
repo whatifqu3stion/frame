@@ -57,6 +57,8 @@ export type WeeklyPicksClientResult =
   | { status: "invalid_response" };
 
 export type WeeklyPicksClient = {
+  /** Local preparation only; public responses remain unchanged. */
+  isPreparing?(profileId: string): boolean;
   policyVersion?: string;
   compatiblePolicyVersions?: readonly string[];
   getWeeklyPicks(interestIds: readonly InterestId[], profileId?: string): Promise<WeeklyPicksClientResult>;

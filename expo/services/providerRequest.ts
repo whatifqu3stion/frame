@@ -1,6 +1,8 @@
 import { boundedRequest } from "./boundedRequest";
 import type { KeyProvider, ProviderKeyStore } from "../storage/providerKeys";
 
+export const BYOK_GEMINI_MODEL = "gemini-3.5-flash-lite";
+
 export type ProviderErrorKind = "missing_key" | "access" | "request" | "billing" | "unavailable" | "quota" | "network" | "invalid_response" | "cancelled" | "storage";
 export class ProviderError extends Error {
   constructor(public readonly kind: ProviderErrorKind, public readonly provider?: KeyProvider, public readonly httpStatus?: number) {
@@ -80,8 +82,11 @@ export function createProviderTransport(keys: ProviderKeyStore, fetchImpl: typeo
       if (!/^gemini-[a-z0-9.-]{1,64}$/.test(model)) throw new ProviderError("invalid_response");
       return request("gemini", `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, body, signal);
     },
-    validateGemini(candidateKey: string, signal?: AbortSignal) {
-      return request("gemini", "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", undefined, signal, candidateKey);
+    async validateGemini(candidateKey: string, signal?: AbortSignal) {
+      const name = `models/${BYOK_GEMINI_MODEL}`;
+      const details = await request("gemini", `https://generativelanguage.googleapis.com/v1beta/${name}`, undefined, signal, candidateKey) as { name?: string; supportedGenerationMethods?: unknown } | null;
+      if (details?.name !== name || !Array.isArray(details.supportedGenerationMethods)) throw new ProviderError("invalid_response", "gemini");
+      if (!details.supportedGenerationMethods.includes("generateContent")) throw new ProviderError("unavailable", "gemini");
     },
   };
 }

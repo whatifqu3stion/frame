@@ -25,7 +25,7 @@ export default function ProgrammeArtwork({ videos, enter = false, editorial = fa
 function ProgrammePrint({ video, index, enter, editorial = false }: { video: Artwork; index: number; enter: boolean; editorial?: boolean }) {
   const { palette } = useFrameTheme();
   const { progress, reduced } = usePresentationProgress({ enter, duration: motion.artwork + index * 70 });
-  return <Animated.View style={[styles.print, editorial && styles.editorialPrint, { backgroundColor: palette.mount, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }), transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced || editorial ? 1 : 0.96, 1] }) }, { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [editorial && !reduced ? (index + 1) * 4 : 0, 0] }) }] }]}>
+  return <Animated.View style={[styles.print, editorial && styles.editorialPrint, { backgroundColor: editorial ? palette.onProgramme : palette.mount, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }), transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced || editorial ? 1 : 0.96, 1] }) }, { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [editorial && !reduced ? (index + 1) * 4 : 0, 0] }) }] }]}>
     <MediaImage source={{ uri: video.thumbnailUrl! }} style={styles.image} contentFit="cover" cachePolicy="none" />
   </Animated.View>;
 }
@@ -38,5 +38,5 @@ const styles = StyleSheet.create({
   solo: { width: "100%", flexDirection: "row" },
   companions: { width: "78%", alignSelf: "flex-end", flexDirection: "row", gap: 12, marginTop: 12 },
   oneCompanion: { width: "48%" },
-  editorialPrint: { maxWidth: "100%", padding: 2, boxShadow: [{ offsetX: 0, offsetY: 3, blurRadius: 8, color: "rgba(0, 0, 0, 0.24)" }] },
+  editorialPrint: { maxWidth: "100%", padding: 2, boxShadow: [{ offsetX: 0, offsetY: 3, blurRadius: 8, color: "rgba(0, 0, 0, 0.16)" }] },
 });

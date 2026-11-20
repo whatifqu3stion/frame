@@ -102,7 +102,7 @@ function PageControls({ label, page, pages, total, busy, onChange }: { label: st
 }
 
 function ApprovalRow({ title, meta, busy, onRemove, styles, danger }: { title: string; meta: string; busy: boolean; onRemove(): void; styles: ReturnType<typeof createStyles>; danger: string }) {
-  return <View style={styles.row}><View style={styles.flex}><Text style={styles.title} numberOfLines={2}>{title}</Text><Text style={styles.meta} numberOfLines={1}>{meta}</Text></View><Pressable accessibilityRole="button" onPress={onRemove} disabled={busy} style={styles.iconButton} accessibilityLabel={`Remove approval for ${title}`}><Trash2 size={15} color={danger} /></Pressable></View>;
+  return <View style={styles.row}><View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 180, minWidth: 0 }}><Text style={styles.title}>{title}</Text><Text style={styles.meta}>{meta}</Text></View><Pressable accessibilityRole="button" onPress={onRemove} disabled={busy} style={styles.iconButton} accessibilityLabel={`Remove approval for ${title}`}><Trash2 size={15} color={danger} /></Pressable></View>;
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {

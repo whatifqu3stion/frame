@@ -1,8 +1,10 @@
 export const SETTINGS_TITLES = {
-  today: "Viewing preferences",
+  today: "Max videos in Today",
   interests: "Weekly interests",
+  topics: "Choose topics",
+  priorities: "Priority topics",
   appearance: "Appearance",
-  google: "Subscription import",
+  google: "Previous Google connection",
   privacy: "Privacy & device data",
   about: "Help & about",
   keys: "YouTube & Gemini",

@@ -2,6 +2,7 @@ import { posterForTopic } from "@/constants/onboardingPosters";
 import { sampleVideoTopic } from "./interestPicks";
 import Text from "@/components/FrameText";
 import { useState } from "react";
+import { useFinishedRoom } from "@/providers/RoomLightingProvider";
 import CompletionArtwork from "@/components/motion/CompletionArtwork";
 import { router } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
@@ -12,6 +13,7 @@ import { makePreviewLibrary } from "./library";
 
 export default function PreviewVideo({ id }: { id: string }) {
   const [ending, setEnding] = useState(false);
+  useFinishedRoom(ending);
   const { type } = useFrameTheme();
   const palette = watchPalette;
   const video = makePreviewLibrary(Date.now()).videos.find((item) => item.id === id);

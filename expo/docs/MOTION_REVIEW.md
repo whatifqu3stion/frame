@@ -249,3 +249,23 @@ frame pacing still require device acceptance; the browser player is fictional.
 The waiting scene reuses the three studies from Frame’s opening print. Their mounts settle on an umber table while a soft band of light passes over them. The caption follows real discovery callbacks: finding creators, checking channels, reading uploads, reviewing quality, and saving. Checking and review can repeat; the arrangement is not a percentage or a promise that three videos qualified.
 
 On arrival, the lead mount opens and the smaller prints settle beside it on one 840 ms presentation clock. Buttons and artwork are available throughout. No provider request, minimum wait, retry, autoplay, or quality-policy change is part of this animation. Cancellation, failure and empty editions have no success reveal. The light stops on unmount, backgrounding, loss of focus, or Reduce Motion; the static table keeps the live status. Phone-width visual QA uses the explicitly fictional sample rehearsal described in `expo/preview/README.md`. Native frame pacing and live provider timing require device testing.
+
+### Touch feedback coverage — November 18, 2026
+
+Extended the existing expo-haptics vocabulary rather than adding feedback to every press:
+
+- Onboarding step changes use a selection tick; an actual first-discovery handoff and successful setup completion use the milestone cue. Sample discovery previews and automated story/chart animations remain silent. Replaying setup closes with the lighter commit cue.
+- Verified provider keys acknowledge only after successful local storage. Failed validation and removal stay silent.
+- Section switches and deliberate discovery-gallery promotions tick only when the selected item changes.
+- Today’s maximum, discovery priority topics, and House lights acknowledge successful writes. Re-enabling Haptic feedback gives a single sample tick; disabling it stays silent.
+- Existing saves, follows, add-to-session, session ordering/creation/start and viewing-day selection keep their existing acknowledgements without an extra generic button pulse.
+
+All cues use the existing device-wide preference, foreground/navigation validity, one-shot completion and burst suppression. No sound, dependency, visual redesign, or feedback during automatic playback was added. Native-only output means the web preview remains silent.
+
+Validation: TypeScript, scoped ESLint, Impeccable detector and 22 focused interaction/feedback tests pass. Browser smoke checks exercise onboarding advance and Saved’s section switch without runtime errors. Physical iOS/Android tactile strength remains unverified and should be checked in the next native build.
+
+### Study visibility and release hardening — November 18, 2026
+
+Study charts now keep one elapsed-time clock for their opening delay and reveal, pausing when the route or app is inactive. Resume preserves the same easing position instead of restarting it. Hidden and unmounted completion callbacks are rejected; Reduce Motion settles the data and acknowledges completion only when visible. Regression tests cover delay/reveal interruptions, queued completion, reduced motion and unmount.
+
+Shared info and identified onboarding/help/replay targets now meet 48-unit interaction bounds. Session details virtualize their queue beneath the existing editorial cover; metadata reads are batched and cancellable. Full verification passes with 471 tests; browser layout checks are supplementary. Native motion/gesture/haptic acceptance remains pending.

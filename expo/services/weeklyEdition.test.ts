@@ -177,3 +177,25 @@ test("a short first page does not skip a source when another page becomes availa
   expect(next.items.map((item) => item.providerSourceId)).toEqual(["tech-2", "science-2", "tech-3"]);
   expect((await service.showPrevious("owner", next, [])).items.map((item) => item.providerSourceId)).toEqual(["tech-1", "science-1"]);
 });
+
+test("an edition opened during preparation grows its unseen pool without moving the first page", async () => {
+  let preparing = true;
+  let full = false;
+  const client: WeeklyPicksClient = {
+    isPreparing: () => preparing,
+    async getWeeklyPicks() {
+      const data = response();
+      if (!full) data.interests = [data.interests[0]];
+      return { status: "success", response: data };
+    },
+  };
+  const service = createWeeklyEditionService(client, new MemoryStorage());
+  const first = await service.get("owner", ["tech", "science"], [], monday);
+  expect(first.items.map(item => item.providerSourceId)).toEqual(["tech-1", "tech-2", "tech-3"]);
+  full = true; preparing = false;
+  const settled = await service.get("owner", ["tech", "science"], [], monday);
+  expect(settled.items.map(item => item.providerSourceId)).toEqual(first.items.map(item => item.providerSourceId));
+  expect(settled.canShowMore).toBe(true);
+  const more = await service.showMore("owner", settled, []);
+  expect(more.items.map(item => item.providerSourceId)).toEqual(["science-1", "science-2", "science-3"]);
+});

@@ -1,7 +1,7 @@
 import PlaybackAction from "@/components/PlaybackAction";
 import { controlTransition, useControlFeedback } from "@/hooks/useControlFeedback";
 import Text from "@/components/FrameText";
-import MediaImage from "@/components/MediaImage";
+import ProgrammeArtwork from "@/components/ProgrammeArtwork";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useQuery } from "@tanstack/react-query";
 import { Timer } from "lucide-react-native";
@@ -12,6 +12,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 import { expireVideo } from "@/domain/metadataRetention";
 import { useSessionPlayback } from "@/hooks/useSessionPlayback";
 import { sessionRuntime } from "@/domain/sessionFlow";
+import { loadSessionMetadata } from "@/services/sessionMetadata";
 import { todayRepository } from "@/repositories/todayRepository";
 import type { Video, VideoQueue } from "@/types";
 
@@ -24,7 +25,7 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const media = useQuery({
     queryKey: ["library", profileId, "session-programme", session.orderedVideoIds.join(",")], networkMode: "always",
-    queryFn: () => Promise.all(session.orderedVideoIds.map((id) => todayRepository.getVideo(profileId, id))),
+    queryFn: ({ signal }) => loadSessionMetadata(session.orderedVideoIds, (id) => todayRepository.getVideo(profileId, id), signal),
   });
   const videos = useMemo(() => new Map([
     ...(media.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos,
@@ -35,19 +36,16 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   const length = runtime.seconds ? `${runtime.unknown ? "at least " : ""}${Math.ceil(runtime.seconds / 60)} min total` : "duration unavailable";
   const next = position >= count ? "Queue complete" : `Up next · Video ${position + 1} of ${count}`;
   const coverStart = position >= count ? 0 : position;
-  const artwork = session.orderedVideoIds.slice(coverStart, coverStart + 3)
-    .map((id) => videos.get(id)).filter((video): video is Video => Boolean(video?.thumbnailUrl));
+  const artwork = session.orderedVideoIds
+    .map((id) => videos.get(id)).filter((video): video is Video => Boolean(video?.thumbnailUrl)).slice(0, 3);
   const upcoming = session.orderedVideoIds[position];
   return <View style={styles.root}>
     <ProgrammeGrain />
     <Pressable {...cover.events} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Open ${session.name}. ${next}.`}
       accessibilityHint="View the full session lineup" style={[styles.cover, cover.ring]}>
       {({ pressed }) => <>
-      {artwork.length > 0 && <View style={[styles.mount, !cover.reduced && controlTransition, (cover.highlighted || pressed) && { backgroundColor: palette.onDark }]} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <MediaImage source={{ uri: artwork[0].thumbnailUrl }} contentFit="cover" cachePolicy="none" style={styles.leadImage} />
-        {artwork.length > 1 && <View style={styles.companions}>
-          {artwork.slice(1).map((video) => <MediaImage key={video.id} source={{ uri: video.thumbnailUrl }} contentFit="cover" cachePolicy="none" style={styles.companionImage} />)}
-        </View>}
+      {artwork.length > 0 && <View style={[styles.mount, !cover.reduced && controlTransition, (cover.highlighted || pressed) && { opacity: 0.9 }]}>
+        <ProgrammeArtwork videos={artwork} editorial />
       </View>}
       <View style={styles.caption}>
         <Text style={[styles.title, (cover.highlighted || pressed) && { textDecorationLine: "underline" }]}>{session.name}</Text>
@@ -76,13 +74,10 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
 
 function createStyles(p: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    root: { backgroundColor: p.programme, borderRadius: radii.card, padding: 12 },
+    root: { backgroundColor: p.programme, borderRadius: radii.card, borderCurve: "continuous", padding: 12 },
     cover: { borderRadius: radii.small },
-    mount: { flexDirection: "row", width: "100%", aspectRatio: 2.55, maxHeight: 220, gap: 3, padding: 3, backgroundColor: p.onProgrammeSoft },
-    leadImage: { flex: 2, minWidth: 0, height: "100%" },
-    companions: { flex: 1, minWidth: 0, gap: 3 },
-    companionImage: { width: "100%", flex: 1, minHeight: 0 },
-    caption: { paddingHorizontal: 8, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.xs },
+    mount: { paddingHorizontal: 8, paddingTop: 8 },
+    caption: { paddingHorizontal: 8, paddingTop: 0, paddingBottom: spacing.md, gap: spacing.xs },
     title: { ...type.title, color: p.onProgramme },
     summary: { ...type.label, color: p.onProgrammeSoft, flexShrink: 1 },
     body: { marginHorizontal: 8, marginBottom: 8 },

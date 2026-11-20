@@ -895,10 +895,36 @@ export async function refreshTodaySnapshotMetadata(profileId: string, periodKey:
   });
 }
 
+/** One metadata cleanup and bounded lookup for a whole selection, newest evidence first. */
+export async function getLatestTodayVideos(profileId: string, mediaIds: readonly string[]): Promise<Video[]> {
+  const ids = [...new Set(mediaIds)];
+  if (!ids.length) return [];
+  await expireLocalTodayMetadata();
+  const wanted = new Set(ids);
+  let history: TodaySnapshotItem[];
+  if (Platform.OS === "web") {
+    history = profileValues(webStore.todaySnapshots, profileId).flatMap(snapshot => snapshot.items)
+      .filter(item => wanted.has(item.id)).sort((a, b) => b.fetchedAt - a.fetchedAt);
+  } else {
+    const db = await getDb();
+    history = [];
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const batch = ids.slice(offset, offset + 500);
+      const rows = await db.getAllAsync<TodayItemRow>(`SELECT * FROM today_snapshot_items WHERE profileId = ? AND mediaId IN (${batch.map(() => "?").join(",")}) ORDER BY fetchedAt DESC`, [profileId, ...batch]);
+      history.push(...rows.map(mapTodayItemRow));
+    }
+  }
+  const found = new Map<string, Video>();
+  const now = Date.now();
+  for (const item of history) {
+    if (found.has(item.id) || !isMetadataCurrent(item.fetchedAt, now)) continue;
+    found.set(item.id, { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids, fetchedAt: item.fetchedAt });
+  }
+  return ids.flatMap(id => found.has(id) ? [found.get(id)!] : []);
+}
+
 export async function getLatestTodayVideo(profileId: string, mediaId: string): Promise<Video | null> {
-  const history = await listTodayHistory(profileId);
-  const item = history.find((candidate) => candidate.id === mediaId && isMetadataCurrent(candidate.fetchedAt, Date.now()));
-  return item ? { id: item.id, title: item.title, channelId: item.sourceId, channelTitle: item.sourceTitle, thumbnailUrl: item.thumbnailUrl, publishedAt: item.publishedAt, durationSeconds: item.durationSeconds, description: item.description, madeForKids: item.madeForKids, fetchedAt: item.fetchedAt } : null;
+  return (await getLatestTodayVideos(profileId, [mediaId]))[0] ?? null;
 }
 
 export async function listTodaySourceRules(profileId: string): Promise<TodaySourceRule[]> {

@@ -12,7 +12,7 @@ describe("Managed playback control boundaries", () => {
     expect(source).toContain("playbackControlsService.beginPlaying(profile)");
     expect(source).toContain("playbackControlsService.checkpoint()");
     expect(source).toContain("playbackControlsService.stopPlaying()");
-    expect(source).toContain("Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()])");
+    expect(source).toContain("Promise.all([viewingAllowanceService.stopPlaying(stoppedAt), playbackControlsService.stopPlaying(stoppedAt)])");
   });
 
   test("protects mutations and fails closed before every player entry", async () => {

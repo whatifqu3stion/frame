@@ -17,6 +17,8 @@ export const LEGACY_INTEREST_REPLACEMENTS: Readonly<Record<string, InterestId>> 
 const canonicalIds = INTEREST_LIBRARY.map((interest) => interest.id);
 const canonicalIdSet = new Set<InterestId>(canonicalIds);
 
+export const CUSTOM_INTEREST_LIMIT = 8;
+export const isCustomInterest = (id: string) => id.startsWith("custom:");
 export const CUSTOM_INTEREST_MAX_LENGTH = 120;
 export const DISCOVERY_INTERESTS_PER_WEEK = 12;
 const customPrefix = "custom:";
@@ -83,6 +85,7 @@ export function toggleInterestId(
 ): InterestId[] {
   if (!validIds.has(interestId)) return [...selected];
   if (selected.includes(interestId)) return selected.filter((id) => id !== interestId);
+  if (isCustomInterest(interestId) && selected.filter(isCustomInterest).length >= CUSTOM_INTEREST_LIMIT) return [...selected];
   if (selected.length >= maxSelections) return [...selected];
   return [...selected, interestId];
 }

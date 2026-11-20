@@ -1,9 +1,11 @@
+import { useDiscoveryRunLifecycle } from "@/hooks/useDiscoveryRun";
 import CollectionArrivalProvider from "@/providers/CollectionArrivalProvider";
 import ThemeTransitionProvider from "@/providers/ThemeTransitionProvider";
 import RoomLightingProvider from "@/providers/RoomLightingProvider";
 import Text, { FontScaleProvider } from "@/components/FrameText";
 import PaperSurface from "@/components/PaperSurface";
 import PreviewLibraryBar from "@/preview/PreviewLibraryBar";
+import ProgressRecoveryNotice from "@/components/ProgressRecoveryNotice";
 import { keepPendingWatch, takePendingWatch } from "@/storage/pendingWatchStorage";
 import { feedbackGate, loadFeedbackPreference } from "@/services/feedback";
 import { HankenGrotesk_400Regular, HankenGrotesk_500Medium, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
@@ -85,6 +87,7 @@ function AppContent() {
 }
 
 function ThemedApp() {
+  useDiscoveryRunLifecycle();
   const pathname = usePathname();
   React.useLayoutEffect(() => { feedbackGate.invalidate(); }, [pathname]);
   React.useEffect(() => {
@@ -108,8 +111,9 @@ function ThemedApp() {
   return (
     <View style={{ flex: 1, backgroundColor: wall }}>
       <StatusBar style={isWatching || isDark ? "light" : "dark"} />
-      <PreviewLibraryBar />
+      {pathname !== "/onboarding" && pathname !== "/welcome-preview" && <PreviewLibraryBar />}
       <View key={activeProfileId} style={{ flex: 1 }}><AppContent /></View>
+      <ProgressRecoveryNotice profileId={activeProfileId} hidden={isWatching || profileSwitching} />
       {profileSwitching ? <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", backgroundColor: palette.wall }} accessible accessibilityLabel="Switching profile"><ActivityIndicator color={palette.active} /><Text style={{ color: palette.ink, marginTop: 16 }}>Switching profile…</Text></View> : null}
       <OwnerPinModal />
     </View>

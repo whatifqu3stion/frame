@@ -98,9 +98,9 @@ export function createByokYouTube(transport: ProviderTransport, keys: ProviderKe
     cache.set(id, { expires: now() + 15 * 60_000, feed });
     return feed;
   }
-  function feedFor(id: string): Promise<Feed | null> {
+  function feedFor(id: string, refresh: boolean): Promise<Feed | null> {
     const cached = cache.get(id);
-    if (cached && cached.expires > now()) return Promise.resolve(cached.feed);
+    if (!refresh && cached && cached.expires > now()) return Promise.resolve(cached.feed);
     const running = pending.get(id);
     if (running) return running;
     const request = loadFeed(id).finally(() => { if (pending.get(id) === request) pending.delete(id); });
@@ -211,26 +211,26 @@ export function createByokYouTube(transport: ProviderTransport, keys: ProviderKe
         return { status: error instanceof ProviderError ? error.kind === "quota" ? "quota_exhausted" : error.kind === "access" || error.kind === "missing_key" ? "unauthorized" : error.kind === "network" ? "network_error" : "temporarily_unavailable" : "temporarily_unavailable", message: error instanceof ProviderError ? error.message : "Secure key storage is unavailable. Try again on your device." };
       }
     },
-    async getCachedFeeds(sourceIds: readonly string[]): Promise<SourceFeedClientResult> {
+    async getCachedFeeds(sourceIds: readonly string[], refresh = false): Promise<SourceFeedClientResult> {
       const ids = [...new Set(sourceIds)];
       if (!ids.length || ids.length > SOURCE_FEED_MAX_SOURCES || ids.some((id) => !channelPattern.test(id))) return { status: "invalid_request" };
       try {
-        if (!await keys.read("youtube")) return { status: "missing_configuration" };
+        if (!await keys.read("youtube")) return { status: "missing_configuration", message: new ProviderError("missing_key", "youtube").message };
         const revision = keys.revision();
         const feeds: Feed[] = [];
         const unavailableSourceIds: string[] = [];
         // Bounded concurrency avoids a burst of requests against the user's quota.
         for (let start = 0; start < ids.length; start += 3) {
           const batch = ids.slice(start, start + 3);
-          const results = await Promise.all(batch.map(feedFor));
+          const results = await Promise.all(batch.map((id) => feedFor(id, refresh)));
           results.forEach((feed, index) => { if (feed) feeds.push(feed); else unavailableSourceIds.push(batch[index]); });
           if (keys.revision() !== revision) throw new ProviderError("cancelled");
         }
-        const response: SourceFeedResponse = { state: feeds.length ? "fresh" : "unavailable", feeds, unavailableSourceIds, fetchedAt: new Date(now()).toISOString(), message: "Loaded with your YouTube key." };
+        const response: SourceFeedResponse = { state: feeds.length ? "fresh" : "unavailable", feeds, unavailableSourceIds, fetchedAt: new Date(now()).toISOString(), message: feeds.length ? "Loaded with your YouTube key." : "YouTube could not find these followed channels." };
         if (!isSourceFeedResponse(response, ids)) return { status: "invalid_response" };
         return { status: "success", response, candidates: mapCandidates(response) };
       } catch (error) {
-        return { status: error instanceof ProviderError && error.kind === "network" ? "network_error" : error instanceof ProviderError && error.kind === "missing_key" ? "missing_configuration" : "http_unavailable" };
+        return { status: error instanceof ProviderError && error.kind === "network" ? "network_error" : error instanceof ProviderError && error.kind === "missing_key" ? "missing_configuration" : "http_unavailable", message: error instanceof ProviderError ? error.message : undefined };
       }
     },
   };

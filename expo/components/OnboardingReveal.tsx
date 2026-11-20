@@ -37,7 +37,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
   const [showMore, setShowMore] = useState(false);
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, followedChannels, sourcesLoading, sourcesError, refreshLibrary, savedVideos, saveVideo, requirePurchase } = useApp();
+  const { activeProfileId, activeProfile, prefs, followedChannels, sourcesLoading, sourcesError, refreshLibrary, savedVideos, saveVideo, requirePurchase } = useApp();
   const client = useQueryClient();
   const { busy: retryingSources, run: retrySourceRead } = useScreenAction(activeProfileId);
   const [clock] = useState(() => Date.now());
@@ -48,8 +48,8 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
   const sourceIds = followedChannels.map((source) => source.id);
   const managed = activeProfile?.role === "managed";
   const enabled = !sourcesError && !sourcesLoading && sourceIds.length > 0 && !managed;
-  const key = ["today", activeProfileId, period.key] as const;
-  const today = useQuery({ queryKey: key, networkMode: "always", queryFn: () => todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: true }), enabled, retry: false, refetchOnWindowFocus: false });
+  const key = ["today", activeProfileId, period.key, [...sourceIds].sort().join(",")] as const;
+  const today = useQuery({ queryKey: key, networkMode: "always", queryFn: () => todayService.load({ maxItems: prefs.todayVideoCount, periodAt: clock, profileId: activeProfileId, followedSourceIds: sourceIds, refreshExisting: true }), enabled, retry: false, refetchOnWindowFocus: false });
   const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], networkMode: "always", queryFn: () => listTodaySourceRules(activeProfileId), enabled, staleTime: Infinity });
   const rules = new Map<string, TodaySourceRule>((rulesQuery.data ?? []).map((rule) => [rule.sourceId, rule]));
   const items = onboardingSelection(today.data?.snapshot?.items ?? [], activeProfileId, new Set(sourceIds), rules, Date.now(), new Set(savedHere));
@@ -66,7 +66,7 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
       done(savedHere.length === 0 ? "milestone" : "commit");
       setFeedback(null);
       try {
-        const result = await todayService.load({ profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
+        const result = await todayService.load({ maxItems: prefs.todayVideoCount, periodAt: clock, profileId: activeProfileId, followedSourceIds: sourceIds });
         client.setQueryData(key, result);
       } catch { setFeedback("Your video is saved. The selection couldn’t refresh; reopen Today to try again."); }
     } catch { setFeedback("Couldn’t finish saving. Check Saved before trying again."); }
@@ -79,8 +79,10 @@ export default function OnboardingReveal({ onBrowseSources, onChooseSource, onBu
       : sourcesLoading || (enabled && (today.isLoading || rulesQuery.isLoading)) ? <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel="Loading your selection"><ActivityIndicator color={palette.active} /><Text style={type.bodySoft}>Bringing your sources together…</Text></View>
       : sourcesError ? <><Text style={type.bodySoft}>Your sources couldn’t load. Try again to bring back your selection.</Text><Pressable disabled={retryingSources} accessibilityState={{ busy: retryingSources, disabled: retryingSources }} onPress={() => { void retrySourceRead(refreshLibrary, () => {}, () => {}); }} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>{retryingSources ? "Loading sources…" : "Try again"}</Text></Pressable></>
       : !sourceIds.length ? <><Text style={type.bodySoft}>Follow a creator to see videos here, or finish setup and add one in Sources.</Text><Pressable onPress={onChooseSource} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Choose a source</Text></Pressable></>
+      : today.data?.state === "no_sources" ? <><Text style={type.bodySoft}>{today.data.message}</Text><Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Manage sources</Text></Pressable></>
       : today.data?.state === "source_limit" ? <><Text style={type.bodySoft}>Today includes up to 100 sources. Keep extra creators in your library using their Include in Today setting.</Text><Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Manage sources</Text></Pressable></>
-      : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved, but the videos couldn’t load. Try again, or continue into Frame.</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
+      : today.isError || rulesQuery.isError || (!items.length && ["network_error", "unavailable", "no_cache"].includes(today.data?.state ?? "")) ? <><Text style={type.bodySoft}>Your choices are saved. {today.isError || rulesQuery.isError ? "Frame couldn’t read your selection on this device. Try again." : today.data?.message ?? "YouTube videos couldn’t load. Try again."}</Text><Pressable onPress={retry} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Try again</Text></Pressable></>
+      : today.data?.state === "empty" && !today.data.snapshot ? <><Text style={type.bodySoft}>{today.data.message}</Text><Pressable onPress={retry} disabled={today.isFetching} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>{today.isFetching ? "Checking…" : "Check again"}</Text></Pressable><Pressable onPress={onChooseSource} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Choose another source</Text></Pressable></>
       : items.length === 0 ? <><Text style={type.bodySoft}>No new picks today. Your creators are still in Sources.</Text>{followedChannels[0] ? <View style={styles.supporting}><MediaImage source={followedChannels[0].thumbnailUrl ? { uri: followedChannels[0].thumbnailUrl } : null} style={{ width: 56, height: 56, borderRadius: radii.source }} contentFit="cover" cachePolicy="none" /><View style={styles.supportingDetails}><Text style={type.heading}>{followedChannels[0].title}</Text></View></View> : null}<Pressable onPress={onBrowseSources} style={styles.action} accessibilityRole="button"><Text style={styles.actionText}>Browse my sources</Text></Pressable></>
       : <View>
         {today.data?.snapshot?.freshness !== "fresh" ? <Text style={type.caption}>Showing a previously loaded selection.</Text> : null}

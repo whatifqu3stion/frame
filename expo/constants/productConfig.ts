@@ -33,7 +33,8 @@ export const FOUNDATION_CAPABILITIES = {
   youtubeSearch: false,
   sharedTodayFeed: true,
   weeklyDiscovery: true,
-  googleSelectiveImport: true,
+  // Retired in the BYOK edition. Keep legacy credential cleanup available.
+  googleSelectiveImport: false,
   automaticGoogleFollowing: false,
 } as const;
 

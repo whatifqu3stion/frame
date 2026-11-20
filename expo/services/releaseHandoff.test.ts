@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const text = (path: string): Promise<string> => readFile(new URL(path, import.meta.url).pathname, "utf8");
 
-describe("pre-design release handoff", () => {
+describe("BYOK release handoff", () => {
   test("keeps the native acceptance guide aligned with the current feature contract", async () => {
     const smoke = await text("../docs/SMOKE_TEST.md");
     for (const boundary of [
@@ -13,21 +13,24 @@ describe("pre-design release handoff", () => {
       "Daily time and Managed playback controls",
       "Finite Today",
       "time-based Session",
-      "Selective Google import",
-      "database version 9",
+      "Google account import is retired",
+      "Keys and live discovery",
+      "500-item session",
     ]) expect(smoke).toContain(boundary);
-    expect(smoke).toContain("Billing is intentionally disabled during the free beta");
+    expect(smoke).toContain("full-access BYOK");
+    expect(smoke).not.toContain("welcome flow includes a clearly labeled sample checkout");
     expect(smoke).not.toContain("paywall and restore");
     expect(smoke).not.toContain("add it to Watch Later");
   });
 
-  test("records the Rork/Codex boundary without assigning product logic to native plumbing", async () => {
-    const handoff = await text("../docs/RORK_HANDOFF.md");
-    expect(handoff).toContain("Rork owns next");
-    expect(handoff).toContain("Codex retains");
-    expect(handoff).toContain("without rewriting product logic");
-    expect(handoff).toContain("Later paywall entitlement correctness");
-    expect(handoff).toContain("Unreviewed or automatic Weekly Picks publication");
+  test("the release checklist names the actual verification and build commands", async () => {
+    const smoke = await text("../docs/SMOKE_TEST.md");
+    const manifest = JSON.parse(await text("../package.json"));
+    expect(smoke).toContain("bun run verify");
+    expect(smoke).toContain("npm run android:apk");
+    expect(manifest.scripts.verify).toBe("bun run typecheck && bun run lint && bun run test");
+    expect(manifest.scripts["android:apk"]).toBe("node scripts/build-android-apk.mjs");
+    expect(smoke).toContain("Browser previews and mocked tests do not establish native acceptance");
   });
 
   test("reset disclosure includes Managed content state", async () => {

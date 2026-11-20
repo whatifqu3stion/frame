@@ -41,7 +41,7 @@ export type SourceFeedResponse = {
 
 export type SourceFeedClientResult =
   | { status: "success"; response: SourceFeedResponse; candidates: CachedTodayCandidate[] }
-  | { status: "missing_configuration" | "invalid_request" | "unauthorized" | "http_unavailable" | "network_error" | "invalid_response" };
+  | { status: "missing_configuration" | "invalid_request" | "unauthorized" | "http_unavailable" | "network_error" | "invalid_response"; message?: string };
 
 type SourceFeedClientOptions = { supabaseUrl?: string; publishableKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number };
 

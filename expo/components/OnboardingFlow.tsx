@@ -1,4 +1,6 @@
+import FirstDiscoveriesPreview from "@/preview/FirstDiscoveriesPreview";
 import { onboardingPosters } from "@/constants/onboardingPosters";
+import OnboardingGlimmer, { useOnboardingIdleCue } from "@/components/motion/OnboardingGlimmer";
 import PrimaryAction from "@/components/PrimaryAction";
 import { useOnboardingBack } from "@/hooks/useOnboardingBack";
 import { useProviderKeyStatus } from "@/hooks/useProviderKeyStatus";
@@ -17,26 +19,29 @@ import ProgressSegment from "@/components/motion/ProgressSegment";
 import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
 import OnboardingIdentity from "@/components/motion/OnboardingIdentity";
+import TexturedHeart from "@/components/TexturedHeart";
+import Animated, { FadeIn, Easing } from "react-native-reanimated";
+import { ShortVideoStudy } from "@/components/ShortVideoStudy";
+import { ViewingStudy, ViewingContrast } from "@/components/OnboardingStory";
+import { CUSTOM_INTEREST_LIMIT, isCustomInterest } from "@/domain/interests";
 import WelcomeShowcase from "@/components/WelcomeShowcase";
-import IntroductionSheet from "@/components/IntroductionSheet";
+import WelcomeContinueAction from "@/components/WelcomeContinueAction";
+import { ConnectionHeader } from "@/components/ConnectionWalkthrough";
+import type { KeyProvider } from "@/storage/providerKeys";
 import ProviderKeySettings from "@/components/ProviderKeySettings";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import InterestPicksReveal from "@/components/InterestPicksReveal";
 import GenerateWeeklyPicks from "@/components/GenerateWeeklyPicks";
 import { CuratingSelection } from "@/components/motion/CuratingSelection";
-import type { DiscoveryStage } from "@/services/byokWeeklyPicks";
-import { CAN_PREVIEW_LIBRARY, PREVIEW_LIBRARY_ENABLED } from "@/preview/mode";
-import PreviewKeySetup from "@/preview/PreviewKeySetup";
-import type { KeyProvider } from "@/storage/providerKeys";
-import PreviewPrintRoom from "@/preview/PreviewPrintRoom";
+import type { DiscoveryRunSnapshot } from "@/services/discoveryRun";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { weeklyEditionService } from "@/services/weeklyEditionInstance";
 import { weeklyDiscoveryPeriodKey } from "@/services/discovery";
 import ChoiceOption from "@/components/ChoiceOption";
 import { INTEREST_LIBRARY } from "@/constants/interests";
 import { router } from "expo-router";
-import { Check, ChevronDown, ChevronUp, Link2, Play, Plus } from "lucide-react-native";
+import { Check, Link2, Plus, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,29 +56,34 @@ import type { SourceResolution, Video } from "@/types";
 import { notifyUser } from "@/services/notifyUser";
 
 const steps = ONBOARDING_STEPS;
-const starterTopicIds = ["science", "history", "design", "film", "cooking", "making"];
-const starterTopics = INTEREST_LIBRARY.filter((topic) => starterTopicIds.includes(topic.id));
-const otherTopics = INTEREST_LIBRARY.filter((topic) => !starterTopicIds.includes(topic.id));
 
-export default function OnboardingFlow({ replay = false }: { replay?: boolean }) {
+export default function OnboardingFlow({ replay = false, sampleReveal = false, loadingPreview = false }: { replay?: boolean; sampleReveal?: boolean; loadingPreview?: boolean }) {
   const { activeProfileId } = useApp();
-  return <ProfileOnboarding key={`${activeProfileId}:${replay}`} replay={replay} />;
+  return <ProfileOnboarding key={`${activeProfileId}:${replay}`} replay={replay} sampleReveal={sampleReveal && __DEV__} loadingPreview={loadingPreview && __DEV__} />;
 }
 
-function ProfileOnboarding({ replay }: { replay: boolean }) {
+function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: boolean; sampleReveal: boolean; loadingPreview: boolean }) {
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { activeProfileId, activeProfile, interests, followedChannels, savedVideos, finishOnboarding, getPlaybackAllowance, requirePurchase, profileSwitching } = useApp();
+  const { activeProfileId, activeProfile, interests, followedChannels, finishOnboarding, getPlaybackAllowance, requirePurchase, profileSwitching } = useApp();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const client = useQueryClient();
+  const onboardingTouch = useFeedback(!sampleReveal);
   const keyStatus = useProviderKeyStatus();
   const hasYouTubeKey = providerKeyState(keyStatus) === "ready" && keyStatus.data?.youtube;
+  const [chosenProvider, setChosenProvider] = useState<KeyProvider | null>(null);
+  const selectedProvider = chosenProvider ?? (hasYouTubeKey && !keyStatus.data?.gemini ? "gemini" : "youtube");
+  const { height, fontScale } = useWindowDimensions();
+  const showConnectionTitle = height / fontScale >= 600;
   const revealed = useRef(false);
-  const identityPresented = useRef(false);
+  const [visitedStorySteps, setVisitedStorySteps] = useState<ReadonlySet<string>>(() => new Set());
+  const [welcomeComplete, setWelcomeComplete] = useState(false);
+  const [benefitsComplete, setBenefitsComplete] = useState(false);
   const setup = useOnboardingDraft(activeProfileId, replay);
-  const { step, savedIds: savedDuringSetup } = setup.draft;
+  const { savedIds: savedDuringSetup } = setup.draft;
+  const step = sampleReveal ? steps.indexOf("your-frame") : setup.draft.step;
   const setDraft = setup.setDraft;
   const setStep = useCallback((next: number) => setDraft((draft) => ({ ...draft, step: next })), [setDraft]);
   const [typedSource, setTypedSource] = useState<string | null>(null);
@@ -90,7 +100,6 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
     void readPendingWatch(activeProfileId).then((id) => { if (active) setLinkedVideo(id); }).catch(() => {});
     return () => { active = false; };
   }, [activeProfileId, replay]);
-  const [introOpen, setIntroOpen] = useState(false);
   const returnTo = setup.draft.returnTo ?? null;
   const setReturnTo = (next: "source" | "your-frame" | null) => setDraft((draft) => ({ ...draft, returnTo: next ?? undefined }));
   const manual = setup.draft.path === "creator" || activeProfile?.role !== "owner";
@@ -99,7 +108,6 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
     if (creator) creatorOrigin.current = step;
     setDraft((draft) => ({ ...draft, path: creator ? "creator" : undefined }));
   };
-  const needsTopic = steps[step] === "source" && !manual && interests.length === 0;
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const sourceLock = useRef(false);
@@ -108,14 +116,20 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
   const progress = useRef<View>(null);
   const lastStage = useRef<string | null>(null);
   const current = steps[step];
+  const [finishedStudy, setFinishedStudy] = useState<string | null>(null);
+  const studyDone = useCallback(() => setFinishedStudy(current), [current]);
+  const studyPage = current === "study" || current === "intentions" || current === "recall";
+  const presentationDone = studyPage ? finishedStudy === current : current === "welcome" ? welcomeComplete : current === "contrast" ? benefitsComplete : true;
+  const { showCue, onActivity } = useOnboardingIdleCue(current, setup.ready && presentationDone && !busy);
+  const progressSteps = manual ? steps.filter(name => name !== "bespoke") : steps;
+  const progressIndex = progressSteps.findIndex(name => name === current);
   const [finding, setFinding] = useState(false);
-  const [searchStage, setSearchStage] = useState<DiscoveryStage | null>(null);
-  const [previewing, setPreviewing] = useState(false);
-  useEffect(() => { if (finding || previewing) scroll.current?.scrollTo({ y: 0, animated: false }); }, [finding, previewing]);
+  const [searchStage, setSearchStage] = useState<DiscoveryRunSnapshot | null>(null);
+  useEffect(() => { if (finding) scroll.current?.scrollTo({ y: 0, animated: false }); }, [finding]);
   const onFinding = useCallback((value: boolean) => { setFinding(value); onStepBusyChange(value); }, [onStepBusyChange]);
   const topicIds = interests.map((topic) => topic.id).sort();
-  const canGenerate = current === "source" && !manual && Boolean(hasYouTubeKey && keyStatus.data?.gemini && topicIds.length);
-  const edition = useQuery({ queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), topicIds.join(",")], queryFn: () => weeklyEditionService.preview(topicIds, activeProfileId), enabled: current === "source" && !manual && topicIds.length > 0 && !PREVIEW_LIBRARY_ENABLED, networkMode: "always", staleTime: Infinity, retry: false, refetchOnWindowFocus: false });
+  const canGenerate = current === "bespoke" && !manual && Boolean(hasYouTubeKey && keyStatus.data?.gemini && topicIds.length);
+  const edition = useQuery({ queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), topicIds.join(",")], queryFn: () => weeklyEditionService.preview(topicIds, activeProfileId), enabled: current === "bespoke" && !manual && topicIds.length > 0, networkMode: "always", staleTime: Infinity, retry: false, refetchOnWindowFocus: false });
   const offerGeneration = canGenerate && (finding || edition.data?.reason === "configuration");
   useEffect(() => {
     const changed = lastStage.current !== null && lastStage.current !== current;
@@ -127,30 +141,25 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [current]);
-  const savedCount = savedDuringSetup.filter((id) => savedVideos.some((video) => video.id === id)).length;
-  const destination = onboardingDestination(followedChannels.length, replay, savedCount);
-  const nextAction = onboardingNextAction(current, followedChannels.length, replay, savedCount, returnTo, manual);
-  const [sampleKeys, setSampleKeys] = useState<KeyProvider[]>([]);
-  const sampleSetup = CAN_PREVIEW_LIBRARY && replay && activeProfile?.role === "owner";
-  const youtubeConnected = sampleSetup ? sampleKeys.includes("youtube") : hasYouTubeKey;
-  const geminiConnected = sampleSetup ? sampleKeys.includes("gemini") : keyStatus.data?.gemini;
-  const missingConnection = current === "keys" && activeProfile?.role === "owner" && (sampleSetup || providerKeyState(keyStatus) === "ready") && (!youtubeConnected || !geminiConnected);
-  const chooseCreatorNext = current === "keys" && youtubeConnected && !geminiConnected && !returnTo && !manual && !PREVIEW_LIBRARY_ENABLED;
-  const finishWithInterests = current === "source" && !manual && !PREVIEW_LIBRARY_ENABLED && !canGenerate && edition.data?.reason === "configuration";
-  const connectForPicks = finishWithInterests && providerKeyState(keyStatus) === "ready";
+  const destination = onboardingDestination(activeProfileId, !manual && topicIds.length > 0);
+  const nextAction = onboardingNextAction(current, followedChannels.length, replay, returnTo, manual);
+  const youtubeConnected = hasYouTubeKey;
+  const geminiConnected = keyStatus.data?.gemini;
+  const missingConnection = current === "keys" && activeProfile?.role === "owner" && providerKeyState(keyStatus) === "ready" && (!youtubeConnected || !geminiConnected);
   const showLinkedVideo = linkedVideo && !returnTo && !(manual && sourceInput) && (current === "welcome" || current === "keys");
   const openLinkedVideo = Boolean(showLinkedVideo && youtubeConnected);
   let nextLabel = nextAction.label;
   if (missingConnection && !returnTo) nextLabel = youtubeConnected ? "Continue without Gemini" : "Set up later";
-  if (chooseCreatorNext) nextLabel = "Choose a video or creator";
-  if (finishWithInterests) nextLabel = connectForPicks ? (hasYouTubeKey ? "Connect Gemini for picks" : "Connect for weekly picks") : "Finish setup";
   if (returnTo === "source" && !manual && current === "keys") nextLabel = "Back to my interests";
-  if (current === "keys" && manual && sourceInput && (returnTo === "source" || youtubeConnected)) nextLabel = parseSourceInput(sourceInput).kind === "video" ? "Back to my video link" : "Back to my creator";
+  if (current === "keys" && manual && sourceInput && returnTo === "source") nextLabel = parseSourceInput(sourceInput).kind === "video" ? "Back to my video link" : "Back to my creator";
   if (openLinkedVideo) nextLabel = "Open linked video";
-  const quietNext = !openLinkedVideo && (current === "keys" ? missingConnection && !returnTo && !chooseCreatorNext : manual && current === "source" && followedChannels.length === 0);
-  const finish = async (target?: typeof destination, video?: OnboardingWatchItem, requestedLink?: string) => {
+  const quietNext = !openLinkedVideo && (current === "keys" ? missingConnection && !returnTo : manual && current === "source" && followedChannels.length === 0);
+  const savingTopic = busy && current === "source" && !manual && !locked.current;
+  const showFooterBusy = busy && !savingTopic;
+  const finish = async (target?: "/(tabs)/sources", video?: OnboardingWatchItem, requestedLink?: string) => {
     if (locked.current || sourceLock.current || profileSwitching || (video && (video.profileId !== activeProfileId || !requirePurchase("library")))) return;
     locked.current = true; setBusy(true); Keyboard.dismiss();
+    const acknowledge = onboardingTouch.capture();
     try {
       if (video) {
         const allowance = await getPlaybackAllowance(activeProfileId);
@@ -171,95 +180,133 @@ function ProfileOnboarding({ replay }: { replay: boolean }) {
       const storedLink = replay ? null : await takePendingWatch(activeProfileId).catch(() => null);
       const pending = requestedLink ?? (target ? null : storedLink);
       if (!mounted.current) return;
+      acknowledge(replay ? "commit" : "milestone");
       router.replace(video ? { pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.sourceId, channelTitle: video.sourceTitle, thumbnailUrl: video.thumbnailUrl, publishedAt: video.publishedAt, durationSeconds: String(video.durationSeconds), cachedMetadata: "1", fetchedAt: String(video.fetchedAt), ...(video.periodKey ? { origin: "today", todayProfileId: activeProfileId, todayPeriodKey: video.periodKey } : {}) } } : pending ? { pathname: FRAME_PLAYBACK_ROUTE, params: { id: pending } } : (target ?? destination));
     }
     catch { if (mounted.current) notifyUser("Couldn’t finish setup", "Your choices are still here. Try again."); }
     finally { locked.current = false; setBusy(false); }
   };
-  const goTo = (index: number) => {
+  const goTo = (index: number, feedback: "selection" | "milestone" | false = "selection") => {
     if (locked.current || sourceLock.current) return;
-    setPreviewing(false);
+    const next = Math.max(0, Math.min(steps.length - 1, index));
+    if (next === step) return;
+    if (index !== step && (current === "study" || current === "intentions" || current === "recall" || current === "contrast")) {
+      setVisitedStorySteps(seen => seen.has(current) ? seen : new Set(seen).add(current));
+    }
     if (index !== steps.indexOf("keys")) setReturnTo(null);
-    Keyboard.dismiss(); setStep(Math.max(0, Math.min(steps.length - 1, index)));
+    Keyboard.dismiss(); setStep(next);
+    if (feedback) onboardingTouch.capture()(feedback);
     scroll.current?.scrollTo({ y: 0, animated: false });
   };
   const goBack = () => {
-    if (previewing) { setPreviewing(false); return; }
+    if (sampleReveal) { router.replace("/welcome-preview"); return; }
     if (current === "source" && manual && activeProfile?.role === "owner") {
       choosePath(false);
       goTo(creatorOrigin.current);
-    } else goTo(returnTo ? steps.indexOf(returnTo) : step - 1);
+    } else if (current === "your-frame" && manual) goTo(steps.indexOf("source"));
+    else goTo(returnTo ? steps.indexOf(returnTo) : step - 1);
   };
   useOnboardingBack(replay, step, () => locked.current || sourceLock.current, goBack, Boolean(returnTo));
   const advance = () => {
-    if (openLinkedVideo && linkedVideo) void finish(destination, undefined, linkedVideo);
-    else if (chooseCreatorNext) { choosePath(true); goTo(steps.indexOf("source")); }
-    else if (connectForPicks) { setReturnTo("source"); goTo(steps.indexOf("keys")); }
-    else if (finishWithInterests || nextAction.finish) void finish();
-    else if (previewing) goTo(steps.indexOf("your-frame"));
-    else if (PREVIEW_LIBRARY_ENABLED && current === "source" && !manual) setPreviewing(true);
+    if (openLinkedVideo && linkedVideo) void finish(undefined, undefined, linkedVideo);
+    else if (nextAction.finish) void finish();
     else goTo(nextAction.target ? steps.indexOf(nextAction.target) : step + 1);
   };
   if (!setup.ready) return <View style={[styles.screen, { justifyContent: "center" }]}><ActivityIndicator color={palette.active} accessibilityLabel="Restoring setup" /></View>;
-  return <KeyboardAvoidingView style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+  const connectionsHeader = current === "keys" && activeProfile?.role === "owner" ? <ConnectionHeader
+    provider={selectedProvider} presence={{ youtube: Boolean(hasYouTubeKey), gemini: Boolean(keyStatus.data?.gemini) }}
+    storageState={providerKeyState(keyStatus)} showTitle={showConnectionTitle} busy={busy} onSelect={value => {
+      Keyboard.dismiss();
+      setChosenProvider(value);
+      scroll.current?.scrollTo({ y: 0, animated: false });
+    }} /> : null;
+  const storyPage = current === "welcome" || current === "contrast";
+  const StepBody = storyPage ? View : MotionView;
+  return <KeyboardAvoidingView onTouchStart={onActivity} style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]} enabled={Platform.OS === "ios"} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={[styles.topRow, { paddingTop: insets.top + spacing.sm }]}>
-      {step === 0 ? <OnboardingIdentity enter={setup.fresh && !identityPresented.current} onPresented={() => { identityPresented.current = true; }} /> : <Text style={styles.wordmark}>Frame</Text>}
-      <Pressable disabled={busy} onPress={() => { if (replay && router.canGoBack()) router.back(); else void finish(); }} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>{replay ? "Close setup" : "Skip setup"}</Text></Pressable>
+      <OnboardingIdentity />
+      <Pressable disabled={busy} onPress={() => { void finish(); }} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>{replay ? "Close setup" : "Skip setup"}</Text></Pressable>
     </View>
-    <View ref={progress} tabIndex={-1} style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel={`Setup progress: ${["Welcome", "API connections", manual ? "Video or creator" : "Your interests", "Your first selection"][step]}`} accessibilityValue={{ min: 1, max: steps.length, now: step + 1, text: `Step ${step + 1} of ${steps.length}` }}>
-      {steps.map((name, i) => <ProgressSegment key={name} complete={i <= step} />)}
+    <View ref={progress} tabIndex={-1} style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel={`Setup progress: ${["API connections", "Autoplay study", "Short-video break study", "Video recall study", "Welcome", "How Frame works", manual ? "Video or creator" : "Your interests", "Personal interests", "Your first selection"][step]}`} accessibilityValue={{ min: 1, max: progressSteps.length, now: progressIndex + 1, text: `Step ${progressIndex + 1} of ${progressSteps.length}` }}>
+      {progressSteps.map((name, i) => <ProgressSegment key={name} complete={i <= progressIndex} />)}
     </View>
-    <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={[styles.content, current === "welcome" && styles.welcomeContent]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-      <MotionView changeKey={current} active={current !== "your-frame"} distance={6} style={current === "welcome" ? styles.welcomeBody : undefined}>
+    {connectionsHeader && <View style={styles.connectionsHeader}>{connectionsHeader}</View>}
+    <ScrollView onScrollBeginDrag={onActivity} onMomentumScrollEnd={onActivity} ref={scroll} style={styles.scroll} contentContainerStyle={[styles.content, storyPage && styles.welcomeContent]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <StepBody {...(storyPage ? { style: styles.welcomeBody } : { changeKey: current, active: current !== "your-frame", distance: 6 })}>
       {setup.error ? <Text style={styles.note} accessibilityLiveRegion="polite">Your setup position couldn’t be saved. Your followed sources and saved videos are kept separately.</Text> : null}
-      {current === "source" && !manual ? PREVIEW_LIBRARY_ENABLED && previewing ? <PreviewPrintRoom onReady={() => goTo(steps.indexOf("your-frame"))} /> : finding && searchStage ? <CuratingSelection stage={searchStage} /> : <>
-        <TasteStep finding={finding} onChooseCreator={() => choosePath(true)} onBusyChange={onStepBusyChange} />
-        {finishWithInterests && <Text style={type.bodySoft}>{connectForPicks ? "Your interests are saved. Weekly picks use YouTube and Gemini." : unavailableKeyStorageMessage(Platform.OS === "web")}</Text>}
-      </> : null}
-      {current === "source" && manual ? <SourceStep onWatch={(video) => { void finish(destination, video); }} finishing={busy} firstSelection={!replay} link={sourceInput} setLink={setSourceInput} onFollowed={() => goTo(steps.indexOf("your-frame"))} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onStepBusyChange} /> : null}
-      {current === "welcome" ? <WelcomeShowcase /> : null}
+      {current === "study" && <ViewingStudy onComplete={studyDone} firstVisit={!visitedStorySteps.has(current)} />}
+      {(current === "intentions" || current === "recall") && <ShortVideoStudy onComplete={studyDone} key={current} topic={current} firstVisit={!visitedStorySteps.has(current)} />}
+      {current === "contrast" && <ViewingContrast firstVisit={!visitedStorySteps.has(current)} onCompletionChange={setBenefitsComplete} />}
+      {current === "welcome" && <WelcomeShowcase onCompletionChange={setWelcomeComplete} />}
+      {current === "source" && !manual && <TasteStep onChooseCreator={() => choosePath(true)} onBusyChange={onStepBusyChange} />}
+      {current === "bespoke" && (finding && searchStage ? <CuratingSelection stage={searchStage.stage} reviewedCount={searchStage.reviewedCount} startedAt={searchStage.startedAt} /> : <BespokeStep disabled={busy} onBusyChange={onStepBusyChange} />)}
+      {current === "source" && manual ? <SourceStep onWatch={(video) => { void finish(undefined, video); }} finishing={busy} firstSelection={!replay} link={sourceInput} setLink={setSourceInput} onFollowed={() => goTo(steps.indexOf("your-frame"))} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onStepBusyChange} /> : null}
       {showLinkedVideo && <Text style={type.bodySoft} accessibilityLiveRegion="polite">
         {youtubeConnected ? "Your linked video is ready to open." : "Frame has kept your video link. Connect YouTube to open it."}
       </Text>}
-      {current === "keys" ? sampleSetup
-        ? <PreviewKeySetup saved={sampleKeys} onSave={(provider) => setSampleKeys((keys) => [...new Set([...keys, provider])])} />
-        : <ProviderKeySettings onboarding weeklyPicksRequested={Boolean(returnTo && !manual)} onBusyChange={onStepBusyChange}
+      {current === "keys" ? <ProviderKeySettings onboarding selectedProvider={selectedProvider} onBusyChange={onStepBusyChange}
           youtubeGuide={setup.draft.youtubeGuide} onYouTubeGuideChange={(youtubeGuide) => setDraft((existing) => ({ ...existing, youtubeGuide }))} /> : null}
-      {current === "your-frame" && !manual ? <InterestPicksReveal onBrowse={() => scroll.current?.scrollTo({ y: 0, animated: false })} interestIds={interests.map((interest) => interest.id)} onWatch={(pick) => { const video = interestPickWatchItem(pick, activeProfileId, Date.now()); if (video) void finish(destination, video); else notifyUser("This pick is unavailable", "Its video details need to be refreshed."); }} onChooseCreator={() => { choosePath(true); goTo(steps.indexOf("source")); }} onChooseTopics={() => goTo(steps.indexOf("source"))} onSetUpKeys={() => { setReturnTo("your-frame"); goTo(steps.indexOf("keys")); }} onBusyChange={onStepBusyChange} /> : null}
-      {current === "your-frame" && manual ? <>
-        <OnboardingReveal onWatch={(item) => { void finish(destination, item); }} finishing={busy} onBrowseSources={() => { void finish("/(tabs)/sources"); }} animateReveal={!revealed.current} onRevealed={() => { revealed.current = true; }} savedHere={savedDuringSetup} onSaved={(id) => setup.setDraft((draft) => ({ ...draft, savedIds: [...new Set([...draft.savedIds, id])] }))} onChooseSource={() => goTo(steps.indexOf("source"))} onBusyChange={onStepBusyChange} />
+      {sampleReveal ? <FirstDiscoveriesPreview loading={loadingPreview} /> : null}
+      {current === "your-frame" && !manual && !sampleReveal ? <InterestPicksReveal finalReveal onBrowse={() => scroll.current?.scrollTo({ y: 0, animated: false })} interestIds={interests.map((interest) => interest.id)} onWatch={(pick) => { const video = interestPickWatchItem(pick, activeProfileId, Date.now()); if (video) void finish(undefined, video); else notifyUser("This pick is unavailable", "Its video details need to be refreshed."); }} onChooseCreator={() => { choosePath(true); goTo(steps.indexOf("source")); }} onChooseTopics={() => goTo(steps.indexOf("source"))} onSetUpKeys={() => { setReturnTo("your-frame"); goTo(steps.indexOf("keys")); }} onBusyChange={onStepBusyChange} /> : null}
+      {current === "your-frame" && manual && !sampleReveal ? <>
+        <OnboardingReveal onWatch={(item) => { void finish(undefined, item); }} finishing={busy} onBrowseSources={() => { void finish("/(tabs)/sources"); }} animateReveal={!revealed.current} onRevealed={() => { revealed.current = true; }} savedHere={savedDuringSetup} onSaved={(id) => setup.setDraft((draft) => ({ ...draft, savedIds: [...new Set([...draft.savedIds, id])] }))} onChooseSource={() => goTo(steps.indexOf("source"))} onBusyChange={onStepBusyChange} />
       </> : null}
-      </MotionView>
+      </StepBody>
     </ScrollView>
     <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-      {current === "welcome" && <Pressable accessibilityRole="button" accessibilityLabel="Watch introduction, 28 seconds" onPress={() => setIntroOpen(true)} style={styles.introAction}>
-        <Play size={15} color={palette.active} fill={palette.active} />
-        <Text style={styles.link}>Watch intro · 0:28</Text>
-      </Pressable>}
       {step > 0 || returnTo ? <Pressable disabled={busy} onPress={goBack} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>Back</Text></Pressable> : null}
-      {offerGeneration ? <View style={{ flexGrow: 1, flexBasis: 240 }}><GenerateWeeklyPicks onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onFinding} onPresentationStage={setSearchStage} onPrepared={() => { onFinding(false); goTo(steps.indexOf("your-frame")); }} /></View> : <PrimaryAction depth={!quietNext && palette.primaryButtonDepth} disabled={busy || needsTopic} onPress={advance} style={[styles.primary, quietNext && styles.quietNext, (busy || needsTopic) && styles.disabled]} accessibilityRole="button" accessibilityLabel={previewing ? "Show sample picks now" : nextLabel} accessibilityState={{ busy, disabled: busy || needsTopic }} testID="onboarding-next">
-        {busy ? <ActivityIndicator color={quietNext ? palette.active : palette.onDark} /> : <Text style={quietNext ? styles.link : styles.primaryText}>{previewing ? "Show sample picks now" : nextLabel}</Text>}
+      {offerGeneration ? <View style={{ flexGrow: 1, flexBasis: 240 }}><GenerateWeeklyPicks onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onFinding} onPresentationStage={setSearchStage} onPrepared={(hasPicks) => { onFinding(false); goTo(steps.indexOf("your-frame"), hasPicks ? "milestone" : false); }} />{!busy && <Pressable accessibilityRole="button" onPress={() => { void finish(); }} style={styles.continueLink}><Text style={styles.link}>Open Today</Text>{showCue && <OnboardingGlimmer quiet />}</Pressable>}</View> : storyPage ? <WelcomeContinueAction showCue={showCue} key={current} complete={current === "welcome" ? welcomeComplete : benefitsComplete} label={nextLabel} disabled={busy} onPress={advance} style={styles.primary} /> : <PrimaryAction keepAppearance={savingTopic} textured={!quietNext} depth={!quietNext && palette.primaryButtonDepth} disabled={busy} onPress={advance} style={[styles.primary, quietNext && styles.quietNext, showFooterBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={nextLabel} accessibilityState={{ busy, disabled: busy }} testID="onboarding-next">
+        {showCue && <OnboardingGlimmer quiet={Boolean(quietNext)} />}
+        {showFooterBusy ? <ActivityIndicator color={quietNext ? palette.active : palette.onDark} /> : <Text style={quietNext ? styles.link : styles.primaryText}>{nextLabel}</Text>}
       </PrimaryAction>}
     </View>
-    <IntroductionSheet visible={introOpen} onClose={() => setIntroOpen(false)} onConnect={() => { setIntroOpen(false); goTo(steps.indexOf("keys")); }} />
   </KeyboardAvoidingView>;
 }
 
-function TasteStep({ finding, onChooseCreator, onBusyChange }: { finding: boolean; onChooseCreator(): void; onBusyChange(value: boolean): void }) {
+function BespokeStep({ disabled, onBusyChange }: { disabled: boolean; onBusyChange(value: boolean): void }) {
+  const { palette, type } = useFrameTheme();
+  const { interests, toggleInterest } = useApp();
+  const topics = interests.filter(topic => isCustomInterest(topic.id));
+  const lock = useRef(false);
+  const change = async (id: string) => {
+    if (lock.current || disabled) return false;
+    lock.current = true;
+    onBusyChange(true);
+    try { return await toggleInterest(id); }
+    finally { lock.current = false; onBusyChange(false); }
+  };
+  return <View style={{ gap: spacing.lg, paddingVertical: spacing.sm }}>
+    <View style={{ gap: spacing.md }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
+        <View style={{ paddingTop: spacing.xs }}><TexturedHeart size={40} /></View>
+        <Text accessibilityRole="header" style={[type.title, { flex: 1, fontSize: 32, lineHeight: 40, maxWidth: 460 }]}>What could you talk about for hours?</Text>
+      </View>
+      <Text style={[type.bodySoft, { maxWidth: 440 }]}>Make your picks more personal with a few specifics.</Text>
+    </View>
+    <View style={{ gap: spacing.md }}>
+      <CustomInterestInput expanded selectedIds={interests.map(topic => topic.id)} onAdd={change} disabled={disabled} />
+      {topics.length > 0 && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+        {topics.map(topic => <Animated.View key={topic.id} entering={FadeIn.duration(180).easing(Easing.bezier(0.23, 1, 0.32, 1))} style={{ maxWidth: "100%" }}><Pressable disabled={disabled} accessibilityRole="button" accessibilityLabel={`Remove ${topic.name}`} onPress={() => { void change(topic.id).catch(() => notifyUser("Couldn’t remove interest", "Try again in a moment.")); }} style={{ flexDirection: "row", alignItems: "center", maxWidth: "100%", minHeight: 48, gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.pill, borderCurve: "continuous", backgroundColor: palette.activeSoft }}>
+          <Text style={[type.body, { flexShrink: 1 }]}>{topic.name}</Text><X size={16} color={palette.active} />
+        </Pressable></Animated.View>)}
+      </View>}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: spacing.sm }}>
+        <Text style={type.bodySoft}>Optional</Text>
+        <Text accessibilityLiveRegion="polite" style={[type.bodySoft, { fontVariant: ["tabular-nums"] }]}>{topics.length} of {CUSTOM_INTEREST_LIMIT} interests added</Text>
+      </View>
+    </View>
+    <Text style={[type.bodySoft, { fontSize: 12, lineHeight: 18, maxWidth: 440 }]}>Topics are sent to Gemini when you generate picks. Leave out personal details.</Text>
+  </View>;
+}
+
+function TasteStep({ onChooseCreator, onBusyChange }: { onChooseCreator(): void; onBusyChange(value: boolean): void }) {
   const { type, palette } = useFrameTheme();
   const { interests, toggleInterest } = useApp();
   const feedback = useFeedback();
   const { width, fontScale } = useWindowDimensions();
-  const [expanded, setExpanded] = useState(false);
-  const [changing, setBusy] = useState(false);
-  const busy = finding || changing;
+  const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const ids = interests.map((topic) => topic.id);
-  const shown = [
-    ...starterTopics,
-    ...otherTopics.filter((topic) => expanded || ids.includes(topic.id)),
-    ...interests.filter((topic) => topic.id.startsWith("custom:")),
-  ];
   const select = async (id: string) => {
     if (busy || lock.current) return;
     lock.current = true; setBusy(true); onBusyChange(true);
@@ -268,35 +315,32 @@ function TasteStep({ finding, onChooseCreator, onBusyChange }: { finding: boolea
     catch { notifyUser("Couldn’t save this interest", "Try again in a moment."); return false; }
     finally { lock.current = false; setBusy(false); onBusyChange(false); }
   };
-  const Chevron = expanded ? ChevronUp : ChevronDown;
-  return <View style={{ gap: spacing.md }}>
+  return <View style={{ gap: spacing.lg }}>
     <View style={{ gap: spacing.sm, paddingTop: spacing.sm }}>
-      <Text style={[type.title, { fontSize: 36, lineHeight: 43 }]} accessibilityRole="header">What draws you in?</Text>
-      <Text style={[type.bodySoft, { fontSize: 18, lineHeight: 26, maxWidth: 470 }]}>Choose one or more topics. Your choices guide Frame’s weekly video picks.</Text>
+      <Text accessibilityRole="header" style={[type.title, tasteStyles.title]}>What draws you in?</Text>
+      <Text style={type.bodySoft}>Pick the subjects you love. Add specifics next.</Text>
     </View>
     <View style={{ gap: spacing.sm }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: spacing.sm, paddingTop: spacing.sm }}>
-        <Text style={type.heading}>Topics</Text>
-        <Text style={type.label} accessibilityLiveRegion="polite">{ids.length} selected</Text>
+        <Text style={type.label}>Choose as many as you like</Text>
+        <Text style={[type.caption, { fontVariant: ["tabular-nums"] }]} accessibilityLiveRegion="polite">{ids.filter(id => !isCustomInterest(id)).length} selected</Text>
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-        {shown.map(({ id, name }) => <ChoiceOption key={id} role="checkbox" variant="topic" label={name}
+        {INTEREST_LIBRARY.map(({ id, name }) => <ChoiceOption key={id} role="checkbox" variant="topic" dimWhenDisabled={false} label={name}
           selected={ids.includes(id)} disabled={busy} unselectedMark={<Plus size={15} color={palette.inkMuted} />}
-          onPress={() => { void select(id); }} style={{ flexGrow: 1, flexBasis: width < 360 || fontScale > 1.3 ? "100%" : "45%" }}
+          onPress={() => { void select(id); }} style={{ flexGrow: 1, flexBasis: width < 320 || fontScale > 1.3 ? "100%" : "45%", borderCurve: "continuous" }}
           testID={`setup-topic-${id}`} />)}
       </View>
-      {(expanded || otherTopics.some((topic) => !ids.includes(topic.id))) && <Pressable accessibilityRole="button" accessibilityState={{ expanded }} aria-expanded={expanded}
-        onPress={() => setExpanded(!expanded)} style={{ alignSelf: "flex-start", minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-        <Text style={[type.label, { color: palette.active }]}>{expanded ? "Show fewer topics" : `Show all ${INTEREST_LIBRARY.length} topics`}</Text>
-        <Chevron size={16} color={palette.active} />
-      </Pressable>}
     </View>
     <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft }}>
-      <CustomInterestInput compact selectedIds={ids} onAdd={async (id) => Boolean(await select(id))} disabled={busy} />
-      <Pressable accessibilityRole="button" disabled={busy} onPress={onChooseCreator} style={{ minHeight: 44, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Start with a creator instead</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={busy} onPress={onChooseCreator} style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Start with a creator instead</Text></Pressable>
     </View>
   </View>;
 }
+
+const tasteStyles = StyleSheet.create({
+  title: { fontSize: 32, lineHeight: 40 },
+});
 
 function SourceStep({ onWatch, finishing, onBusyChange, onSetUpKeys, onFollowed, scrollToSource, link, setLink, firstSelection }: { onWatch(video: OnboardingWatchItem): void; finishing: boolean; link: string; setLink(value: string): void; onBusyChange(value: boolean): void; onSetUpKeys(): void; onFollowed(): void; scrollToSource(): void; firstSelection: boolean }) {
   const { palette, type } = useFrameTheme();
@@ -370,12 +414,12 @@ function SourceStep({ onWatch, finishing, onBusyChange, onSetUpKeys, onFollowed,
 
 function createStyles(p: FramePalette, t: FrameType) {
   return StyleSheet.create({
-    introAction: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs },
     screen: { flex: 1, backgroundColor: "transparent" }, scroll: { flex: 1 },
-    topRow: { width: "100%", maxWidth: 640, alignSelf: "center", flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", paddingHorizontal: spacing.page, gap: spacing.md }, wordmark: { ...t.heading },
+    topRow: { width: "100%", maxWidth: 640, alignSelf: "center", flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", paddingHorizontal: spacing.page, gap: spacing.md },
     textButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.xs }, link: { ...t.label, color: p.active },
     progress: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, flexDirection: "row", gap: spacing.xs, paddingVertical: spacing.md },
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.xl },
+    connectionsHeader: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.sm, paddingBottom: spacing.xs },
     welcomeContent: { flexGrow: 1, paddingBottom: 0 }, welcomeBody: { flexGrow: 1 },
     quietNext: { backgroundColor: p.activeSoft },
     previewNavigation: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md },
@@ -383,7 +427,7 @@ function createStyles(p: FramePalette, t: FrameType) {
     pickPreview: { gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: p.border }, supportingPreview: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, pickCopy: { gap: spacing.sm }, supportingCopy: { flex: 1 },
     heroImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }, supportingImage: { width: 96, aspectRatio: 16 / 9, borderRadius: radii.media },
     keySetup: { marginTop: spacing.md, gap: spacing.xs },
-    suggestions: { gap: spacing.sm, marginTop: spacing.lg }, pickAction: { ...t.label, color: p.active, marginTop: spacing.sm }, continueLink: { minHeight: 48, flexBasis: "100%", alignItems: "center", justifyContent: "center" },
+    suggestions: { gap: spacing.sm, marginTop: spacing.lg }, pickAction: { ...t.label, color: p.active, marginTop: spacing.sm }, continueLink: { minHeight: 48, alignItems: "center", justifyContent: "center" },
     title: { ...t.title, fontSize: 36, lineHeight: 44 }, body: { ...t.bodySoft, marginTop: spacing.md }, note: { ...t.bodySoft, marginTop: spacing.lg },
     introduction: { marginBottom: spacing.lg },
     fieldLabel: { ...t.label, marginTop: spacing.xl }, inputRow: { marginTop: spacing.sm },

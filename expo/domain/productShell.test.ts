@@ -47,7 +47,7 @@ describe("Round 1C product shell", () => {
     let fetchCount = 0;
     globalThis.fetch = (async () => { fetchCount += 1; throw new Error("unexpected fetch"); }) as typeof fetch;
     try {
-      expect(ONBOARDING_STEPS).toEqual(["welcome", "keys", "source", "your-frame"]);
+      expect(ONBOARDING_STEPS).toEqual(["keys", "study", "intentions", "recall", "welcome", "contrast", "source", "bespoke", "your-frame"]);
       expect(toggleInterestId([], "science", new Set(["science"]))).toEqual(["science"]);
       await discoveryService.getTodayFeed(DEFAULT_OWNER_PROFILE_ID);
       await discoveryService.getWeeklyPicks(DEFAULT_OWNER_PROFILE_ID, ["science"]);

@@ -3,7 +3,7 @@ import type { UserPreferences } from "@/types";
 import { readProfileStorage, type KeyValueStorage } from "./profileStorage";
 
 export const defaultPrefs: UserPreferences = {
-  todayVideoCount: normalizeTodayVideoCount(undefined), theme: "warm", accent: "blue",
+  todayVideoCount: normalizeTodayVideoCount(undefined), theme: "warm", accent: "blue", houseLights: true,
   hasCompletedOnboarding: false, googleEmail: null, googleConnectedAt: null,
 };
 
@@ -18,6 +18,7 @@ export async function loadProfilePreferences(storage: KeyValueStorage, profileId
     todayVideoCount: normalizeTodayVideoCount(parsed.todayVideoCount),
     theme: parsed.theme === "ink" ? "ink" : "warm",
     accent: parsed.accent === "green" || parsed.accent === "rose" ? parsed.accent : "blue",
+    houseLights: parsed.houseLights !== false,
     hasCompletedOnboarding: parsed.hasCompletedOnboarding === true,
     googleEmail: typeof parsed.googleEmail === "string" ? parsed.googleEmail : null,
     googleConnectedAt: typeof parsed.googleConnectedAt === "number" && Number.isFinite(parsed.googleConnectedAt) ? parsed.googleConnectedAt : null,

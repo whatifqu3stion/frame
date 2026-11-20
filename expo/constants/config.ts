@@ -55,7 +55,7 @@ export const GOOGLE_CONFIG = {
   }),
 } as const;
 
-/** Stable Owner identity used until profile switching is deliberately introduced. */
+/** Default Owner identity; active profile selection is handled by AppProvider. */
 export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 
 export const FEATURE_FLAGS = {

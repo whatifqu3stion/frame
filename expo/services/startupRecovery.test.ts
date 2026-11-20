@@ -36,7 +36,7 @@ function harness(fail: "database" | "profile" | "snapshot" | null, fresh = false
     loadProfileSnapshot: async () => { if (failure === "snapshot") throw Error("preferences unavailable"); return snapshot; },
     writeActiveProfileId: async (_storage: unknown, id: string) => { writes.push(id); },
     queryClient: { setQueryData() {} }, clearProfileGoogleCredential: async () => {},
-    viewingAllowanceService: { stopPlaying: async () => {} }, authorizationResolverRef: { current: null },
+    playbackOperations: { stop: async () => {} }, authorizationResolverRef: { current: null },
     ...Object.fromEntries(["Profiles", "ActiveProfileId", "Prefs", "Interests", "RecentSearches", "GoogleCredential", "OwnerPinAvailability", "HasOwnerPin", "OwnerPinProtectionError", "Ready", "StartupError"].map((name) => [`set${name}`, (value: unknown) => { state[name[0].toLowerCase() + name.slice(1)] = value; }])),
   };
   runInNewContext(startupCode, context);

@@ -7,10 +7,9 @@ import { listTodaySourceRules } from "@/db/database";
 import TextField from "@/components/TextField";
 import CollectionPrompt from "@/components/CollectionPrompt";
 import Heading from "@/components/Heading";
-import ImportSubscriptionsAction from "@/components/ImportSubscriptionsAction";
 import GenerateWeeklyPicks from "@/components/GenerateWeeklyPicks";
 import { CuratingSelection } from "@/components/motion/CuratingSelection";
-import type { DiscoveryStage } from "@/services/byokWeeklyPicks";
+import type { DiscoveryRunSnapshot } from "@/services/discoveryRun";
 import { boundedCollection } from "@/constants/layout";
 import MotionView from "@/components/motion/MotionView";
 import PositionedRow from "@/components/motion/PositionedRow";
@@ -58,7 +57,7 @@ export default function SourcesScreen() {
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const [editionBusy, setEditionBusy] = useState(false);
-  const [searchStage, setSearchStage] = useState<DiscoveryStage | null>(null);
+  const [searchStage, setSearchStage] = useState<DiscoveryRunSnapshot | null>(null);
   const arrivingEdition = useRef(false);
   const [lastFollow, setLastFollow] = useState<{ id: string; message: string } | null>(null);
   const [followFeedback, setFollowFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
@@ -202,7 +201,6 @@ export default function SourcesScreen() {
                 caption={selectedVideosOnly ? "Request a video for the Owner to review." : activeProfile?.role === "managed" ? "Ask the Owner to add a source for this profile." : "Follow a creator to browse their videos and choose whether Today can pick from them."}
                 action={{ label: addLabel, onPress: startAdding, prominentAdd: true, testID: "sources-add-source" }}
               /> : null}
-              {activeProfile?.role === "managed" && managedOverview?.policy.mode === "approvedSources" ? <ImportSubscriptionsAction /> : null}
               {libraryLoading || managedContentQuery.isLoading ? (
                 <VideoFeedSkeleton variant="source" count={3} accessibilityLabel="Loading followed sources" />
               ) : activeProfile?.role === "managed" && managedContentQuery.isError ? (
@@ -259,7 +257,7 @@ export default function SourcesScreen() {
                   <InterestChoices />
                   <Pressable style={styles.settingsButton} accessibilityRole="button" onPress={() => { setEditingInterests(false); if (interests.length === 0) setSection("followed"); }}><Text style={styles.settingsButtonText}>Done</Text><ArrowRight size={17} color={palette.active} /></Pressable>
                 </View>
-              ) : searchStage ? <CuratingSelection stage={searchStage} /> : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
+              ) : searchStage ? <CuratingSelection stage={searchStage.stage} reviewedCount={searchStage.reviewedCount} startedAt={searchStage.startedAt} /> : discoverQuery.isLoading && discoverQuery.fetchStatus !== "idle" ? (
                 <VideoFeedSkeleton variant="full" count={WEEKLY_DISCOVERY_DISPLAY_MAX} accessibilityLabel="Loading weekly picks" />
               ) : discoverQuery.data?.reason === "offline" ? (
                 <View>

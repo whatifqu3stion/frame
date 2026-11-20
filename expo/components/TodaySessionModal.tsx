@@ -1,3 +1,4 @@
+import CollectionPager, { collectionPage, SESSION_PAGE_SIZE } from "@/components/CollectionPager";
 import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
 import { defaultSessionName } from "@/domain/sessionFlow";
@@ -20,6 +21,8 @@ export default function TodaySessionModal({ title, videoId, busy, sessions, onCl
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [name, setName] = useState("");
+  const [page, setPage] = useState(0);
+  const currentPage = collectionPage(page, sessions.length);
   const [pending, setPending] = useState<{ sessionId: string | null } | null>(null);
   const [added, setAdded] = useState<AddedSession | null>(null);
   const locked = useRef(false);
@@ -68,7 +71,8 @@ export default function TodaySessionModal({ title, videoId, busy, sessions, onCl
         </Pressable>
         <Pressable accessibilityRole="button" onPress={onClose} style={styles.quiet}><Text style={type.label}>Done</Text></Pressable>
       </View> : <>
-      <View>{sessions.map((session) => (
+      <CollectionPager page={currentPage} count={sessions.length} onChange={setPage} />
+      <View>{sessions.slice(currentPage * SESSION_PAGE_SIZE, (currentPage + 1) * SESSION_PAGE_SIZE).map((session) => (
         <DestinationRow key={session.id} session={session} videoId={videoId} unavailable={unavailable}
           pending={pending?.sessionId === session.id}
           onPress={() => { if (session.orderedVideoIds.includes(videoId)) onOpen(session.id); else void submit(session.id); }} styles={styles} />

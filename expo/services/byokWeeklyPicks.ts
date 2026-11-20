@@ -7,10 +7,10 @@ import { profileStorageKey } from "../storage/profileStorage";
 import { DEFAULT_OWNER_PROFILE_ID } from "../models/profile";
 import type { InterestId, ServiceResult, SourceResolution } from "../types";
 import type { ProviderKeyStore } from "../storage/providerKeys";
-import { ProviderError, type ProviderTransport } from "./providerRequest";
+import { BYOK_GEMINI_MODEL, ProviderError, type ProviderTransport } from "./providerRequest";
 import { isWeeklyPicksResponse, type WeeklyPicksClient, type WeeklyPicksResponse } from "./weeklyPicksClient";
 
-export const BYOK_GEMINI_MODEL = "gemini-3.5-flash-lite";
+export { BYOK_GEMINI_MODEL } from "./providerRequest";
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
 type Inspector = (sourceId: string, signal?: AbortSignal) => Promise<DiscoverySample>;
 type Resolver = (input: string, signal?: AbortSignal) => Promise<ServiceResult<SourceResolution>>;
@@ -25,6 +25,7 @@ function cacheKey(profileId: string) { return profileStorageKey("generatedPicks"
 function validInterests(ids: readonly string[]) { return ids.length > 0 && ids.every((id) => typeof id === "string" && interestTopicFromId(id) !== null); }
 type Draft = { interestId: string; handle: string; reason: string };
 export type DiscoveryStage = "setup" | "suggestions" | "verification" | "sample" | "review" | "save";
+export type DiscoveryProgress = { reviewedCount: number; available: boolean };
 const stageLabels: Record<DiscoveryStage, string> = { setup: "Preparing discovery", suggestions: "Suggesting sources", verification: "Verifying YouTube sources", sample: "Reading YouTube uploads", review: "Reviewing source quality", save: "Saving picks on this device" };
 export class DiscoveryError extends ProviderError {
   constructor(error: ProviderError, public readonly stage: DiscoveryStage) {
@@ -86,8 +87,9 @@ export function parseGeminiDraft(value: unknown, interestIds: readonly string[])
 }
 
 /** Reads are local only. Only an explicit generate action can spend Gemini quota. */
-export function createByokWeeklyPicks(transport: ProviderTransport, keys: ProviderKeyStore, storage: Storage, resolve: Resolver, inspect: Inspector, now = Date.now): WeeklyPicksClient & { generate(ids: readonly InterestId[], signal?: AbortSignal, profileId?: string, onStage?: (stage: DiscoveryStage) => void): Promise<void>; canRetryEmpty(profileId?: string): Promise<boolean> } {
+export function createByokWeeklyPicks(transport: ProviderTransport, keys: ProviderKeyStore, storage: Storage, resolve: Resolver, inspect: Inspector, now = Date.now): WeeklyPicksClient & { generate(ids: readonly InterestId[], signal?: AbortSignal, profileId?: string, onStage?: (stage: DiscoveryStage) => void, onProgress?: (progress: DiscoveryProgress) => void): Promise<void>; canRetryEmpty(profileId?: string): Promise<boolean> } {
   let running = false;
+  let runningProfile: string | null = null;
   let lastAttempt = -Infinity;
   async function read(profileId: string): Promise<WeeklyPicksResponse | null> {
     const raw = await storage.getItem(cacheKey(profileId));
@@ -102,6 +104,7 @@ export function createByokWeeklyPicks(transport: ProviderTransport, keys: Provid
   return {
     policyVersion: editionVersion,
     compatiblePolicyVersions,
+    isPreparing: (profileId) => runningProfile === profileId,
     async canRetryEmpty(profileId = DEFAULT_OWNER_PROFILE_ID) {
       const response = await read(profileId);
       if (!response || response.interests.length) return false;
@@ -114,10 +117,11 @@ export function createByokWeeklyPicks(transport: ProviderTransport, keys: Provid
         return response ? { status: "success", response } : { status: "missing_configuration" };
       } catch { return { status: "http_unavailable" }; }
     },
-    async generate(ids, signal, profileId = DEFAULT_OWNER_PROFILE_ID, onStage) {
+    async generate(ids, signal, profileId = DEFAULT_OWNER_PROFILE_ID, onStage, onProgress) {
       if (!validInterests(ids)) throw new DiscoverySetupError("interests");
       if (running) throw new DiscoverySetupError("running");
       running = true;
+      runningProfile = profileId;
       let stage: DiscoveryStage = "setup";
       const report = (next: DiscoveryStage) => { onStage?.(next); return next; };
       const revision = keys.revision();
@@ -189,6 +193,18 @@ export function createByokWeeklyPicks(transport: ProviderTransport, keys: Provid
             let group = interests.find((entry) => entry.interestId === draft.interestId);
             if (!group) { group = { interestId: draft.interestId, publicationPeriod: { start, end }, picks: [] }; interests.push(group); }
             group.picks.push({ order: group.picks.length + 1, source: verified.data.source, reason: accepted.reason, featuredMedia: { provider: accepted.featured.provider, providerMediaId: accepted.featured.providerMediaId, title: accepted.featured.title, description: accepted.featured.description, thumbnailUrl: accepted.featured.thumbnailUrl, publishedAt: accepted.featured.publishedAt, durationSeconds: accepted.featured.durationSeconds, isLivestream: false, isUpcomingPremiere: false }, fetchedAt: sample.fetchedAt });
+            const reviewedCount = interests.reduce((sum, item) => sum + item.picks.length, 0);
+            if (onProgress && reviewedCount >= 3) {
+              // Publish only fully reviewed, durable results. Cancelling later keeps
+              // this checkpoint; there is no automatic retry or quota refill.
+              const partial: WeeklyPicksResponse = { state: "cached", interests };
+              if (!isWeeklyPicksResponse(partial, new Set(focusIds))) throw new ProviderError("invalid_response");
+              current();
+              try { await storage.setItem(cacheKey(profileId), JSON.stringify({ policyVersion: editionVersion, focusIds, period: start, recoveryUsed: Boolean(existing), response: partial })); }
+              catch { throw new DiscoverySetupError("storage"); }
+              current();
+            }
+            onProgress?.({ reviewedCount, available: reviewedCount >= 3 });
           } catch (error) {
             current();
             if (!(error instanceof ProviderError) || error.kind === "cancelled" || !interests.length) throw error;
@@ -207,7 +223,7 @@ export function createByokWeeklyPicks(transport: ProviderTransport, keys: Provid
         if (error instanceof DiscoveryError || error instanceof DiscoverySetupError) throw error;
         if (error instanceof ProviderError) throw new DiscoveryError(error.provider || error.kind === "cancelled" || stage === "setup" ? error : new ProviderError(error.kind, stage === "suggestions" || stage === "review" ? "gemini" : "youtube", error.httpStatus), stage);
         throw new DiscoverySetupError(stage === "setup" || stage === "save" ? "storage" : "unexpected");
-      } finally { running = false; }
+      } finally { running = false; runningProfile = null; }
     },
   };
 }

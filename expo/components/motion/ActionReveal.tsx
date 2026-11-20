@@ -17,7 +17,8 @@ export default function ActionReveal({ open, instant, offset = 0, children }: {
   }, []);
 
   useLayoutEffect(() => {
-    const version = ++revision.current;
+    const lifecycle = revision;
+    const version = ++lifecycle.current;
     if (open) setRetained(true);
     if (instant) {
       progress.value = open ? 1 : 0;
@@ -32,7 +33,7 @@ export default function ActionReveal({ open, instant, offset = 0, children }: {
         if (finished && !open) scheduleOnRN(release, version);
       });
     }
-    return () => { ++revision.current; cancelAnimation(progress); };
+    return () => { ++lifecycle.current; cancelAnimation(progress); };
   }, [open, instant, reduced, progress, release]);
 
   const style = useAnimatedStyle(() => {

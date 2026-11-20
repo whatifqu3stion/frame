@@ -71,6 +71,13 @@ const accentTokens: Record<AccentMode, { light: AccentTokens; dark: AccentTokens
   },
 };
 
+/** Quiet, ink-rich grounds for editorial collections; paired with warm ivory content. */
+const programmeColors: Record<AccentMode, { light: string; dark: string }> = {
+  blue: { light: "#304B58", dark: "#233640" },
+  green: { light: "#414C36", dark: "#2B3527" },
+  rose: { light: "#603D47", dark: "#402C34" },
+};
+
 export const accentOptions: readonly { id: AccentMode; label: string }[] = [
   { id: "blue", label: "Mineral blue" }, { id: "green", label: "Mineral green" }, { id: "rose", label: "Muted rose" },
 ];
@@ -89,7 +96,7 @@ export function primaryActionDepth(isDark: boolean, accent: AccentMode): ViewSty
 
 export function createPalette(isDark: boolean, accent: AccentMode): FramePalette {
   const colors = accentTokens[accent][isDark ? "dark" : "light"];
-  return { ...(isDark ? darkBase : lightBase), ...colors, primaryButtonDepth: primaryActionDepth(isDark, accent), onAccent: isDark ? darkBase.wall : lightBase.onDark, onDanger: isDark ? darkBase.wall : lightBase.onDark };
+  return { ...(isDark ? darkBase : lightBase), ...colors, programme: programmeColors[accent][isDark ? "dark" : "light"], programmeRule: "rgba(250, 244, 234, 0.24)", primaryButtonDepth: primaryActionDepth(isDark, accent), onAccent: isDark ? darkBase.wall : lightBase.onDark, onDanger: isDark ? darkBase.wall : lightBase.onDark };
 }
 
 export const lightPalette: FramePalette = createPalette(false, "blue");
@@ -99,16 +106,16 @@ export const darkPalette: FramePalette = createPalette(true, "blue");
 export const palette = lightPalette;
 
 export const watchPalette = {
-  litWall: "#56483D",
-  darkLitWall: darkBase.surfaceHigh,
+  litWall: "#605249",
+  darkLitWall: "#413A35",
   wall: "#202021",
   stage: "#202021",
   surface: "#24201C",
   surfaceHigh: "#302922",
   ink: "#F4F0ED",
-  inkSoft: "rgba(244, 240, 237, 0.76)",
-  inkMuted: "rgba(244, 240, 237, 0.68)",
-  accent: "#9AC0D2",
+  inkSoft: "rgba(244, 240, 237, 0.84)",
+  inkMuted: "rgba(244, 240, 237, 0.77)",
+  accent: "#B2D2E1",
   accentSoft: "#C7DEE7",
   mount: "#302B26", mountEdge: "#51483F", programme: "#382F28", onProgramme: "#FAF4EA", onProgrammeSoft: "#D4C7B6", programmeRule: "#69584A",
   border: "rgba(244, 240, 237, 0.22)",

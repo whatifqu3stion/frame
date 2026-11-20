@@ -1,0 +1,2 @@
+{"scenario":"completion overlaps profile switch","resumeCleared":true,"positionWrites":0,"recoveryFailures":0}
+{"scenario":"timer checkpoint fails after unmount","timerWrites":1,"errorSignals":0,"pauses":0,"appRecoveryFailures":0}

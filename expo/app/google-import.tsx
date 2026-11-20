@@ -8,12 +8,12 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import Image from "@/components/MediaImage";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { Check, ChevronDown, Circle, Import, RefreshCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
+import { FOUNDATION_CAPABILITIES, PRODUCT_LIMITS } from "@/constants/productConfig";
 import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -23,6 +23,7 @@ type LoadState = "idle" | "loading" | "loadingMore";
 
 export default function GoogleImportScreen() {
   const { activeProfileId, prefs } = useApp();
+  if (!FOUNDATION_CAPABILITIES.googleSelectiveImport) return <Redirect href="/(tabs)/sources" />;
   return <GoogleImportContent key={`${activeProfileId}:${prefs.googleConnectedAt ?? "disconnected"}`} />;
 }
 

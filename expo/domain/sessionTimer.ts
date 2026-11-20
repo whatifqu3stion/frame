@@ -1,6 +1,13 @@
 export type SessionRun = { runId: number; consumedSeconds: number; ended: boolean; finishVideoId: string | null; lastVideoId: string | null };
 export const emptySessionRun = (): SessionRun => ({ runId: 0, consumedSeconds: 0, ended: false, finishVideoId: null, lastVideoId: null });
 
+/** UI shows whole minutes; enforcement continues to use the precise clock. */
+export function sessionDisplayChanged(previous: SessionRun, next: SessionRun, minutes: number | null): boolean {
+  return previous.runId !== next.runId || previous.ended !== next.ended
+    || previous.finishVideoId !== next.finishVideoId || previous.lastVideoId !== next.lastVideoId
+    || (minutes !== null && Math.ceil(sessionTimeRemaining(previous, minutes) / 60) !== Math.ceil(sessionTimeRemaining(next, minutes) / 60));
+}
+
 /** Monotonic elapsed playback: seeking, video duration and pauses never change usage. */
 export function createSessionClock(initial: SessionRun, now: () => number) {
   let value = { ...initial };

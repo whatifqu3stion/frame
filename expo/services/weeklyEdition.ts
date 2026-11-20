@@ -5,6 +5,7 @@ import type { DiscoveryResult, InterestId, WeeklyPickSourceSuggestion } from "..
 import type { WeeklyPicksClient } from "./weeklyPicksClient";
 
 type IssuedEdition = {
+  collecting?: boolean;
   policyVersion?: string;
   periodKey: string;
   interestIds: InterestId[];
@@ -34,6 +35,7 @@ function validEdition(value: unknown): value is IssuedEdition {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<IssuedEdition>;
   return typeof record.periodKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.periodKey)
+    && (record.collecting === undefined || typeof record.collecting === "boolean")
     && Array.isArray(record.interestIds) && record.interestIds.every((id) => typeof id === "string")
     && Array.isArray(record.poolIds) && record.poolIds.every((id) => typeof id === "string")
     && Array.isArray(record.issuedIds) && record.issuedIds.every((id) => typeof id === "string")
@@ -107,15 +109,19 @@ export function createWeeklyEditionService(client: WeeklyPicksClient, storage: K
         return { ...mapped, pool: [], canShowMore: false, nextRefreshDate };
       }
       const pool = selectWeeklyPickSuggestions(fetched.response, PRODUCT_LIMITS.weeklyDiscoveryEditionMax);
-      const current = edition ?? {
+      let current = edition ?? {
         periodKey,
+        collecting: client.isPreparing?.(profileId) ?? false,
         ...(client.policyVersion ? { policyVersion: client.policyVersion } : {}),
         interestIds: selectedInterests,
         poolIds: pool.map((item) => item.providerSourceId),
         issuedIds: pool.filter((item) => !followedIds.includes(item.providerSourceId)).slice(0, WEEKLY_DISCOVERY_DISPLAY_MAX).map((item) => item.providerSourceId),
         dismissedIds: [],
       };
-      if (!edition) await writeEdition(storage, profileId, current);
+      // A first page issued during preparation retains its order. Only its
+      // unshown pool can grow until the original search settles.
+      if (edition?.collecting) current = { ...edition, poolIds: [...new Set([...edition.poolIds, ...pool.map(item => item.providerSourceId)])], collecting: client.isPreparing?.(profileId) ?? false };
+      if (!edition || edition.collecting) await writeEdition(storage, profileId, current);
       return { ...display(current, pool, followedIds), status: mapped.status, ...(mapped.message ? { message: mapped.message } : {}), nextRefreshDate };
     },
     async dismiss(profileId, sourceId, result, followedIds) {

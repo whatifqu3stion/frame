@@ -175,6 +175,7 @@ export type UserPreferences = {
   todayVideoCount: number;
   theme: ThemeMode;
   accent: AccentMode;
+  houseLights: boolean;
   hasCompletedOnboarding: boolean;
   googleEmail: string | null;
   googleConnectedAt: number | null;

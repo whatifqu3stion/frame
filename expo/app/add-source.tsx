@@ -10,7 +10,6 @@ import AddChannelModal from "@/components/AddChannelModal";
 import ChannelSearch from "@/components/ChannelSearch";
 import Text from "@/components/FrameText";
 import Heading from "@/components/Heading";
-import ImportSubscriptionsAction from "@/components/ImportSubscriptionsAction";
 import Pressable from "@/components/motion/ChoicePressable";
 import { boundedReading } from "@/constants/layout";
 import { spacing } from "@/constants/theme";
@@ -48,7 +47,6 @@ export default function AddSourceScreen() {
           <Text style={[type.body, styles.rowLabel]}>Paste a channel link or @handle</Text>
           <ArrowRight size={16} color={palette.inkMuted} />
         </Pressable>}
-        <ImportSubscriptionsAction />
       </View>
     </ScrollView>
     <AddChannelModal visible={pasteOpen} onClose={() => setPasteOpen(false)} />

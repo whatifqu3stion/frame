@@ -46,6 +46,7 @@ function harness(file: string, width = 390, overrides: Record<string, unknown> =
     "@/preview/mode": { PREVIEW_LIBRARY_ENABLED: false },
     "@/preview/library": { isPreviewVideo: () => false },
     "@/constants/motion": { motion: { galleryArrival: 840 } },
+    "@/hooks/useFeedback": { useFeedback: () => ({ capture: () => () => {}, selection: () => {} }) },
     "@/hooks/usePresentationProgress": { usePresentationProgress: () => ({ reduced: true, progress: { interpolate: () => 1 } }) },
     "@/hooks/useControlFeedback": { useControlFeedback: () => ({ events: {}, highlighted: false, reduced: true }) },
     "lucide-react-native": { Bookmark: "Bookmark", MoreHorizontal: "MoreHorizontal", Play: "Play", Rows3: "Rows3" },
@@ -65,10 +66,10 @@ function harness(file: string, width = 390, overrides: Record<string, unknown> =
     "@/domain/today": { tomorrowSnoozeTime: (now: number) => now + 86400000 },
     "./SnoozePicker": { default: "SnoozePicker" },
   };
-  for (const name of ["FrameText", "motion/MotionView", "motion/PersonalizedPreview", "motion/DisclosureIndicator", "VideoDetailsRecovery", "MediaMount", "MediaImage", "GlassPlayMark", "Sheet"]) modules[`@/components/${name}`] = { default: name };
+  for (const name of ["FrameText", "ProgrammeGrain", "motion/MotionView", "motion/PersonalizedPreview", "motion/DisclosureIndicator", "VideoDetailsRecovery", "MediaMount", "MediaImage", "GlassPlayMark", "Sheet"]) modules[`@/components/${name}`] = { default: name };
   modules["@/components/motion/PersonalizedPreview"] = { PrintWindow: "PrintWindow" };
   Object.assign(modules, overrides);
-  const context = { exports: {} as Record<string, (props: Record<string, unknown>) => Node>, require: (name: string) => {
+  const context = { setTimeout, clearTimeout, exports: {} as Record<string, (props: Record<string, unknown>) => Node>, require: (name: string) => {
     if (!(name in modules)) throw new Error(`Missing test module: ${name}`);
     return modules[name];
   } };
@@ -213,27 +214,39 @@ test("only the current promoted poster can settle after loading, including a ret
   }
 });
 
-test("print-room light only runs while visible with motion enabled, and stops on cleanup", () => {
+test("discovery frames animate only pending reviews while visible, respect Reduce Motion, and stop on cleanup", () => {
   for (const [visible, reduced] of [[true, false], [true, true], [false, false]]) {
     let starts = 0, stops = 0;
-    const targets: number[] = [];
+    const active = new Set<unknown>();
     const cleanups: (() => void)[] = [];
-    class Value { setValue() {} interpolate() { return 0; } }
     const render = harness("./motion/CuratingSelection.tsx", 390, {
-      react: { useState: () => [350, () => {}], useRef: (current: unknown) => ({ current }), useEffect: (effect: () => (() => void) | undefined) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); } },
-      "react-native": { View: "View", StyleSheet: { create: (styles: unknown) => styles }, Easing: { linear: () => {} }, Animated: { View: "Animated.View", Value, timing: () => ({}), loop: () => ({ start: () => { starts++; }, stop: () => { stops++; } }) } },
-      "expo-linear-gradient": { LinearGradient: "LinearGradient" },
-      "@/components/ProgrammeGrain": { default: "ProgrammeGrain" },
-      "@/components/motion/PrintStudy": { default: "PrintStudy" },
-      "@/hooks/useMotionTarget": { useMotionTarget: (target: number) => { targets.push(target); return new Value(); } },
+      react: {
+        useState: (initial: unknown) => [typeof initial === "function" ? initial() : initial, () => {}],
+        useEffect: (effect: () => (() => void) | undefined) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); },
+      },
+      "react-native-reanimated": {
+        default: { View: "Animated.View" }, Easing: { sin: () => {}, inOut: () => {} },
+        useSharedValue: (initial: number) => {
+          let value = initial;
+          const shared = { get: () => value, set: (next: number | { repeat: boolean }) => {
+            if (typeof next === "object") { active.add(shared); value = 1; } else value = next;
+          } };
+          return shared;
+        },
+        useAnimatedStyle: (compute: () => unknown) => compute(),
+        withTiming: (target: number) => target,
+        withRepeat: () => { starts++; return { repeat: true }; },
+        cancelAnimation: (shared: unknown) => { if (active.delete(shared)) stops++; },
+      },
       "@/hooks/useMotionVisibility": { useMotionVisibility: () => visible },
       "@/hooks/useReducedMotion": { useReducedMotion: () => reduced },
     }, "CuratingSelection");
-    const root = render({ stage: "review" });
-    expect(textContent(root)).toContain("Reviewing video quality");
-    expect(descendants(root).filter(node => node.type === "PrintStudy")).toHaveLength(3);
-    expect(starts).toBe(visible && !reduced ? 1 : 0);
-    expect(targets).toEqual([reduced ? 2 : 1]);
+    const root = render({ stage: "review", reviewedCount: 1 });
+    expect(textContent(root)).toContain("1 pick reviewed");
+    const frames = descendants(root).filter(node => typeof node.type === "function");
+    expect(frames).toHaveLength(3);
+    frames.forEach(node => (node.type as (props: Record<string, unknown>) => Node)(node.props));
+    expect(starts).toBe(visible && !reduced ? 2 : 0);
     cleanups.forEach(cleanup => cleanup()); expect(stops).toBe(starts);
   }
 });
@@ -302,4 +315,44 @@ test("video options dismiss or open snooze inside the same sheet, with error and
   expect(action(busy, "Dismissing…").props.disabled).toBe(true);
   (busy.props.onClose as () => void)();
   expect(closed).toBe(0);
+});
+
+
+test("section selection acknowledges changed tabs once and leaves selected or disabled tabs silent", () => {
+  const changed: string[] = []; let pulses = 0;
+  const render = harness("./SectionTabs.tsx", 390, {
+    "@/components/motion/ChoicePressable": { default: "Pressable" },
+    "@/hooks/useFeedback": { useFeedback: () => ({ selection: () => { pulses++; } }) },
+  });
+  const props = { label: "Saved sections", tabs: [{ value: "videos", label: "Videos" }, { value: "sessions", label: "Sessions" }], value: "videos", onChange: (value: string) => changed.push(value) };
+  let tabs = descendants(render(props)).filter(node => node.props.accessibilityRole === "tab");
+  tabs[0].props.onPress!(); tabs[1].props.onPress!();
+  expect(changed).toEqual(["sessions"]); expect(pulses).toBe(1);
+  tabs = descendants(render({ ...props, disabled: true })).filter(node => node.props.accessibilityRole === "tab");
+  tabs[1].props.onPress!();
+  expect(pulses).toBe(1);
+});
+
+test("Today size haptic follows persistence, suppressing duplicate presses and failed writes", async () => {
+  for (const succeeds of [true, false]) {
+    let settle!: () => void; let fail!: (error: Error) => void; let writes = 0;
+    const pending = new Promise<void>((resolve, reject) => { settle = resolve; fail = reject; });
+    const pulses: string[] = [];
+    const render = harness("./TodaySelectionSetting.tsx", 390, {
+      "@/components/InfoDisclosure": { default: "InfoDisclosure" },
+      "@/components/Heading": { default: "Heading" },
+      "@/constants/productConfig": { TODAY_MAX_ITEMS: 12 },
+      "@/constants/settings": { SETTINGS_TITLES: { today: "Max. Videos in Today" } },
+      "@/providers/AppProvider": { useApp: () => ({ activeProfileId: "owner", prefs: { todayVideoCount: 3 }, setTodayVideoCount: () => { writes++; return pending; } }) },
+      "@/hooks/useFeedback": { useFeedback: () => ({ capture: () => (kind: string) => pulses.push(kind) }) },
+    });
+    const wrapper = render({});
+    const node = (wrapper.type as (props: Record<string, unknown>) => Node)(wrapper.props);
+    const plus = descendants(node).find(item => item.props.accessibilityLabel === "More videos in Today")!;
+    plus.props.onPress!(); plus.props.onPress!();
+    expect(writes).toBe(1); expect(pulses).toEqual([]);
+    if (succeeds) settle(); else fail(new Error("storage unavailable"));
+    await pending.catch(() => {}); await Promise.resolve();
+    expect(pulses).toEqual(succeeds ? ["selection"] : []);
+  }
 });

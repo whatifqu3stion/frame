@@ -1,5 +1,13 @@
 export type KeyProvider = "youtube" | "gemini";
 export const KEY_PROVIDERS: readonly KeyProvider[] = ["youtube", "gemini"];
+export const MAX_PROVIDER_KEY_LENGTH = 2048;
+export function isProviderKey(provider: KeyProvider, key: string): boolean {
+  if (key.length < 20 || key.length > MAX_PROVIDER_KEY_LENGTH) return false;
+  // AI Studio authorization keys start with AQ. and may be longer than a standard key.
+  if (provider === "gemini" && key.startsWith("AQ.")) return /^AQ\.[A-Za-z0-9_.-]+$/.test(key);
+  return /^[A-Za-z0-9_-]{20,256}$/.test(key);
+}
+
 export type KeyStorage = {
   getItemAsync(key: string): Promise<string | null>;
   setItemAsync(key: string, value: string): Promise<void>;
@@ -33,7 +41,7 @@ export function createProviderKeyStore(storage: KeyStorage, available: () => Pro
     },
     save(provider: KeyProvider, value: string) {
       const key = value.trim();
-      if (!/^[A-Za-z0-9_-]{20,256}$/.test(key)) return Promise.reject(new Error("Enter a valid API key, without spaces or a URL."));
+      if (!isProviderKey(provider, key)) return Promise.reject(new Error("Enter a valid API key, without spaces or a URL."));
       return mutate(() => storage.setItemAsync(providerKeyName(provider), key));
     },
     remove(provider: KeyProvider) { return mutate(() => storage.deleteItemAsync(providerKeyName(provider))); },

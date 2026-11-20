@@ -1,3 +1,4 @@
+import { useFeedback } from "@/hooks/useFeedback";
 import GlassPlayMark from "@/components/GlassPlayMark";
 import { posterForTopic } from "@/constants/onboardingPosters";
 import { PREVIEW_LIBRARY_ENABLED } from "@/preview/mode";
@@ -35,6 +36,7 @@ type GalleryProps = {
 
 export default function PickGallery({ items, featuredId, onBrowse, busy, animate, onPresented, isFollowed, onFollow, onWatch }: GalleryProps) {
   const { palette, type } = useFrameTheme();
+  const feedback = useFeedback();
   const posterControl = useControlFeedback(palette.active);
   const [selection, setSelection] = useState<{ id: string; revision: number; companion: boolean; pointer: boolean } | null>(null);
   const { progress, reduced } = usePresentationProgress({ enter: animate, active: !selection, deferEntrance: true, duration: motion.galleryArrival, onPresented });
@@ -95,6 +97,7 @@ export default function PickGallery({ items, featuredId, onBrowse, busy, animate
   const framedPrint = <PrintWindow progress={progress} reduced={reduced} curtainColor={palette.programme}
     image={<><Reanimated.View style={artworkStyle}>{print(lead, true)}</Reanimated.View>{playable && <GlassPlayMark label="Watch" />}</>} />;
   const browse = (pick: WeeklyPickSourceSuggestion, event: GestureResponderEvent, companion: boolean) => {
+    if (pick.providerSourceId === lead.providerSourceId || busy) return;
     const pointer = isPointerActivation(event);
     const next = ++revision.current;
     const promote = companion && pointer && visible;
@@ -102,6 +105,7 @@ export default function PickGallery({ items, featuredId, onBrowse, busy, animate
     cancelAnimation(settle);
     settle.set(promote ? 0 : 1);
     setSelection({ id: pick.providerSourceId, revision: next, companion, pointer });
+    feedback.selection();
     onBrowse();
   };
   return <View style={styles.gallery}>

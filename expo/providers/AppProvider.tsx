@@ -1,3 +1,5 @@
+import { getLatestTodayVideos } from "@/db/database";
+import { createPlaybackOperations } from "@/domain/playbackOperations";
 import { sourceParticipationLabel } from "@/domain/sourceParticipation";
 import { notifyUser } from "@/services/notifyUser";
 import { normalizeTodayVideoCount } from "@/domain/todayPreference";
@@ -16,7 +18,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clearLegacyThumbnailCaches } from "@/services/thumbnailRetention";
 import { isMetadataCurrent, expireVideo, expireChannel, expireResume } from "@/domain/metadataRetention";
-import { Alert, AppState, Linking, Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 import type { AccentMode, AddChannelResult, FollowedChannel, GoogleImportResult, GoogleSubscriptionPage, InterestTopic, ServiceResult, SourceResolution, ThemeMode, UserPreferences, Video, VideoQueue, SessionDraft } from "@/types";
 import { DEFAULT_OWNER_PROFILE_ID, type Profile } from "@/models/profile";
 import type { ManagedAllowance } from "@/models/dailyAllowance";
@@ -31,6 +33,7 @@ import { resolveActiveProfileId } from "@/domain/profiles";
 import { normalizeSessionIds, normalizeSessionTarget, positionAfterEdit } from "@/domain/sessionFlow";
 import { authorizeForCurrentProfile, OwnerAuthorizationSession } from "@/domain/ownerAuthorization";
 import { performFullReset } from "@/domain/fullReset";
+import { progressRecovery } from "@/services/progressRecoveryInstance";
 import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
 import { planSelectiveGoogleImport } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, LEGACY_GOOGLE_TOKEN_KEY, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
@@ -83,6 +86,12 @@ import {
 } from "@/db/database";
 
 WebBrowser.maybeCompleteAuthSession();
+
+const playbackOperations = createPlaybackOperations(async (stoppedAt): Promise<ViewingAllowanceStatus | null> => {
+  const [allowance, controls] = await Promise.all([viewingAllowanceService.stopPlaying(stoppedAt), playbackControlsService.stopPlaying(stoppedAt)]);
+  if (!allowance && !controls) return null;
+  return combinePlaybackStatus(allowance ?? { kind: "unlimited", canPlay: true }, controls ?? { kind: "available", canPlay: true });
+});
 
 const MAX_RECENT_SEARCHES = 8;
 const sourceLeaseClient = createSourceLeaseClient({
@@ -341,7 +350,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
     return () => {
       mounted = false;
-      void viewingAllowanceService.stopPlaying();
+      void playbackOperations.stop().catch(() => {});
       authorizationResolverRef.current?.(false);
       authorizationResolverRef.current = null;
     };
@@ -473,7 +482,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     try {
       await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current, draftWritesRef.current.get(previousProfileId)]);
       storageGenerationRef.current += 1;
-      await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]);
+      await playbackOperations.stop();
       await Promise.all([
         queryClient.cancelQueries({ queryKey: ["library", previousProfileId] }),
         queryClient.cancelQueries({ queryKey: ["today", previousProfileId] }),
@@ -561,6 +570,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (!switchResult.ok) return switchResult;
     }
     try {
+      await progressRecovery.discard(profileId);
       await profileRepository.deleteLocal(profileId);
       setProfiles(await profileRepository.list());
       queryClient.removeQueries({ queryKey: ["library", profileId] });
@@ -576,6 +586,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t delete that profile." };
     }
   }, [profiles, queryClient, switchProfile, authorizeProtectedAction]);
+
+  const getProfileViewingAllowance = useCallback(async (profileId: string): Promise<ViewingAllowance> => {
+    if (!authorizationSessionRef.current.isAuthorized()) throw new Error("Unlock Owner access to view this profile’s daily limit.");
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) throw new Error("That profile is no longer available.");
+    const status = await viewingAllowanceService.getStatus(profile);
+    if (status.kind === "unlimited") return { mode: "unlimited" };
+    if (status.kind === "limited" || status.kind === "complete") return { mode: "dailyLimit", minutes: status.allowanceMinutes, commitment: status.commitment !== false };
+    throw new Error("The saved daily limit is unavailable.");
+  }, [profiles]);
 
   const setProfileViewingAllowance = useCallback(async (profileId: string, allowance: ViewingAllowance): Promise<AddChannelResult> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required to change a daily viewing allowance." };
@@ -788,17 +808,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return combinePlaybackStatus(await viewingAllowanceService.getStatus(profile), controls);
   }, [profiles]);
 
-  const beginAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus> => {
-    const profile = profiles.find((candidate) => candidate.id === activeProfileIdRef.current);
-    if (!profile) return { kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." };
-    const controls = await playbackControlsService.beginPlaying(profile);
-    if (!controls.canPlay) return combinePlaybackStatus({ kind: "unlimited", canPlay: true }, controls);
-    const allowance = await viewingAllowanceService.beginPlaying(profile);
-    if (!allowance.canPlay) await playbackControlsService.stopPlaying();
-    return combinePlaybackStatus(allowance, controls);
+  const beginAllowancePlayback = useCallback((valid: () => boolean): Promise<ViewingAllowanceStatus | null> => {
+    const profileId = activeProfileIdRef.current;
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) return Promise.resolve({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "This profile needs Owner review before playback can continue." });
+    return playbackOperations.start(async (current) => {
+      const controls = await playbackControlsService.beginPlaying(profile);
+      if (!current()) return null;
+      if (!controls.canPlay) return combinePlaybackStatus({ kind: "unlimited", canPlay: true }, controls);
+      const allowance = await viewingAllowanceService.beginPlaying(profile);
+      if (!allowance.canPlay) await playbackControlsService.stopPlaying();
+      return combinePlaybackStatus(allowance, controls);
+    }, () => profileId === activeProfileIdRef.current && !switchingRef.current && valid());
   }, [profiles]);
 
-  const checkpointAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus> => {
+  const checkpointAllowancePlayback = useCallback((): Promise<ViewingAllowanceStatus> => playbackOperations.checkpoint(async () => {
     const controls = await playbackControlsService.checkpoint();
     if (!controls.canPlay) {
       await viewingAllowanceService.stopPlaying();
@@ -807,12 +831,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const allowance = await viewingAllowanceService.checkpoint();
     if (!allowance.canPlay) await playbackControlsService.stopPlaying();
     return combinePlaybackStatus(allowance, controls);
-  }, []);
-  const stopAllowancePlayback = useCallback(async (): Promise<ViewingAllowanceStatus | null> => {
-    const [allowance, controls] = await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]);
-    if (!allowance && !controls) return null;
-    return combinePlaybackStatus(allowance ?? { kind: "unlimited", canPlay: true }, controls ?? { kind: "available", canPlay: true });
-  }, []);
+  }), []);
+  const stopAllowancePlayback = useCallback(() => playbackOperations.stop(), []);
 
   const verifyCurrentPinForChange = useCallback(async (pin: string): Promise<boolean> => {
     if (!pin || authorizationSessionRef.current.getCooldownUntil() > Date.now() || pinVerificationRef.current) return false;
@@ -887,7 +907,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         void clearLegacyThumbnailCaches().catch(() => console.warn("[retention] Thumbnail cleanup pending; retrying on foreground."));
       }
       if (nextState !== "active") {
-        void viewingAllowanceService.stopPlaying();
+        void playbackOperations.stop().catch(() => {});
         relockOwnerAccess();
       }
       previousState = nextState;
@@ -916,6 +936,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const setTodayVideoCount = useCallback((count: number) => updatePrefs({ todayVideoCount: normalizeTodayVideoCount(count) }), [updatePrefs]);
   const setTheme = useCallback((mode: ThemeMode) => updatePrefs({ theme: mode }), [updatePrefs]);
+  const setHouseLights = useCallback((enabled: boolean) => updatePrefs({ houseLights: enabled }), [updatePrefs]);
   const setAccent = useCallback((accent: AccentMode) => updatePrefs({ accent }), [updatePrefs]);
   const finishOnboarding = useCallback(() => updatePrefs({ hasCompletedOnboarding: true }), [updatePrefs]);
 
@@ -1030,7 +1051,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await writeSessionDraft(profileId, next);
       queryClient.setQueryData(["library", profileId, "draft"], next);
     });
-    draftWritesRef.current.set(profileId, write);
+    draftWritesRef.current.set(profileId, write.catch(() => {}));
     return write;
   }, [activeProfileId, queryClient]);
 
@@ -1042,7 +1063,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       await deleteSessionDraft(profileId);
       queryClient.setQueryData(["library", profileId, "draft"], null);
     });
-    draftWritesRef.current.set(profileId, write);
+    draftWritesRef.current.set(profileId, write.catch(() => {}));
     return write;
   }, [activeProfileId, queryClient]);
 
@@ -1086,18 +1107,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const validateSessionContent = useCallback(async (ids: readonly string[]): Promise<void> => {
     const saved = await listSavedVideos(activeProfileId);
-    const media = await Promise.all(ids.map((id) => saved.find((video) => video.id === id) ?? todayRepository.getVideo(activeProfileId, id)));
+    const known = new Map(saved.map(video => [video.id, video]));
+    const missing = await getLatestTodayVideos(activeProfileId, ids.filter(id => !known.has(id)));
+    missing.forEach(video => known.set(video.id, video));
+    const media = ids.map(id => known.get(id) ?? null);
     media.map((video) => video ? expireVideo(video, Date.now()) : null).forEach(assertLongFormVideo);
   }, [activeProfileId]);
 
   const updateSessionVideos = useCallback(
-    async (sessionId: string, videoIds: string[], targetMinutes?: number | null): Promise<void> => {
+    async (sessionId: string, videoIds: string[], targetMinutes?: number | null, name?: string): Promise<void> => {
       if (!requirePurchase("sessions")) return;
       const existing = (await listQueues(activeProfileId)).find((session) => session.id === sessionId);
       if (!existing) throw new Error("Session no longer available.");
       const uniqueIds = normalizeSessionIds(videoIds);
       await validateSessionContent(uniqueIds);
-      await upsertQueue(activeProfileId, { ...existing, targetMinutes: targetMinutes === undefined ? existing.targetMinutes : normalizeSessionTarget(targetMinutes), orderedVideoIds: uniqueIds, currentIndex: positionAfterEdit(existing, uniqueIds), updatedAt: Date.now() });
+      if (switchingRef.current || activeProfileId !== activeProfileIdRef.current) throw new Error("Profile changed. Try again.");
+      await upsertQueue(activeProfileId, { ...existing, name: name?.trim() || existing.name, targetMinutes: targetMinutes === undefined ? existing.targetMinutes : normalizeSessionTarget(targetMinutes), orderedVideoIds: uniqueIds, currentIndex: positionAfterEdit(existing, uniqueIds), updatedAt: Date.now() });
       await invalidateLibrary();
     },
     [activeProfileId, invalidateLibrary, requirePurchase, validateSessionContent],
@@ -1169,6 +1194,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return changed;
   }, [activeProfileId, queryClient]);
 
+  // An already-authorized completion belongs to its original profile even after switching.
+  // Watch queues this in progressRecovery, which drains/retires writes before profile deletion.
+  const completeSessionPosition = useCallback(async (sessionId: string, videoId: string, atIndex: number, nextIndex: number): Promise<void> => {
+    const changed = await setQueuePosition(activeProfileId, sessionId, videoId, atIndex, nextIndex);
+    // A concurrently edited/deleted session legitimately makes this completion obsolete.
+    if (changed) await queryClient.invalidateQueries({ queryKey: ["library", activeProfileId, "queues"] });
+  }, [activeProfileId, queryClient]);
+
   const duplicateSession = useCallback(
     async (id: string): Promise<VideoQueue | null> => {
       if (!requirePurchase("sessions")) return null;
@@ -1194,7 +1227,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const isCurrent = () => generation === storageGenerationRef.current && activeProfileId === activeProfileIdRef.current && !switchingRef.current;
     const cancelled = { ok: false, message: "Profile changed. Connect Google again from the profile you want to use." };
     if (!isCurrent()) return cancelled;
-    if (!isGoogleConfigured()) return { ok: false, message: "Google sign-in isn't configured for this build yet." };
+    if (!isGoogleConfigured()) return { ok: false, message: "Google account import is no longer available. Add a source by channel link or @handle." };
     if (!promptGoogle) return { ok: false, message: "Google sign-in isn't configured for this platform yet." };
     try {
       const result = await promptGoogle();
@@ -1235,6 +1268,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [activeProfileId, promptGoogle, updatePrefs]);
 
   const loadGoogleSubscriptions = useCallback(async (pageToken?: string): Promise<ServiceResult<GoogleSubscriptionPage>> => {
+    if (!FEATURE_FLAGS.googleSelectiveImport) return { status: "unavailable", message: "Google account import is no longer available. Add a source by channel link or @handle." };
     if (!googleCredential || googleCredential.expiresAt <= Date.now()) {
       setGoogleCredential(null);
       await clearProfileGoogleCredential(SecureStore, activeProfileId).catch(() => {});
@@ -1251,6 +1285,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [activeProfileId, googleCredential, updatePrefs]);
 
   const importGoogleSubscriptions = useCallback(async (selected: FollowedChannel[]): Promise<GoogleImportResult> => {
+    if (!FEATURE_FLAGS.googleSelectiveImport) return { ok: false, importedCount: 0, message: "Google account import is no longer available. Add a source by channel link or @handle." };
     if (selected.length === 0) return { ok: false, importedCount: 0, message: "Choose at least one subscription." };
     const profileId = activeProfileId;
     if (!await authorizeProtectedAction(profileId)) return { ok: false, importedCount: 0, message: "Source change cancelled." };
@@ -1279,8 +1314,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       queueSourceLeaseReconciliation("local_change");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["library", profileId] }),
-        queryClient.invalidateQueries({ queryKey: ["today", profileId] }),
+        queryClient.invalidateQueries({ queryKey: ["managed-content", profileId] }),
       ]);
+      await queryClient.invalidateQueries({ queryKey: ["today", profileId] });
       const count = plan.channels.length;
       return { ok: true, importedCount: count, message: `${count} ${count === 1 ? "source" : "sources"} added to Frame.` };
     } catch (error) {
@@ -1350,6 +1386,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     storageGenerationRef.current += 1;
     await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current]);
     await draftWritesRef.current.get(activeProfileId)?.catch(() => {});
+    await progressRecovery.discard(activeProfileId);
     await clearAllData(activeProfileId);
     queryClient.removeQueries({ queryKey: ["google-import-draft", activeProfileId] });
     queueSourceLeaseReconciliation("local_change");
@@ -1372,7 +1409,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (!confirmedRecovery && !await authorizeProtectedAction()) throw new Error("Owner authorization required before erasing local data.");
     storageGenerationRef.current += 1;
     await performFullReset({
-      stopPlayback: async () => { await Promise.all([viewingAllowanceService.stopPlaying(), playbackControlsService.stopPlaying()]); },
+      stopPlayback: async () => { await playbackOperations.stop(); },
       flushPendingWrites: async () => { await Promise.all([prefsWriteRef.current, interestsWriteRef.current, searchesWriteRef.current, googleWriteRef.current, ...draftWritesRef.current.values()]); },
       clearProtectedCredentials: async () => {
         if (Platform.OS !== "web") await providerKeyStore.clear();
@@ -1386,7 +1423,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           removeOwnerPin(),
         ]);
       },
-      resetDatabase: resetAllFrameDatabaseData,
+      resetDatabase: async () => { await progressRecovery.discard(); await resetAllFrameDatabaseData(); },
       clearKeyValueStorage: async () => { await AsyncStorage.clear(); resetFeedbackPreference(); },
       restoreOwnerSelection: async () => { await writeActiveProfileId(AsyncStorage, DEFAULT_OWNER_PROFILE_ID); },
     });
@@ -1424,6 +1461,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameLocalProfile,
       reorderLocalProfile,
       deleteLocalProfile,
+      getProfileViewingAllowance,
       setProfileViewingAllowance,
       getManagedPlaybackControls,
       setManagedPlaybackControls,
@@ -1460,6 +1498,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setTodayVideoCount,
       setTheme,
       setAccent,
+      setHouseLights,
       finishOnboarding,
       canUseLibrary: true,
       libraryLoading: !ready
@@ -1478,6 +1517,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       addRecentSearch,
       clearRecentSearches,
       googleConfigured: isGoogleConfigured(),
+      // Preserve cleanup access for credentials retained from earlier installations.
+      hasLegacyGoogleConnection: Boolean(googleCredential),
       googleConnected: Boolean(googleCredential && googleCredential.expiresAt > Date.now() && prefs.googleConnectedAt),
       googleEmail: prefs.googleEmail,
       importing,
@@ -1511,6 +1552,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       removeSession,
       updateSessionVideos,
       updateSessionPosition,
+      completeSessionPosition,
       saveSessionDraft,
       clearSessionDraft,
       recordResume,
@@ -1531,6 +1573,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       renameLocalProfile,
       reorderLocalProfile,
       deleteLocalProfile,
+      getProfileViewingAllowance,
       setProfileViewingAllowance,
       getManagedPlaybackControls,
       setManagedPlaybackControls,
@@ -1567,6 +1610,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setTodayVideoCount,
       setTheme,
       setAccent,
+      setHouseLights,
       finishOnboarding,
       savedQuery.isError,
       resumeQuery.isError,
@@ -1608,6 +1652,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       removeSession,
       updateSessionVideos,
       updateSessionPosition,
+      completeSessionPosition,
       saveSessionDraft,
       clearSessionDraft,
       recordResume,

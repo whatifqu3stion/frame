@@ -1,3 +1,4 @@
+import { useFeedback } from "@/hooks/useFeedback";
 import InfoDisclosure from "@/components/InfoDisclosure";
 import { confirmUser } from "@/services/notifyUser";
 import PrimaryAction from "@/components/PrimaryAction";
@@ -7,6 +8,7 @@ import TextField from "@/components/TextField";
 import InlineHelp from "@/components/InlineHelp";
 import Heading from "@/components/Heading";
 import SettingsRow from "@/components/SettingsRow";
+import SettingsGroup from "@/components/SettingsGroup";
 import { useProviderKeyStatus } from "@/hooks/useProviderKeyStatus";
 import { providerKeyState, unavailableKeyStorageMessage } from "@/domain/providerKeyStatus";
 import { useIsFocused } from "@react-navigation/native";
@@ -16,8 +18,8 @@ import { AccessibilityInfo, ActivityIndicator, AppState, Linking, Platform, Pres
 import { radii, spacing } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
-import { providerKeyStore } from "@/storage/providerKeyStore";
-import { KEY_PROVIDERS, type KeyProvider } from "@/storage/providerKeys";
+import { localKeyPreview, providerKeyStore } from "@/storage/providerKeyStore";
+import { isProviderKey, KEY_PROVIDERS, MAX_PROVIDER_KEY_LENGTH, type KeyProvider } from "@/storage/providerKeys";
 import { byokYouTube, providerTransport } from "@/services/byok";
 import { setupGuidance } from "@/domain/providerSetupGuide";
 import { ProviderError } from "@/services/providerRequest";
@@ -31,17 +33,19 @@ const setupGuideLinks = {
   gemini: "https://ai.google.dev/gemini-api/docs/api-key",
 };
 
-type Props = { onBusyChange?(busy: boolean): void; onboarding?: boolean; weeklyPicksRequested?: boolean; youtubeGuide?: "credentials"; onYouTubeGuideChange?(step: "credentials" | undefined): void };
-export default function ProviderKeySettings({ onBusyChange, onboarding = false, weeklyPicksRequested = false, youtubeGuide, onYouTubeGuideChange }: Props = {}) {
+type Props = { onBusyChange?(busy: boolean): void; onboarding?: boolean; selectedProvider?: KeyProvider; youtubeGuide?: "credentials"; onYouTubeGuideChange?(step: "credentials" | undefined): void };
+export default function ProviderKeySettings({ onBusyChange, onboarding = false, selectedProvider = "youtube", youtubeGuide, onYouTubeGuideChange }: Props = {}) {
   const { palette, type } = useFrameTheme();
   const { activeProfile, activeProfileId, authorizeProtectedAction } = useApp();
   const focused = useIsFocused();
+  const feedback = useFeedback(focused);
   const queryClient = useQueryClient();
   const status = useProviderKeyStatus();
   const storageState = providerKeyState(status);
   const storageReady = storageState === "ready";
   const [editing, setEditing] = useState<KeyProvider | null>(null);
   const [draft, setDraft] = useState("");
+  const [inputKeys, setInputKeys] = useState({ youtube: "", gemini: "" });
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     onBusyChange?.(busy);
@@ -57,20 +61,21 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
   profile.current = activeProfileId;
   useEffect(() => {
     alive.current = focused;
-    setDraft(""); setEditing(null); setBusy(false); setMessage(null);
+    setDraft(""); setInputKeys({ youtube: "", gemini: "" }); setEditing(null); setBusy(false); setMessage(null);
     const listener = AppState.addEventListener("change", (state) => {
-      if (state !== "active") { operation.current?.abort(); setDraft(""); setEditing(null); setBusy(false); setMessage(null); }
+      if (state !== "active") { operation.current?.abort(); setDraft(""); setInputKeys({ youtube: "", gemini: "" }); setEditing(null); setBusy(false); setMessage(null); }
     });
     return () => { alive.current = false; operation.current?.abort(); listener.remove(); };
   }, [focused, activeProfileId]);
 
   const act = async (provider: KeyProvider, action: "edit" | "save" | "remove") => {
     if (operation.current || activeProfile?.role !== "owner" || !storageReady) return;
-    const key = action === "save" ? draft.trim() : "";
-    if (action === "save" && !/^[A-Za-z0-9_-]{20,256}$/.test(key)) {
+    const key = action === "save" ? (onboarding ? inputKeys[provider] : draft).trim() : "";
+    if (action === "save" && !isProviderKey(provider, key)) {
       setMessage({ provider, text: "Paste only the key you copied from Google. A link or project name won’t work." });
       return;
     }
+    const acknowledge = feedback.capture();
     const controller = new AbortController(); operation.current = controller;
     const id = activeProfileId;
     const current = () => alive.current && profile.current === id && !controller.signal.aborted;
@@ -87,7 +92,12 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
       }
       if (!current()) return;
       setDraft(""); setEditing(null);
-      setMessage({ provider, text: action === "remove" ? "Key removed from this device. Revoke it in your provider account if you no longer need it." : provider === "gemini" ? "Key recognized and saved securely on this device. Generation access and quota have not been tested." : "Key verified and saved securely on this device." });
+      setInputKeys(previous => ({ ...previous, [provider]: "" }));
+      const saved = localKeyPreview ? "Key verified for this tab." : "Key verified and saved on this device.";
+      setMessage({ provider, text: action === "remove"
+        ? "Key removed. Revoke it at Google if you no longer need it."
+        : provider === "gemini" ? saved + " Generation is checked when you request picks." : saved });
+      if (action === "save") acknowledge("commit");
       // Retry failed metadata reads with the new credential. No AI generation occurs on a read.
       await queryClient.invalidateQueries({ predicate: (query) => ["provider-key-status", "today", "cached-channel", "weekly-picks", "onboarding-picks"].includes(String(query.queryKey[0])) });
     } catch (error) {
@@ -112,12 +122,14 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
     <Text style={type.bodySoft}>Switch to the Owner profile to manage the keys used on this device.</Text>
   </View>;
   if (onboarding) {
-    if (!storageReady) return <View style={{ gap: spacing.md }}><Heading level={1} style={type.title}>Connect your services.</Heading>{storageNotice}</View>;
-    return <ConnectionWalkthrough weeklyPicksRequested={weeklyPicksRequested} youtubeGuide={youtubeGuide} onYouTubeGuideChange={onYouTubeGuideChange} youtube={Boolean(status.data?.youtube)} gemini={Boolean(status.data?.gemini)}
-      editing={editing} draft={draft} busy={busy} feedback={message}
-      onChange={(value) => { setDraft(value); setMessage(null); }}
-      onEdit={(provider) => { void act(provider, "edit"); }} onSave={(provider) => { void act(provider, "save"); }}
-      onCancel={() => { setDraft(""); setEditing(null); setMessage(null); }} />;
+    return <View style={{ gap: spacing.sm }}>
+      <ConnectionWalkthrough provider={selectedProvider} youtubeGuide={youtubeGuide} onYouTubeGuideChange={onYouTubeGuideChange}
+        saved={storageReady && Boolean(status.data?.[selectedProvider])} editable={storageReady}
+        draft={inputKeys[selectedProvider]} busy={busy} feedback={message}
+        onChange={(value) => { setInputKeys(previous => ({ ...previous, [selectedProvider]: value })); setMessage(null); }}
+        onSave={(provider) => { void act(provider, "save"); }} />
+      {!storageReady && storageNotice}
+    </View>;
   }
   if (!storageReady) return <View style={{ gap: spacing.md }}>
     <Heading style={type.heading}>{Platform.OS === "web" ? "Set up on your phone" : "Device connections"}</Heading>
@@ -125,26 +137,34 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
     {storageNotice}
   </View>;
   return <View style={{ gap: spacing.lg }}>
+    <SettingsGroup label="Connections">
+      {KEY_PROVIDERS.filter(provider => !editing || editing === provider).map(provider => <View key={provider}>
+        {!editing && <SettingsRow grouped last={provider === "gemini"} title={provider === "youtube" ? "YouTube" : "Gemini"}
+          summary={`${provider === "youtube" ? "Videos and channels" : "AI discovery · optional"}${status.data?.[provider] ? " · Key saved" : ""}`}
+          value={status.data?.[provider] ? "Manage key" : "Add key"}
+          disabled={busy || editing !== null}
+          onPress={() => { void act(provider, "edit"); }} testID={`key-edit-${provider}`} />}
+        {message?.provider === provider ? <Text style={[type.bodySoft, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm }]} accessibilityLiveRegion="polite" testID={`key-feedback-${provider}`}>{message.text}</Text> : null}
+        {editing === provider ? <View style={{ gap: spacing.sm, padding: spacing.md }}>
+          <Heading style={type.heading}>{status.data?.[provider] ? "Replace" : "Add"} {provider === "youtube" ? "YouTube" : "Gemini"} key</Heading>
+          <Text style={type.bodySoft}>{status.data?.[provider] ? "Your current key stays in place until the new one verifies." : "Paste your key below. We’ll check it before saving."}</Text>
+          <TextField value={draft} onChangeText={(value) => { setDraft(value); setMessage(null); }} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" importantForAutofill="no" maxLength={MAX_PROVIDER_KEY_LENGTH} editable={!busy} accessibilityLabel={`${provider} API key`} placeholder="Paste your API key" placeholderTextColor={palette.inkMuted} testID={`key-input-${provider}`}  />
+
+          <PrimaryAction depth={palette.primaryButtonDepth} disabled={busy || !storageReady || !draft.trim()} accessibilityState={{ disabled: busy || !storageReady || !draft.trim(), busy }} accessibilityRole="button" style={[buttonStyle, { alignItems: "center", borderRadius: radii.control, backgroundColor: palette.accentDeep, opacity: busy || !storageReady || !draft.trim() ? 0.5 : 1 }]} onPress={() => { void act(provider, "save"); }} testID={`key-save-${provider}`}><Text style={[type.label, { color: palette.onDark }]}>{busy ? "Checking…" : "Verify & save"}</Text></PrimaryAction>
+          <Pressable disabled={busy} accessibilityRole="button" style={buttonStyle} onPress={() => { setDraft(""); setEditing(null); setMessage(null); }}><Text style={type.label}>Cancel</Text></Pressable>
+          <InlineHelp label={`How to get a ${provider === "youtube" ? "YouTube" : "Gemini"} key`}>{guidance(provider)}{setupLink(provider)}</InlineHelp>
+          <InfoDisclosure label="About key verification" anchor={<Text style={type.bodySoft}>Verification doesn’t generate AI content.</Text>}>
+            <Text style={type.bodySoft}>Verification makes one provider request.{provider === "gemini" ? " It checks access to Frame’s configured model. Generation limits and billing are checked when you request picks." : " It checks access to public YouTube channel data."} A saved key is not a guarantee of future access.</Text>
+          </InfoDisclosure>
+        {storageReady && status.data?.[provider] ? <Pressable disabled={busy} accessibilityRole="button" style={buttonStyle} onPress={() => confirmUser("Remove this key from Frame?", "All profiles on this device will lose access to this connection. The key stays active at Google.", "Remove key", (accepted) => { if (accepted) void act(provider, "remove"); }, true)} testID={`key-remove-${provider}`}><Text style={[type.label, { color: palette.danger }]}>Remove key from device</Text></Pressable> : null}
+        </View> : null}
+      </View>)}
+    </SettingsGroup>
     <View style={{ gap: spacing.xs }}>
-      <InfoDisclosure label="Key storage and removal" anchor={<Text style={type.bodySoft}>Keys are shared on this device.</Text>}>
-        <Text style={type.bodySoft}>Keys are kept in secure storage. Remove or replace them here; erasing Frame data removes both keys. Removing a key from Frame does not revoke it at Google. Secure storage cannot protect a key on a compromised device.</Text>
+      <InfoDisclosure label="Key storage and removal" anchor={<Text style={type.bodySoft}>{localKeyPreview ? "Keys last until you refresh this tab." : "Keys are shared on this device."}</Text>}>
+        <Text style={type.bodySoft}>{localKeyPreview ? "Refresh or close this local preview to clear both keys. You can revoke a key at Google." : "Keys are kept in secure storage. Remove or replace them here; erasing Frame data removes both keys. Removing a key from Frame does not revoke it at Google. Secure storage cannot protect a key on a compromised device."}</Text>
       </InfoDisclosure>
       <Text style={type.bodySoft}>Keys are sent to Google. Provider limits and charges apply.</Text>
     </View>
-    {KEY_PROVIDERS.map((provider) => <View key={provider} style={{ gap: spacing.sm, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.borderSoft }}>
-      <Heading style={type.heading}>{provider === "youtube" ? "YouTube" : "Gemini · optional"}</Heading>
-      <Text style={type.bodySoft}>{provider === "youtube" ? "Required for sources and video details." : "For weekly source suggestions."}</Text>
-      <Text style={type.label}>{status.data?.[provider] ? "Key saved on this device" : "No key saved"}</Text>
-      {<InlineHelp label={`How to get a ${provider === "youtube" ? "YouTube" : "Gemini"} key`}>{guidance(provider)}{setupLink(provider)}</InlineHelp>}
-      {message?.provider === provider ? <Text style={type.bodySoft} accessibilityLiveRegion="polite" testID={`key-feedback-${provider}`}>{message.text}</Text> : null}
-      {editing === provider ? <>
-        <TextField value={draft} onChangeText={(value) => { setDraft(value); setMessage(null); }} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" importantForAutofill="no" maxLength={256} editable={!busy} accessibilityLabel={`${provider} API key`} placeholder="Paste your API key" placeholderTextColor={palette.inkMuted} testID={`key-input-${provider}`}  />
-        <Text style={type.bodySoft}>Verify &amp; save makes one provider request. It does not generate AI content. An existing key is replaced only after this succeeds.{provider === "gemini" ? " This checks the key, not generation access or quota." : ""}</Text>
-        <PrimaryAction depth={palette.primaryButtonDepth} disabled={busy || !storageReady || !draft.trim()} accessibilityState={{ disabled: busy || !storageReady || !draft.trim(), busy }} accessibilityRole="button" style={[buttonStyle, { alignItems: "center", borderRadius: radii.control, backgroundColor: palette.accentDeep, opacity: busy || !storageReady || !draft.trim() ? 0.5 : 1 }]} onPress={() => { void act(provider, "save"); }} testID={`key-save-${provider}`}><Text style={[type.label, { color: palette.onDark }]}>{busy ? "Checking…" : "Verify & save"}</Text></PrimaryAction>
-        <Pressable disabled={busy} accessibilityRole="button" style={buttonStyle} onPress={() => { setDraft(""); setEditing(null); setMessage(null); }}><Text style={type.label}>Cancel</Text></Pressable>
-      </> : <PrimaryAction depth={palette.primaryButtonDepth} disabled={busy || editing !== null} accessibilityState={{ disabled: busy || editing !== null }} accessibilityRole="button" style={[buttonStyle, { alignItems: "center", borderRadius: radii.control, backgroundColor: palette.accentDeep, opacity: busy || editing !== null ? 0.5 : 1 }]} onPress={() => { void act(provider, "edit"); }} testID={`key-edit-${provider}`}><Text style={[type.label, { color: palette.onDark }]}>{storageReady && status.data?.[provider] ? "Replace key" : "Add key"}</Text></PrimaryAction>}
-      {storageReady && status.data?.[provider] ? <Pressable disabled={busy} accessibilityRole="button" style={buttonStyle} onPress={() => confirmUser("Remove this key from Frame?", "All profiles on this device will lose access to this connection. The key stays active at Google.", "Remove key", (accepted) => { if (accepted) void act(provider, "remove"); }, true)} testID={`key-remove-${provider}`}><Text style={[type.label, { color: palette.danger }]}>Remove key from device</Text></Pressable> : null}
-    </View>)}
-
   </View>;
 }

@@ -27,15 +27,20 @@ export function resolvedOnboardingFilm(result: SourceResolution | null, profileI
   };
 }
 
-export function onboardingNextAction(step: typeof ONBOARDING_STEPS[number], sourceCount: number, replay: boolean, savedCount = 0, returnTo: "source" | "your-frame" | null = null, manual = false): { label: string; finish: boolean; target?: typeof ONBOARDING_STEPS[number] } {
-  if (step === "welcome") return { label: "Set up connections", finish: false, target: "keys" };
+export function onboardingNextAction(step: typeof ONBOARDING_STEPS[number], sourceCount: number, replay: boolean, returnTo: "source" | "your-frame" | null = null, manual = false): { label: string; finish: boolean; target?: typeof ONBOARDING_STEPS[number] } {
+  if (step === "study") return { label: "What happens after scrolling?", finish: false, target: "intentions" };
+  if (step === "intentions") return { label: "What stays with you?", finish: false, target: "recall" };
+  if (step === "recall") return { label: "Meet Frame", finish: false, target: "welcome" };
+  if (step === "welcome") return { label: "See how Frame works", finish: false, target: "contrast" };
+  if (step === "contrast") return { label: manual ? "Choose a creator" : "Choose my interests", finish: false, target: "source" };
   if (step === "keys" && returnTo) return { label: returnTo === "source" ? "Back to your source" : "Back to my picks", finish: false, target: returnTo };
-  if (step === "keys") return { label: manual ? "Choose a creator" : "Choose my interests", finish: false };
-  if (step === "source" && !manual) return { label: "See my picks", finish: false };
+  if (step === "keys") return { label: "Continue", finish: false, target: "study" };
+  if (step === "source" && !manual) return { label: "Continue", finish: false, target: "bespoke" };
+  if (step === "bespoke" && !manual) return { label: "See my discoveries", finish: false, target: "your-frame" };
   if (step === "source") return sourceCount === 0 && !replay
     ? { label: "Finish for now", finish: true }
-    : { label: sourceCount > 0 ? "See my selection" : "Preview selection", finish: false };
-  return { label: replay ? "Back to Settings" : savedCount > 0 ? "Open Saved" : sourceCount > 0 ? "Open Today" : "Explore Sources", finish: true };
+    : { label: sourceCount > 0 ? "See my selection" : "Preview selection", finish: false, target: "your-frame" };
+  return { label: "Open Today", finish: true };
 }
 
 /** Retain only this profile’s eligible selection and fresh cards saved in this reveal. */
@@ -47,7 +52,7 @@ export function onboardingSelection(items: readonly TodaySnapshotItem[], profile
   return [...visible, ...justSaved].sort((a, b) => a.position - b.position);
 }
 
-/** Completion goes to useful content; replay always returns to Settings. */
-export function onboardingDestination(sourceCount: number, replay: boolean, savedCount: number = 0) {
-  return replay ? "/(tabs)/settings" as const : savedCount > 0 ? "/(tabs)/saved" as const : sourceCount > 0 ? "/(tabs)" as const : "/(tabs)/sources" as const;
+/** An interests handoff opens the same profile’s discovery gallery on Today. */
+export function onboardingDestination(profileId: string, showPicks: boolean) {
+  return showPicks ? { pathname: "/(tabs)" as const, params: { picksFor: profileId } } : "/(tabs)" as const;
 }

@@ -14,5 +14,5 @@ export default function InfoButton({ label, expanded, onPress, onProgramme, test
 }
 
 const styles = StyleSheet.create({
-  button: { width: 44, height: 44, flexShrink: 0, justifyContent: "center", alignItems: "flex-start", paddingLeft: spacing.sm },
+  button: { width: 48, height: 48, flexShrink: 0, justifyContent: "center", alignItems: "flex-start", paddingLeft: spacing.sm },
 });

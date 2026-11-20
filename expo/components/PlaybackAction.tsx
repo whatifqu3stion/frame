@@ -17,7 +17,7 @@ export default function PlaybackAction({ programme, style, children, disabled, a
   const face = programme ? palette.onProgramme : palette.accentDeep;
   const icon = programme ? palette.programme : palette.onDark;
   const hot = (pressed: boolean) => available && (feedback.highlighted || pressed);
-  return <PrimaryAction {...props} {...feedback.events} disabled={disabled} accessibilityState={accessibilityState}
+  return <PrimaryAction textured {...props} {...feedback.events} disabled={disabled} accessibilityState={accessibilityState}
     depth={programme ? primaryActionDepth(true, accent) : palette.primaryButtonDepth}
     style={(state) => [
       typeof style === "function" ? style(state) : style,

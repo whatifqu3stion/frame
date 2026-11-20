@@ -10,6 +10,7 @@ import { useFrameTheme } from "@/constants/useFrameTheme";
 type Props = Omit<PressableProps, "children" | "style" | "accessibilityRole" | "accessibilityState"> & {
   label: string;
   detail?: string;
+  dimWhenDisabled?: boolean;
   selected: boolean;
   role?: "radio" | "checkbox";
   variant?: "outlined" | "ruled" | "filter" | "topic";
@@ -44,7 +45,7 @@ function onChoiceKeyDown(event: KeyboardEvent<HTMLElement>) {
 }
 
 /** Shared choice grammar: quiet backing, an explicit check, and wrapping text. */
-export default function ChoiceOption({ label, detail, selected, role = "radio", variant = "outlined", leading, unselectedMark, style, disabled = false, ...props }: Props) {
+export default function ChoiceOption({ label, detail, selected, role = "radio", variant = "outlined", leading, unselectedMark, style, disabled = false, dimWhenDisabled = true, ...props }: Props) {
   const { palette, type } = useFrameTheme();
   const filter = variant === "filter";
   const mark = <View style={styles.mark} accessible={false}>{selected ? <Check size={16} color={palette.active} /> : unselectedMark}</View>;
@@ -55,7 +56,7 @@ export default function ChoiceOption({ label, detail, selected, role = "radio", 
     filter && [styles.filter, { borderColor: selected ? palette.active : palette.border }],
     variant === "topic" && [styles.topic, { borderColor: selected ? palette.active : palette.border }],
     style,
-    disabled && styles.disabled,
+    disabled && dimWhenDisabled && styles.disabled,
     pressed && { backgroundColor: palette.surfaceDeep },
   ]}>
     {leading ? <View accessible={false}><SelectionArtwork selected={selected}>{leading}</SelectionArtwork></View> : null}

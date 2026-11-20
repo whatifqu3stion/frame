@@ -17,7 +17,7 @@ type Props = { visible: boolean; onClose: () => void; forgottenPinRecovery?: boo
 const DELETED_ITEMS = [
   "All profiles, the Owner PIN, viewing allowances, schedules, pauses, usage, approvals and requests.",
   "Sources, saved videos, sessions, progress, interests, searches and appearance preferences.",
-  "Both provider keys and local Google sign-in credentials.",
+  "Both provider keys and any credentials saved by earlier versions.",
 ];
 
 /** Shared irreversible full-reset recovery used by Privacy & Data and Forgot PIN. */
@@ -63,7 +63,7 @@ export default function FullResetModal({ visible, onClose, forgottenPinRecovery 
       {step === "review" ? <>
         <Text style={styles.body}>This permanently deletes the following from this device:</Text>
         {DELETED_ITEMS.map((item) => <Text key={item} style={styles.body}>• {item}</Text>)}
-        <Text style={styles.note}>Store purchase records remain with the app store. Nothing can be selectively preserved, and the Owner PIN cannot be recovered separately.</Text>
+        <Text style={styles.note}>Nothing can be selectively preserved, and the Owner PIN cannot be recovered separately.</Text>
         <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => setStep("type")} style={styles.primary} accessibilityRole="button"><Text style={styles.primaryText}>Continue</Text></PrimaryAction>
       </> : <>
         <Text style={styles.body}>Type RESET to enable the final confirmation.</Text>

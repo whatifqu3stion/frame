@@ -41,7 +41,7 @@ const SECTIONS: { title: string; body: string }[] = [
 
 export default function TermsScreen() {
   const { palette, type } = useFrameTheme();
-  const { googleConfigured, googleConnected } = useApp();
+  const { hasLegacyGoogleConnection } = useApp();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -59,7 +59,7 @@ export default function TermsScreen() {
         {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => notifyUser("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
       </View>
       <Link href="/settings/privacy" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open device data controls</Text></Pressable></Link>
-      {googleConfigured || googleConnected ? <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Manage Google connection</Text></Pressable></Link> : null}
+      {hasLegacyGoogleConnection ? <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Remove a previous Google connection</Text></Pressable></Link> : null}
     </ScrollView>
   );
 }

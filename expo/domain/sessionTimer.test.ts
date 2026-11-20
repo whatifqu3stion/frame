@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createSessionClock, emptySessionRun, sessionAllowsVideo, sessionCanFinish, sessionTimeRemaining } from "./sessionTimer";
+import { createSessionClock, emptySessionRun, sessionAllowsVideo, sessionCanFinish, sessionTimeRemaining, sessionDisplayChanged } from "./sessionTimer";
 
 test("session usage counts playback only across pause, buffering, background and restart", () => {
   let now = 0;
@@ -45,4 +45,22 @@ test("seeking does not consume time and a new run has its own allowance", () => 
   expect(sessionTimeRemaining(clock.snapshot(), 1)).toBe(55);
   expect(sessionCanFinish(clock.snapshot(), 1, "one")).toBeFalse();
   expect(sessionTimeRemaining({ ...emptySessionRun(), runId: 1 }, 1)).toBe(60);
+});
+
+
+test("precise quarter-second enforcement publishes only visible minute or permission changes", () => {
+  let now = 0;
+  const clock = createSessionClock(emptySessionRun(), () => now);
+  clock.playing(true, "one");
+  let published = clock.snapshot(), updates = 0;
+  for (let i = 1; i <= 480; i++) {
+    now = i * 250;
+    const next = clock.snapshot();
+    if (sessionDisplayChanged(published, next, 2)) { published = next; updates++; }
+    expect(sessionAllowsVideo(next, 2, "one")).toBe(now < 120000);
+  }
+  expect(updates).toBe(2);
+  expect(sessionTimeRemaining(published, 2)).toBe(0);
+  expect(sessionDisplayChanged(published, clock.finish("one"), 2)).toBe(true);
+  expect(sessionDisplayChanged(published, clock.end(), 2)).toBe(true);
 });

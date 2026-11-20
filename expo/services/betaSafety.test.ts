@@ -7,7 +7,7 @@ const source = (path: string): Promise<string> => readFile(new URL(path, import.
 describe("full-access BYOK boundaries", () => {
   test("keeps billing disabled while launch discovery stays free", () => {
     expect(FOUNDATION_CAPABILITIES.paidAccess).toBeFalse();
-    expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeTrue();
+    expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeFalse();
     expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeTrue();
   });
 

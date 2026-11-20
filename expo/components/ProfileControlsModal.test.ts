@@ -13,7 +13,7 @@ function controls(availability: "available" | "web" | "unavailable", hasPin: boo
   authorized: boolean;
   decisionResult?: { ok: boolean; message: string };
   afterDecision?: Promise<void>;
-}) {
+}, readAllowance: () => Promise<unknown> = async () => ({ mode: "unlimited" }), paused = false) {
   const state: unknown[] = []; const refs: { current: unknown }[] = [];
   const mountEffects: (() => void)[] = [];
   let mounted = false;
@@ -25,13 +25,14 @@ function controls(availability: "available" | "web" | "unavailable", hasPin: boo
     getManagedContentOverview: async (id: string) => { if (writes.length) await review?.afterDecision; writes.push(["read requests", id]); return { policy: { mode: "selectedVideos" }, requests: [] }; },
     reviewManagedApprovalRequest: async () => review?.decisionResult,
     ownerPinAvailability: availability, hasOwnerPin: hasPin,
-    getPlaybackAllowance: async () => ({ kind: "unlimited", canPlay: true }),
+    getPlaybackAllowance: async () => paused ? { kind: "restricted", canPlay: false, restriction: "paused" } : { kind: "unlimited", canPlay: true },
+    getProfileViewingAllowance: readAllowance,
     setProfileViewingAllowance: async (...args: any[]) => { writes.push(args); return { ok: true, message: "Saved" }; },
   };
   const jsx = (type: unknown, props: Element["props"]): Element => ({ type, props });
   const modules: Record<string, unknown> = {
     react: {
-      useMemo: (build: () => unknown) => build(), useCallback: (fn: unknown) => fn, useEffect(fn: () => void) { if (review && !mounted) mountEffects.push(fn); },
+      useMemo: (build: () => unknown) => build(), useCallback: (fn: unknown) => fn, useEffect(fn: () => void) { if (!mounted) mountEffects.push(fn); },
       useRef: (initial: unknown) => { const index = refCursor++; return refs[index] ?? (refs[index] = { current: initial }); },
       useState: (initial: unknown) => { const index = cursor++; if (!(index in state)) state[index] = initial; return [state[index], (value: unknown) => { state[index] = value; }]; },
     },
@@ -57,7 +58,7 @@ function controls(availability: "available" | "web" | "unavailable", hasPin: boo
     return nodes;
   };
   const initial = render();
-  if (!review) initial.find(node => String(node.props.accessibilityLabel).startsWith("Manage Owner."))!.props.onPress();
+  if (!review) initial.find(node => String(node.props.accessibilityLabel).startsWith(paused ? "Manage Learner." : "Manage Owner."))!.props.onPress();
   return { render, alerts, writes, announcements };
 }
 
@@ -90,7 +91,7 @@ test("web and unavailable secure storage explain the allowance prerequisite with
     const row = nodes.find(node => node.props.title === "Daily viewing limit")!;
     expect(row.props.disabled).toBe(true);
     expect(row.props.navigation).toBe(false);
-    expect(nodes.some(node => typeof node.props.children === "string" && node.props.children.includes(availability === "web" ? "iPhone or Android app" : "Secure PIN storage is unavailable"))).toBe(true);
+    expect(row.props.summary).toContain(availability === "web" ? "iPhone or Android app" : "Secure PIN storage is unavailable");
     // The callback also refuses entry if availability changes before a queued press.
     row.props.onPress();
     expect(ui.alerts.length).toBe(0);
@@ -114,12 +115,50 @@ test("native allowance entry without a PIN offers the working PIN setup route", 
 test("native allowance entry with a PIN opens the picker and saves the chosen profile limit", async () => {
   const ui = controls("available", true);
   ui.render().find(node => node.props.title === "Daily viewing limit")!.props.onPress();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(ui.render().find(node => node.type === "@/components/AllowancePicker")!.props.value).toEqual({ mode: "unlimited" });
   ui.render().find(node => node.type === "@/components/AllowancePicker")!.props.onChange({ mode: "dailyLimit", minutes: 45 });
   const save = ui.render().find(node => node.props.accessibilityRole === "button" && node.props.children?.props?.children === "Save daily limit")!;
   expect(save.props.disabled).toBe(false);
   save.props.onPress();
   await new Promise(resolve => setTimeout(resolve, 0));
-  expect(ui.writes).toEqual([["owner-default", { mode: "dailyLimit", minutes: 45, commitment: true }]]);
+  expect(ui.writes).toEqual([["owner-default", { mode: "dailyLimit", minutes: 45, commitment: false }]]);
+});
+
+test("a paused profile's saved daily limit can be retried without opening an editor with a substitute value", async () => {
+  let attempts = 0;
+  const saved = { mode: "dailyLimit", minutes: 65, commitment: false };
+  const ui = controls("available", true, undefined, async () => {
+    if (++attempts === 1) throw new Error("Unavailable");
+    return saved;
+  }, true);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(ui.render().some(node => node.props.children === "Managed · Paused")).toBe(true);
+  const open = () => ui.render().find(node => node.props.title === "Daily viewing limit")!.props.onPress();
+  open();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(ui.render().some(node => node.type === "@/components/AllowancePicker")).toBe(false);
+  expect(ui.writes).toEqual([]);
+  open();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(ui.render().find(node => node.type === "@/components/AllowancePicker")!.props.value).toEqual(saved);
+});
+
+test("Add profile explains both roles before opening their editors and keeps managed creation on supported devices", () => {
+  for (const availability of ["available", "web"] as const) {
+    const ui = controls(availability, true);
+    ui.render().find(node => node.props.accessibilityLabel === "Back to Profiles")!.props.onPress();
+    ui.render().find(node => node.props.title === "Add profile")!.props.onPress();
+    const choices = ui.render();
+    const standard = choices.find(node => node.props.title === "Standard profile")!;
+    const managed = choices.find(node => node.props.title === "Managed profile")!;
+    expect(standard.props.summary).toContain("own sources");
+    expect(managed.props.disabled).toBe(availability === "web");
+    standard.props.onPress();
+    expect(ui.render().some(node => node.props.accessibilityLabel === "Profile name")).toBe(true);
+    ui.render().find(node => node.props.accessibilityLabel === "Back to Profile types")!.props.onPress();
+    expect(ui.render().some(node => node.props.title === "Managed profile")).toBe(true);
+  }
 });
 
 test("a pending-request shortcut opens the requested managed profile only with Owner access and a supported PIN", async () => {

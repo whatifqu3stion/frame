@@ -10,4 +10,6 @@ The Today viewing-time chart also shows seven explicitly labelled sample totals 
 
 The sample watch screen includes **Preview ending** to review the production artwork-ending treatment. This is explicitly a design preview: it does not play media or record viewing time.
 
-With the sample library loaded, open the welcome preview, choose interests, and tap **See my picks**. The rehearsal uses the app’s print-room scene and gallery with fictional stages advanced locally. Back cancels the rehearsal and **Show sample picks now** skips it. Real generation follows provider callbacks.
+Onboarding and its replay use the real connection status and weekly picks service. The browser can show the welcome, illustrated key guides, and interests. Use the native app to verify credentials and generate a first pick.
+
+The development route `/welcome-preview?moment=sample` opens the final discovery layout with labelled editorial examples. `/welcome-preview?moment=loading` runs a labelled 17-second simulation of the loading-to-reveal sequence, including the delayed thank-you. Its replay control restarts the simulation. Neither route generates provider requests or saves sample discoveries. Production waiting uses actual provider progress, not this timeline.

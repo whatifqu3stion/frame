@@ -7,7 +7,6 @@ import { profileStorageKey } from "@/storage/profileStorage";
 export function useOnboardingDraft(profileId: string, replay: boolean) {
   const [draft, setDraft] = useState<OnboardingDraft>(emptyOnboardingDraft);
   const [ready, setReady] = useState(replay);
-  const [fresh, setFresh] = useState(replay);
   const [error, setError] = useState(false);
   const queue = useRef(Promise.resolve());
   const stopped = useRef(false);
@@ -15,7 +14,7 @@ export function useOnboardingDraft(profileId: string, replay: boolean) {
   useEffect(() => {
     if (replay) return;
     let active = true;
-    void AsyncStorage.getItem(key).then((raw) => { if (active) { setDraft(parseOnboardingDraft(raw)); setFresh(raw === null); setReady(true); } })
+    void AsyncStorage.getItem(key).then((raw) => { if (active) { setDraft(parseOnboardingDraft(raw)); setReady(true); } })
       .catch(() => { if (active) { setError(true); setReady(true); } });
     return () => { active = false; };
   }, [key, replay]);
@@ -32,5 +31,5 @@ export function useOnboardingDraft(profileId: string, replay: boolean) {
     await queue.current.catch(() => {});
     await AsyncStorage.removeItem(key);
   };
-  return { draft, setDraft, ready, fresh, error, clear };
+  return { draft, setDraft, ready, error, clear };
 }

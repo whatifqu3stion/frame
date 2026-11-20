@@ -58,6 +58,14 @@ describe("BYOK credential lifecycle", () => {
     await Promise.all([keys.save("youtube", fakeKey), keys.clear()]);
     expect(data.size).toBe(0);
   });
+  test("preserves a dotted AI Studio authorization key through secure storage", async () => {
+    const { keys } = fixture();
+    const authKey = "AQ." + "synthetic-test-data_".repeat(15);
+    await keys.save("gemini", authKey);
+    expect(await keys.read("gemini")).toBe(authKey);
+    await expect(keys.save("youtube", authKey)).rejects.toThrow();
+    await expect(keys.save("gemini", authKey + "\r\nheader")).rejects.toThrow();
+  });
   test("rejects URLs, whitespace, and header injection before writing", async () => {
     const { keys, data } = fixture();
     for (const key of ["https://bad.example/key", "bad\r\nAuthorization: value", "too-short"]) await expect(keys.save("youtube", key)).rejects.toThrow();
@@ -85,9 +93,10 @@ describe("BYOK network boundary", () => {
     const requests: string[] = [];
     const transport = createProviderTransport(keys, async (url) => {
       requests.push(String(url));
-      return String(url).includes(":generateContent") ? json({ error: { message: fakeKey } }, 403) : json({ models: [] });
+      return String(url).includes(":generateContent") ? json({ error: { message: fakeKey } }, 403) : json({ name: "models/gemini-3.5-flash-lite", supportedGenerationMethods: ["generateContent"] });
     });
     await transport.validateGemini(fakeKey);
+    expect(requests[0]).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite");
     await expect(transport.gemini("gemini-3.5-flash-lite", {})).rejects.toMatchObject({ kind: "access", provider: "gemini", httpStatus: 403 });
     expect(requests).toHaveLength(2);
   });
@@ -154,7 +163,8 @@ describe("direct YouTube metadata", () => {
     const [first, second] = await Promise.all([youtube.getCachedFeeds([channelId]), youtube.getCachedFeeds([channelId])]);
     expect(first).toMatchObject({ status: "success", candidates: [{ id: videoId, durationSeconds: 615, sourceId: channelId }] }); expect(second.status).toBe("success"); expect(calls).toBe(3);
     await youtube.getCachedFeeds([channelId]); expect(calls).toBe(3);
-    await keys.remove("youtube"); expect(await youtube.getCachedFeeds([channelId])).toEqual({ status: "missing_configuration" }); expect(calls).toBe(3);
+    await youtube.getCachedFeeds([channelId], true); expect(calls).toBe(6);
+    await keys.remove("youtube"); expect(await youtube.getCachedFeeds([channelId])).toMatchObject({ status: "missing_configuration", message: new ProviderError("missing_key", "youtube").message }); expect(calls).toBe(6);
   });
   test("rejects wrong channel identity and unsafe thumbnail URLs", async () => {
     const { keys } = fixture(); await keys.save("youtube", fakeKey);
@@ -584,4 +594,38 @@ test("discovery samples at most three pages to find long-form work behind recent
   expect(sample.sampledCount).toBe(36); expect(sample.videos).toHaveLength(36);
   expect(sample.videos.filter((video) => (video.durationSeconds ?? 0) >= 240)).toHaveLength(12);
   expect(pages).toBe(3); expect(calls).toBe(7);
+});
+
+test("three reviewed discoveries are readable before the search finishes and survive cancellation", async () => {
+  const { keys } = fixture(); await keys.save("youtube", fakeKey); await keys.save("gemini", fakeKey);
+  const stored = new Map<string, string>();
+  let calls = 0; let resolutions = 0;
+  let ready!: () => void; const available = new Promise<void>(resolve => { ready = resolve; });
+  let release!: () => void; const blocked = new Promise<void>(resolve => { release = resolve; });
+  const candidates = [0, 1, 2, 3].map(i => ({ ...drafts[0], handle: `@science${i}` }));
+  const transport = createProviderTransport(keys, async () => json(draftResponse(++calls === 1 ? candidates : review)));
+  const client = createByokWeeklyPicks(transport, keys, {
+    async getItem(key) { return stored.get(key) ?? null; }, async setItem(key, value) { stored.set(key, value); },
+  }, async () => {
+    const index = resolutions++;
+    if (index === 3) await blocked;
+    return { status: "success", data: { source: { ...source, providerSourceId: `UCabcdefghijklmnopqrstu${index}` }, provenance: "provider" } };
+  }, async sourceId => ({ ...await inspect(), sourceId }));
+  const controller = new AbortController();
+  const counts: number[] = [];
+  const pending = client.generate(["science"], controller.signal, "owner", undefined, progress => {
+    counts.push(progress.reviewedCount); if (progress.available) ready();
+  }).catch(error => error);
+  await available;
+  expect(client.isPreparing?.("owner")).toBe(true);
+  const result = await client.getWeeklyPicks(["science"], "owner");
+  expect(result.status).toBe("success");
+  if (result.status === "success") expect(result.response.interests.flatMap(group => group.picks)).toHaveLength(3);
+  expect(counts).toEqual([1, 2, 3]);
+  controller.abort(); release();
+  expect(await pending).toMatchObject({ kind: "cancelled" });
+  expect(client.isPreparing?.("owner")).toBe(false);
+  expect(await client.getWeeklyPicks(["science"], "owner")).toEqual(result);
+  expect(calls).toBe(4);
+  expect(await client.canRetryEmpty("owner")).toBe(false);
 });

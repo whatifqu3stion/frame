@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { METADATA_MAX_AGE_MS } from "../domain/metadataRetention";
 import { DEFAULT_OWNER_PROFILE_ID, DEFAULT_OWNER_PROFILE_NAME } from "../models/profile";
 
-export const DATABASE_SCHEMA_VERSION = 13;
+export const DATABASE_SCHEMA_VERSION = 14;
 
 export const PROFILE_OWNED_TABLES = [
   "saved_videos",
@@ -474,6 +474,16 @@ export async function migrateDatabase(db: MigrationExecutor): Promise<void> {
   if (currentVersion < 12) { await executeMigrationTransaction(db, buildVersion12MigrationPlan()); currentVersion = 12; }
   if (currentVersion < 13) {
     await executeMigrationTransaction(db, buildVersion13MigrationPlan(await readSchemaMetadata(db)));
+    currentVersion = 13;
+  }
+  if (currentVersion < 14) {
+    // Older builds could finalize a first selection before any video qualified.
+    await executeMigrationTransaction(db, [
+      `DELETE FROM today_snapshots WHERE NOT EXISTS (
+        SELECT 1 FROM today_snapshot_items WHERE profileId = today_snapshots.profileId
+      )`,
+      "PRAGMA user_version = 14",
+    ]);
   }
 }
 

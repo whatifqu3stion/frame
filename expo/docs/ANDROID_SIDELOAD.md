@@ -1,8 +1,8 @@
 # Personal Android build
 
-Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). The October 21 verification below is historical; it does not certify a newer APK.
+Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). The existing build 4 predates the current working source. Historical verification below does not certify a new candidate.
 
-Frame's sideload build is a standalone, release-mode APK. It bundles the app and fonts, uses the existing `app.rork.vabp4o345ww8b0akdpr7p` application ID, and needs neither Expo Go nor Metro. Internet remains necessary for YouTube playback and provider requests. Your YouTube and Gemini keys are entered in Settings → Your API keys after installation and stored by native SecureStore.
+Frame's sideload build is a standalone, release-mode APK. It bundles the app and fonts, uses the existing `app.rork.vabp4o345ww8b0akdpr7p` application ID, and needs neither Expo Go nor Metro. Internet remains necessary for YouTube playback and provider requests. Your YouTube and Gemini keys are entered during onboarding or in Settings → YouTube & Gemini and stored by native SecureStore.
 
 ## Build locally
 
@@ -15,9 +15,9 @@ export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 npm run android:apk
 ```
 
-For a **first installation on a new signing identity only**, add `-- --init-key`. The current workspace already has its private signing identity; do not regenerate it. The script fails instead of silently substituting Android's public debug key. It regenerates Android project configuration, applies private release signing, builds all configured Android architectures, and copies the result to `artifacts/Frame-1.0.0-2.apk` (filename follows app version and versionCode).
+For a **first installation on a new signing identity only**, add `-- --init-key`. The current workspace already has its private signing identity; do not regenerate it. The script fails instead of silently substituting Android's public debug key. It regenerates Android project configuration, applies private release signing, builds all configured Android architectures, and copies the result to `artifacts/Frame-<version>-<versionCode>.apk`. Allocate a new versionCode before the next release; do not overwrite build 4 with different source.
 
-The generated `android/` project is disposable. Use this script for signed release builds; do not rely on the generated template's default signing. The script ignores `.env` and inherited `EXPO_PUBLIC_*` values except the two explicitly supported production Google OAuth client IDs. YouTube and Gemini API keys must never be build variables. Optional Google subscription import needs its own Android OAuth configuration for this package and signing certificate; following channels and BYOK discovery do not require that import setup.
+The generated `android/` project is disposable. Use this script for signed release builds; do not rely on the generated template's default signing. The script ignores `.env` and inherited `EXPO_PUBLIC_*` values except the two explicitly supported production Google OAuth client IDs. YouTube and Gemini API keys must never be build variables. Google account import is retired; following channels and BYOK discovery do not require OAuth setup.
 
 If prebuild succeeded and only compilation failed, `npm run android:apk -- --skip-prebuild` retries against the generated project. Use this only with unchanged app configuration; the script checks the generated package, version, and versionCode before signing. A normal build still runs prebuild.
 
@@ -31,7 +31,7 @@ Before each subsequent release, increment `expo.android.versionCode` in `app.jso
 
 1. Copy the APK to your Android phone, open it in Files, and allow that file manager to install this app when Android asks. That per-source permission can be turned off again afterward.
 2. Open Frame and complete setup. Add and verify your YouTube key, then Gemini if you want weekly discovery.
-3. Alternatively, with USB debugging already enabled and the phone authorized, use `adb install -r artifacts/Frame-1.0.0-2.apk` from `expo/`. If multiple devices are connected, specify the intended serial using `adb -s SERIAL install -r ...`.
+3. Alternatively, with USB debugging already enabled and the phone authorized, use `adb install -r artifacts/Frame-<version>-<versionCode>.apk` with the actual verified candidate filename from `expo/`. If multiple devices are connected, specify the intended serial using `adb -s SERIAL install -r ...`.
 
 Verify an APK before sharing with Android's `apksigner verify --verbose --print-certs <apk>`. Keep the certificate fingerprint with release notes. An APK is the installable artifact; an AAB is for store distribution. [Expo APK guidance](https://docs.expo.dev/build-reference/apk/).
 
@@ -43,9 +43,9 @@ Check cold launch without Metro; native key verification and persistence across 
 
 Android backup is disabled. The generated manifest removes unused camera, microphone, location, media/storage and overlay permissions inherited from libraries. Internet and haptic support remain. Release signing, package permissions, and device behavior must be verified against the produced APK; a successful web preview alone does not establish native acceptance.
 
-## Verified test APK — October 31, 2026
+## Historical build 2 — October 31, 2026
 
-`artifacts/Frame-1.0.0-2.apk` is ready for sideload testing: version 1.0.0 / build 2, 93.6 MB, Android 7.0 / API 24 minimum and target API 36. It includes arm64-v8a, armeabi-v7a, x86 and x86_64.
+`artifacts/Frame-1.0.0-2.apk` was the October 31 test artifact and is superseded: version 1.0.0 / build 2, 93.6 MB, Android 7.0 / API 24 minimum and target API 36. It includes arm64-v8a, armeabi-v7a, x86 and x86_64.
 
 - Release compilation and release lint passed; the preceding app verification has 397 passing tests, passing TypeScript and zero lint errors.
 - Signature verified against the same private signing certificate as build 1. ZIP alignment and all 44 packaged 64-bit native libraries pass 16 KB alignment checks.
@@ -56,7 +56,7 @@ Android backup is disabled. The generated manifest removes unused camera, microp
 APK SHA-256: `3397162d0182258ceda1b2015a9863566954589b16e221403128c7e107f59ced`.
 Signing certificate SHA-256: `be84d00d99d64dba0190af6b0b4b4596c51dd53962ab99af15bb029d13b300fc`.
 
-## Verified build — October 21, 2026
+## Historical build 1 — October 21, 2026
 
 Produced `artifacts/Frame-1.0.0-1.apk` (about 90 MB), version 1.0.0 / code 1, for arm64-v8a, armeabi-v7a, x86 and x86_64. Android 7.0 / API 24 minimum; target API 36.
 

@@ -6,7 +6,7 @@ import ProgrammeArtwork from "@/components/ProgrammeArtwork";
 import { motion } from "@/constants/motion";
 import Heading from "@/components/Heading";
 import InfoDisclosure from "@/components/InfoDisclosure";
-import { resetSessionRun } from "@/db/database";
+import { getLatestTodayVideos, resetSessionRun } from "@/db/database";
 import { isLongFormVideo } from "@/domain/contentPolicy";
 import { boundedCollection } from "@/constants/layout";
 import MediaImage from "@/components/MediaImage";
@@ -18,12 +18,11 @@ import PositionedRow from "@/components/motion/PositionedRow";
 import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery } from "@tanstack/react-query";
-import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo } from "@/domain/metadataRetention";
 import { router, useLocalSearchParams, useNavigation, type Href } from "expo-router";
 import { Search, ChevronDown, ChevronUp, Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Alert, SectionList, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
@@ -43,7 +42,7 @@ export default function SessionBuilder() {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, libraryError, refreshLibrary, saveSessionDraft, clearSessionDraft, createSession, renameSession, updateSessionVideos, requirePurchase } = useApp();
+  const { activeProfileId, profileSwitching, prefs, savedVideos, sessions, sessionDraft, sessionDraftLoading, libraryError, refreshLibrary, saveSessionDraft, clearSessionDraft, createSession, updateSessionVideos, requirePurchase } = useApp();
   const defaultName = defaultSessionName(sessions);
   const existingSession = useMemo(() => sessions.find((session) => session.id === id), [id, sessions]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -102,15 +101,20 @@ export default function SessionBuilder() {
     return () => { current = false; };
   }, [activeProfileId, budgetMinutes, clearSessionDraft, hasDraft, hydratedProfile, id, name, saveSessionDraft, selected, draftAttempt, draftRevision, isSaving, destination]);
 
+  const metadataIds = [...new Set(selected)].filter(id => !savedVideos.some(video => video.id === id)).sort();
   const selectedMedia = useQuery({
-    queryKey: ["session-editor-media", activeProfileId, selected.join(",")], networkMode: "always",
-    queryFn: async () => Promise.all(selected.map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
+    queryKey: ["session-editor-media", activeProfileId, metadataIds.join(",")], networkMode: "always",
+    queryFn: async () => getLatestTodayVideos(activeProfileId, metadataIds),
     enabled: hydratedProfile === activeProfileId && selected.length > 0,
   });
   const pool = useMemo<Video[]>(() => [...new Map([
     ...(selectedMedia.data ?? []).filter((video): video is Video => Boolean(video)),
     ...savedVideos,
   ].map((video) => [video.id, expireVideo(video, Date.now())])).values()], [savedVideos, selectedMedia.data]);
+
+  const mediaById = useMemo(() => new Map(pool.map(video => [video.id, video])), [pool]);
+  const positions = useMemo(() => new Map(selected.map((id, index) => [id, index + 1])), [selected]);
+  const selectionKey = selected.join(",");
 
   const filteredPool = useMemo(() => pool.filter((video) => (selected.includes(video.id) || isLongFormVideo(video)) && `${video.title} ${video.channelTitle}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [pool, search, selected]);
 
@@ -151,8 +155,7 @@ export default function SessionBuilder() {
     setIsSaving(true);
     try {
       if (existingSession) {
-        await renameSession(existingSession.id, sessionName);
-        await updateSessionVideos(existingSession.id, selected, budgetMinutes);
+        await updateSessionVideos(existingSession.id, selected, budgetMinutes, sessionName);
         return existingSession.id;
       }
       await saveSessionDraft({ name: sessionName, orderedVideoIds: selected, targetMinutes: budgetMinutes });
@@ -170,7 +173,7 @@ export default function SessionBuilder() {
       persistLock.current = false;
       setIsSaving(false);
     }
-  }, [budgetMinutes, clearSessionDraft, createSession, defaultName, existingSession, name, renameSession, requirePurchase, saveSessionDraft, selected, updateSessionVideos, pool]);
+  }, [budgetMinutes, clearSessionDraft, createSession, defaultName, existingSession, name, requirePurchase, saveSessionDraft, selected, updateSessionVideos, pool]);
 
   const save = useCallback(async (): Promise<void> => {
     const done = feedback.capture();
@@ -236,13 +239,13 @@ export default function SessionBuilder() {
         {budgetMinutes === null ? <Text style={[type.bodySoft, { color: palette.danger }]}>Choose a whole number of minutes from 1 to 1440.</Text> : null}
 
       </View>
-      {selected.length ? (
-        <View style={styles.tray}>
-          <ProgrammeArtwork videos={selected.map((videoId) => pool.find((video) => video.id === videoId))} enter />
-          <Text style={styles.trayLabel}>Video order · {selected.length} selected</Text>
-          {selected.map((videoId, index) => {
-            const video = pool.find((candidate) => candidate.id === videoId);
-            return <PositionedRow transitionKey={selected.join(",")} key={videoId}><MotionView enter distance={16} duration={motion.reorder} style={styles.trayRow}>
+
+    </View>
+  );
+
+  const renderOrderedVideo = (videoId: string, index: number) => {
+    const video = mediaById.get(videoId);
+    return <View style={styles.trayMiddle}><PositionedRow transitionKey={selectionKey} key={videoId}><MotionView enter distance={16} duration={motion.reorder} style={styles.trayRow}>
               <Text style={styles.trayNumber}>{String(index + 1).padStart(2, "0")}</Text>
               <View style={styles.trayMedia}><MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" /><View style={styles.flex}><Text style={styles.trayTitle}>{video?.title ?? "Video details unavailable"}</Text><Text style={styles.duration}>{!isLongFormVideo(video) ? "Unavailable · remove or verify a 4+ minute video" : video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable"}</Text></View></View>
               <View style={styles.trayControls}>
@@ -250,29 +253,38 @@ export default function SessionBuilder() {
               <Pressable onPress={() => move(videoId, 1)} disabled={index === selected.length - 1 || isSaving} accessibilityState={{ disabled: index === selected.length - 1 || isSaving }} style={[styles.trayControl, (index === selected.length - 1 || isSaving) && styles.rowDisabled]} accessibilityRole="button" accessibilityLabel={`Move ${video?.title ?? "video"} later`}><ChevronDown size={18} color={palette.inkSoft} /></Pressable>
               <Pressable onPress={() => toggle(videoId)} disabled={isSaving} style={styles.trayControl} accessibilityRole="button" accessibilityLabel={`Remove ${video?.title ?? "video"} from draft`}><X size={18} color={palette.danger} /></Pressable>
               </View>
-            </MotionView></PositionedRow>;
-          })}
-          <MotionView changeKey={durationSummary} distance={4}><Text style={styles.trayFoot}>{durationSummary} of video in your plan</Text></MotionView>
-        </View>
-      ) : null}
-      <Text style={styles.pickLabel}>Choose videos</Text>
-      <TextField containerStyle={styles.searchField} leading={<Search size={18} color={palette.inkMuted} />} value={search} onChangeText={setSearch} placeholder="Search titles or sources" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search session videos" autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
-    </View>
-  );
+            </MotionView></PositionedRow></View>;
+  };
+  const sections = [
+    ...(selected.length ? [{ key: "ordered", data: selected }] : []),
+    { key: "candidates", data: filteredPool.map(video => video.id) },
+  ];
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={headerHeight}>
-      <FlatList<Video>
+      <SectionList<string, { key: string; data: string[] }>
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        data={hydratedProfile === activeProfileId ? filteredPool : []}
-        keyExtractor={(video) => video.id}
+        sections={sections}
+        stickySectionHeadersEnabled={false}
+        keyExtractor={(videoId) => videoId}
         ListHeaderComponent={header}
-        ListEmptyComponent={<EmptyState title={search.trim() ? "No matching videos" : "No videos to choose yet"} body={search.trim() ? "Try another title or source." : "Save a few videos from Today, then build a session from them."} action={search.trim() ? undefined : { label: "Open Today", onPress: openToday }} />}
-        renderItem={({ item }) => {
-          const isSelected = selected.includes(item.id);
-          const order = selected.indexOf(item.id) + 1;
+        renderSectionHeader={({ section }) => section.key === "ordered" ? <View style={styles.trayTop}>
+          <ProgrammeArtwork videos={selected.map(id => mediaById.get(id))} enter />
+          <Text style={styles.trayLabel}>Video order · {selected.length} selected</Text>
+        </View> : <View>
+          <Text style={styles.pickLabel}>Choose videos</Text>
+          <TextField containerStyle={styles.searchField} leading={<Search size={18} color={palette.inkMuted} />} value={search} onChangeText={setSearch} placeholder="Search titles or sources" placeholderTextColor={palette.inkMuted} accessibilityLabel="Search session videos" autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
+        </View>}
+        renderSectionFooter={({ section }) => section.key === "ordered" ? <View style={styles.trayBottom}>
+          <MotionView changeKey={durationSummary} distance={4}><Text style={styles.trayFoot}>{durationSummary} of video in your plan</Text></MotionView>
+        </View> : !filteredPool.length ? <EmptyState title={search.trim() ? "No matching videos" : "No videos to choose yet"} body={search.trim() ? "Try another title or source." : "Save a few videos from Today, then build a session from them."} action={search.trim() ? undefined : { label: "Open Today", onPress: openToday }} /> : null}
+        renderItem={({ item: videoId, index, section }) => {
+          if (section.key === "ordered") return renderOrderedVideo(videoId, index);
+          const item = mediaById.get(videoId)!;
+          const order = positions.get(item.id) ?? 0;
+          const isSelected = order > 0;
           const isDisabled = selected.length >= PRODUCT_LIMITS.sessionDraftMaxItems && !isSelected;
           return (
             <Pressable
@@ -352,7 +364,9 @@ function createStyles(palette: FramePalette, type: FrameType) {
     saveText: { ...type.label, color: palette.accent, flexShrink: 1 },
     beginBtn: { flexGrow: 1, flexBasis: 140, paddingVertical: spacing.sm, minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: palette.accentDeep, paddingHorizontal: spacing.lg, justifyContent: "center", borderRadius: radii.control },
     beginText: { flexShrink: 1, color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 14 },
-    tray: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
+    trayTop: { marginTop: spacing.lg, padding: spacing.md, borderTopLeftRadius: radii.card, borderTopRightRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderBottomWidth: 0, borderColor: palette.borderSoft },
+    trayMiddle: { paddingHorizontal: spacing.md, backgroundColor: palette.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: palette.borderSoft },
+    trayBottom: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderBottomLeftRadius: radii.card, borderBottomRightRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderTopWidth: 0, borderColor: palette.borderSoft },
     trayLabel: { ...type.caption, color: palette.accent },
     trayRow: { minHeight: 48, flexDirection: "row", flexWrap: "wrap", paddingVertical: spacing.sm, alignItems: "center", gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
     trayNumber: { ...type.caption, color: palette.accent, width: 24 },

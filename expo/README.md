@@ -12,7 +12,7 @@ bun install
 bun run start-web
 ```
 
-This is the full-access BYOK edition. Start scripts use standard Expo tooling. Configure YouTube and optional Gemini keys inside the native app; see [BYOK setup and security](docs/BYOK.md). Google subscription import additionally requires platform OAuth client configuration.
+This is the full-access BYOK edition. Start scripts use standard Expo tooling. Configure YouTube and optional Gemini keys inside the native app; see [BYOK setup and security](docs/BYOK.md). Google account sign-in and subscription import are retired; add sources by channel link or @handle.
 
 For the native development server:
 
@@ -20,7 +20,7 @@ For the native development server:
 bun run start
 ```
 
-A web preview can help review layout and interaction, but native playback, secure key storage, authentication, and device behavior require their own compatible builds and acceptance checks.
+A web preview can help review layout and interaction, but native playback, secure key storage, Owner PIN controls, and device behavior require their own compatible builds and acceptance checks.
 
 For hosting the browser preview, see the [Render deployment guide](docs/RENDER.md) and the root `render.yaml`.
 
@@ -31,6 +31,10 @@ bun run verify
 ```
 
 This runs the configured typecheck, lint, and test commands. The [native acceptance plan](docs/SMOKE_TEST.md) remains a separate release requirement.
+
+Last verified November 20, 2026: **506 passing tests, 3960 assertions across 97 files**, passing TypeScript and zero lint errors (one existing generated-file warning). [The latest technical review](docs/TECHNICAL_CRITIQUE_2026-11-20.md) records the session-completion and timer-recovery fixes and their regression coverage.
+
+Open `/welcome-preview` in the local web app to review onboarding. Its research animations, phone demonstration, interest selection and final discovery reveal are part of the current source. Provider-backed results require working keys; a browser demonstration is not native acceptance evidence.
 
 ## Find your way around
 
@@ -46,3 +50,5 @@ The app began with Rork tooling. This guide describes the actual project rather 
 ## Android sideload
 
 Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.
+
+The existing **1.0.0 / build 4 APK predates the current source**. Allocate a new versionCode before packaging these updates; do not overwrite the old artifact with different code under the same build number. See [release status](docs/RELEASE_CANDIDATE.md) for the exact artifact identity and outstanding native/live-provider checks.

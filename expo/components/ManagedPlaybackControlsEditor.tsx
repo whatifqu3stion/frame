@@ -1,10 +1,11 @@
+import ChoiceOption from "@/components/ChoiceOption";
 import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { useFeedback } from "@/hooks/useFeedback";
 import MotionView from "@/components/motion/MotionView";
 import { PauseCircle } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { StyleSheet, Switch, View } from "react-native";
 import ClockTimePicker from "@/components/ClockTimePicker";
 import { scheduleSummary } from "@/domain/scheduleSummary";
 import { INDEFINITE_PAUSE, MAX_SESSION_LIMIT_MINUTES, MAX_SESSION_BREAK_MINUTES } from "@/domain/playbackControls";
@@ -16,6 +17,12 @@ type Props = { value: ManagedPlaybackControls; onChange: (value: ManagedPlayback
 
 export default function ManagedPlaybackControlsEditor({ value, onChange, onValidityChange }: Props) {
   const touch = useFeedback();
+  const initialPause = useRef(value.pausedUntil);
+  const [hourPause, setHourPause] = useState<number | null>(null);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0);
+  const tomorrowAt = tomorrow.getTime();
+  const pendingPause = value.pausedUntil !== initialPause.current;
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const [invalidTimes, setInvalidTimes] = useState<Record<string, boolean>>({});
@@ -53,27 +60,25 @@ export default function ManagedPlaybackControlsEditor({ value, onChange, onValid
       <Text style={styles.title} accessibilityRole="header">Schedule summary</Text>
       <Text style={styles.body} accessibilityLiveRegion="polite">{scheduleSummary(value)}</Text>
       <View style={styles.pauseCard}>
-        <PauseCircle size={19} color={palette.active} /><View style={styles.flex}><Text style={styles.title}>Pause Frame</Text><Text style={styles.body}>{pauseLabel}</Text></View>
+        <PauseCircle size={19} color={palette.active} /><View style={styles.flex}><Text style={styles.title}>Pause Frame</Text><Text style={styles.body}>{pendingPause ? `After saving: ${pauseLabel.toLowerCase()}` : pauseLabel}</Text></View>
       </View>
       <Text style={styles.body}>Save to apply or end a pause.</Text>
-      <View style={styles.pauseActions}>
-        <PauseButton label="1 hour" onPress={() => { onChange({ ...value, pausedUntil: Date.now() + 60 * 60_000 }); touch.selection(); }} styles={styles} />
-        <PauseButton label="Until 7 am tomorrow" onPress={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(7, 0, 0, 0); if (value.pausedUntil !== tomorrow.getTime()) { onChange({ ...value, pausedUntil: tomorrow.getTime() }); touch.selection(); } }} styles={styles} />
-        <PauseButton label="Until resumed" onPress={() => { if (value.pausedUntil === INDEFINITE_PAUSE) return; onChange({ ...value, pausedUntil: INDEFINITE_PAUSE }); touch.selection(); }} styles={styles} />
-        {value.pausedUntil !== null ? <PauseButton label="Resume when saved" onPress={() => { onChange({ ...value, pausedUntil: null }); touch.selection(); }} styles={styles} /> : null}
+      <View style={styles.pauseActions} accessibilityRole="radiogroup" accessibilityLabel="Pause Frame after saving">
+        <ChoiceOption label="1 hour" selected={hourPause !== null && value.pausedUntil === hourPause} onPress={() => { if (hourPause !== null && value.pausedUntil === hourPause) return; const until = Date.now() + 60 * 60_000; setHourPause(until); onChange({ ...value, pausedUntil: until }); touch.selection(); }} />
+        <ChoiceOption label="Until 7 a.m. tomorrow" selected={value.pausedUntil === tomorrowAt} onPress={() => { if (value.pausedUntil === tomorrowAt) return; onChange({ ...value, pausedUntil: tomorrowAt }); touch.selection(); }} />
+        <ChoiceOption label="Until resumed" selected={value.pausedUntil === INDEFINITE_PAUSE} onPress={() => { if (value.pausedUntil === INDEFINITE_PAUSE) return; onChange({ ...value, pausedUntil: INDEFINITE_PAUSE }); touch.selection(); }} />
+        <ChoiceOption label="Not paused" selected={value.pausedUntil === null} onPress={() => { if (value.pausedUntil === null) return; onChange({ ...value, pausedUntil: null }); touch.selection(); }} />
       </View>
     </View>
   );
 }
 
 function ControlSection({ title, body, enabled, onToggle, styles, children }: { title: string; body: string; enabled: boolean; onToggle: (enabled: boolean) => void; styles: ReturnType<typeof createStyles>; children?: React.ReactNode }) {
-  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch value={enabled} onValueChange={onToggle} accessibilityLabel={title} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
+  const { palette } = useFrameTheme();
+  return <View style={styles.section}><View style={styles.sectionHeader}><View style={styles.flex}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text></View><Switch trackColor={{ false: palette.surfaceDim, true: palette.active }} thumbColor={palette.surfaceHigh} ios_backgroundColor={palette.surfaceDim} value={enabled} onValueChange={onToggle} accessibilityLabel={title} /></View>{enabled ? <MotionView enter>{children}</MotionView> : null}</View>;
 }
 function NumberField({ label, value, onChange, styles }: { label: string; value: number; onChange: (text: string) => void; styles: ReturnType<typeof createStyles> }) {
   return <View style={styles.flex}><Text style={styles.fieldLabel}>{label}</Text><TextField value={String(value)} onChangeText={onChange} keyboardType="number-pad" maxLength={3} containerStyle={{ marginTop: spacing.sm }} style={styles.numberInput} accessibilityLabel={label} /></View>;
-}
-function PauseButton({ label, onPress, styles }: { label: string; onPress: () => void; styles: ReturnType<typeof createStyles> }) {
-  return <Pressable onPress={onPress} style={styles.pauseButton} accessibilityRole="button"><Text style={styles.pauseButtonText}>{label}</Text></Pressable>;
 }
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({

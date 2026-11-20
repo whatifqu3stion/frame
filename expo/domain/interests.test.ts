@@ -54,6 +54,16 @@ describe("Round 2B interest compatibility", () => {
     expect(selected).toEqual(canonicalIds);
   });
 
+  test("eight custom additions leave library topics available and legacy topics removable", () => {
+    const ids = Array.from({ length: 9 }, (_, i) => createCustomInterest(`Topic ${i}`).id);
+    const valid = new Set([...ids, "history"]);
+    const eight = ids.slice(0, 8);
+    expect(toggleInterestId(eight.slice(0, 7), ids[7], valid)).toEqual(eight);
+    expect(toggleInterestId(eight, ids[8], valid)).toEqual(eight);
+    expect(toggleInterestId(eight, "history", valid)).toEqual([...eight, "history"]);
+    expect(toggleInterestId(ids, ids[8], valid)).toEqual(eight);
+  });
+
   test("custom topics round-trip through profile IDs with no count cap and retain specific Unicode labels", () => {
     const precise = createCustomInterest("  日本の木工   joinery  ");
     expect(interestTopicFromId(precise.id)?.name).toBe("日本の木工 joinery");

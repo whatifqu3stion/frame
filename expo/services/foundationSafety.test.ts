@@ -46,11 +46,11 @@ describe("Round 1 network safety", () => {
     expect(fetchCount).toBe(0);
   });
 
-  test("Google import remains selective and does no work until the user opens it", async () => {
+  test("retired Google import and automatic following stay disabled without network work", async () => {
     let fetchCount = 0;
     globalThis.fetch = (async () => { fetchCount += 1; throw new Error("unexpected fetch"); }) as typeof fetch;
     expect(isAutomaticGoogleFollowingEnabled()).toBeFalse();
-    expect(isSelectiveGoogleImportEnabled()).toBeTrue();
+    expect(isSelectiveGoogleImportEnabled()).toBeFalse();
     expect(fetchCount).toBe(0);
   });
 });

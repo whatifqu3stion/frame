@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Text from "@/components/FrameText";
 import InlineHelp from "@/components/InlineHelp";
 import Heading from "@/components/Heading";
@@ -25,6 +26,8 @@ export default function InterestChoices() {
 
 type GroupedInterestChoicesProps = {
   headingLevel?: 2 | 3;
+  customLast?: boolean;
+  customAction?: ReactNode;
   selectedIds: readonly string[];
   onToggle(id: string): void;
   busy?: boolean;
@@ -33,15 +36,17 @@ type GroupedInterestChoicesProps = {
   testIDPrefix?: string;
 };
 
-export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle, busy = false, collapsible = false, accessibilityLabel, testIDPrefix }: GroupedInterestChoicesProps) {
+export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle, busy = false, collapsible = false, accessibilityLabel, testIDPrefix, customLast = false, customAction }: GroupedInterestChoicesProps) {
   const { type } = useFrameTheme();
   const { width, fontScale } = useWindowDimensions();
   const singleColumn = width < 360 || fontScale > 1.3;
-  return <View style={collapsible ? undefined : styles.groups} accessibilityLabel={accessibilityLabel}>
-    {selectedIds.some((id) => id.startsWith("custom:")) ? <View>
-      <Heading level={headingLevel} style={type.heading}>Your specific interests</Heading>
+  const customSection = (selectedIds.some((id) => id.startsWith("custom:")) || customAction) ? <View>
+      <Heading level={headingLevel} style={customLast ? type.caption : type.heading}>Your specific interests</Heading>
       {selectedIds.filter((id) => id.startsWith("custom:")).map((id) => <ChoiceOption key={id} label={interestTopicFromId(id)?.name ?? "Interest"} selected role="checkbox" variant="ruled" onPress={() => onToggle(id)} disabled={busy} accessibilityHint="Remove this interest from future weekly selections." />)}
-    </View> : null}
+      {customAction}
+    </View> : null;
+  return <View style={collapsible ? undefined : styles.groups} accessibilityLabel={accessibilityLabel}>
+    {!customLast && customSection}
     {INTEREST_GROUPS.map((group) => {
       const topics = INTEREST_LIBRARY.filter((topic) => (group.ids as readonly string[]).includes(topic.id));
       const count = topics.filter((topic) => selectedIds.includes(topic.id)).length;
@@ -52,6 +57,7 @@ export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle
         ? <InlineHelp key={group.label} label={`${group.label}${count ? ` · ${count} selected` : ""}`}>{choices}</InlineHelp>
         : <View key={group.label}><Heading level={headingLevel} style={type.heading}>{group.label}</Heading>{choices}</View>;
     })}
+    {customLast && <View style={{ marginTop: spacing.md }}>{customSection}</View>}
   </View>;
 }
 

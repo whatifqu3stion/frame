@@ -19,7 +19,7 @@ type Action = { label: string; onPress(): void; prominentAdd?: boolean; testID?:
 
 export function CollectionAction({ label, onPress, prominentAdd, testID }: Action) {
   const { palette, type } = useFrameTheme();
-  return <PrimaryAction depth={palette.primaryButtonDepth} onPress={onPress} testID={testID}
+  return <PrimaryAction textured depth={palette.primaryButtonDepth} onPress={onPress} testID={testID}
     style={({ pressed }) => [styles.button, prominentAdd && styles.prominent, { backgroundColor: palette.accentDeep }, pressed && styles.pressed]}>
     {prominentAdd && <Plus size={22} color={palette.onDark} />}
     <Text style={[type.label, prominentAdd && styles.prominentLabel, { color: palette.onDark }]}>{label}</Text>

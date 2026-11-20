@@ -14,7 +14,7 @@ import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Copy, Pencil, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
@@ -22,6 +22,7 @@ import EmptyState from "@/components/EmptyState";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
+import { loadSessionMetadata } from "@/services/sessionMetadata";
 import { todayRepository } from "@/repositories/todayRepository";
 import { expireVideo, isMetadataCurrent } from "@/domain/metadataRetention";
 import { sessionRuntime } from "@/domain/sessionFlow";
@@ -39,7 +40,7 @@ export default function SavedSessionScreen() {
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
     queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""], networkMode: "always",
-    queryFn: async () => Promise.all((session?.orderedVideoIds ?? []).map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
+    queryFn: ({ signal }) => loadSessionMetadata(session?.orderedVideoIds ?? [], (videoId) => todayRepository.getVideo(activeProfileId, videoId), signal),
     enabled: Boolean(session),
   });
   const recovered = useQuery<Record<string, Video>>({ queryKey: ["recovered-library", activeProfileId], queryFn: skipToken, enabled: false });
@@ -89,7 +90,9 @@ export default function SavedSessionScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={[boundedCollection, { padding: spacing.page, paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: insets.bottom + spacing.xxl }]} showsVerticalScrollIndicator={false}>
+    <FlatList<string> key={`${activeProfileId}:${id}`} data={session.orderedVideoIds} keyExtractor={(videoId) => videoId}
+      initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
+      ListHeaderComponent={<>
       <MotionView enter={assembled === "1"} onPresented={() => { if (assembled === "1") router.setParams({ assembled: undefined }); }} duration={motion.state} style={styles.programme}>
       <ProgrammeGrain />
       <ProgrammeArtwork videos={session.orderedVideoIds.map((videoId) => videoMap.get(videoId))} enter={assembled === "1"} editorial />
@@ -124,10 +127,11 @@ export default function SavedSessionScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.list}>
-        {session.orderedVideoIds.length === 0 ? (
-          <EmptyState title="This session is empty" body={`Edit it to add videos and choose a duration.`} />
-        ) : session.orderedVideoIds.map((videoId, index) => {
+      <View style={styles.list} />
+
+</>}
+      style={styles.screen} contentContainerStyle={[boundedCollection, { padding: spacing.page, paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: insets.bottom + spacing.xxl }]} showsVerticalScrollIndicator={false}
+      renderItem={({ item: videoId, index }) => {
           const video = videoMap.get(videoId);
           return (
             <View key={videoId}><View style={styles.row}>
@@ -143,11 +147,9 @@ export default function SavedSessionScreen() {
             <VideoDetailsRecovery key={`${activeProfileId}:${videoId}`} videoId={videoId} expired={!isMetadataCurrent(video?.fetchedAt, Date.now())} />
             </View>
           );
-        })}
-      </View>
-
-
-    </ScrollView>
+      }}
+      ListEmptyComponent={<EmptyState title="This session is empty" body="Edit it to add videos and choose a duration." />}
+    />
   );
 }
 

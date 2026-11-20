@@ -11,18 +11,22 @@ function item(id: string, extra: Partial<TodaySnapshotItem> = {}): TodaySnapshot
 }
 describe("onboarding first value", () => {
   test("next actions name their destination and allow setup without optional choices", () => {
-    expect(onboardingNextAction("welcome", 0, false)).toEqual({ label: "Set up connections", finish: false, target: "keys" });
-    expect(onboardingNextAction("keys", 0, false)).toEqual({ label: "Choose my interests", finish: false });
-    expect(onboardingNextAction("keys", 0, false, 0, "source")).toEqual({ label: "Back to your source", finish: false, target: "source" });
-    expect(onboardingNextAction("keys", 0, false, 0, "your-frame")).toEqual({ label: "Back to my picks", finish: false, target: "your-frame" });
-    expect(onboardingNextAction("source", 0, false)).toEqual({ label: "See my picks", finish: false });
-    expect(onboardingNextAction("source", 0, false, 0, null, true)).toEqual({ label: "Finish for now", finish: true });
-    expect(onboardingNextAction("source", 1, false, 0, null, true)).toEqual({ label: "See my selection", finish: false });
-    expect(onboardingNextAction("source", 0, true, 0, null, true)).toEqual({ label: "Preview selection", finish: false });
-    expect(onboardingNextAction("your-frame", 0, false)).toEqual({ label: "Explore Sources", finish: true });
+    expect(onboardingNextAction("welcome", 0, false)).toEqual({ label: "See how Frame works", finish: false, target: "contrast" });
+    expect(onboardingNextAction("keys", 0, false)).toEqual({ label: "Continue", finish: false, target: "study" });
+    expect(onboardingNextAction("keys", 0, false, "source")).toEqual({ label: "Back to your source", finish: false, target: "source" });
+    expect(onboardingNextAction("keys", 0, false, "your-frame")).toEqual({ label: "Back to my picks", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("study", 0, false).target).toBe("intentions");
+    expect(onboardingNextAction("intentions", 0, false).target).toBe("recall");
+    expect(onboardingNextAction("recall", 0, false).target).toBe("welcome");
+    expect(onboardingNextAction("contrast", 0, false).target).toBe("source");
+    expect(onboardingNextAction("source", 0, false).target).toBe("bespoke");
+    expect(onboardingNextAction("bespoke", 0, false)).toEqual({ label: "See my discoveries", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("source", 0, false, null, true)).toEqual({ label: "Finish for now", finish: true });
+    expect(onboardingNextAction("source", 1, false, null, true)).toEqual({ label: "See my selection", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("source", 0, true, null, true)).toEqual({ label: "Preview selection", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("your-frame", 0, false)).toEqual({ label: "Open Today", finish: true });
     expect(onboardingNextAction("your-frame", 1, false)).toEqual({ label: "Open Today", finish: true });
-    expect(onboardingNextAction("your-frame", 1, false, 1)).toEqual({ label: "Open Saved", finish: true });
-    expect(onboardingNextAction("your-frame", 1, true, 1)).toEqual({ label: "Back to Settings", finish: true });
+    expect(onboardingNextAction("your-frame", 1, true)).toEqual({ label: "Open Today", finish: true });
   });
   test("interest picks use verified long-form metadata without claiming Today membership", () => {
     const pick: WeeklyPickSourceSuggestion = { provider: "youtube", providerSourceId: "creator", displayName: "An artist", description: "", thumbnailUrl: null, handle: null, fetchedAt: now, interestId: "design", publicationPeriod: { start: "2026-09-28", end: "2026-10-04" }, recommendationReason: null, featuredMedia: { provider: "youtube", providerMediaId: "abcdefghijk", title: "A studio visit", description: "", thumbnailUrl: null, durationSeconds: 560, publishedAt: null, isLivestream: false, isUpcomingPremiere: false } };
@@ -47,13 +51,9 @@ describe("onboarding first value", () => {
     }
     expect(resolvedOnboardingFilm({ ...resolved, video: undefined }, "owner", now)).toBeNull();
   });
-  test("ends in content when sources exist, and a useful starting point otherwise", () => {
-    expect(onboardingDestination(2, false)).toBe("/(tabs)");
-    expect(onboardingDestination(0, false)).toBe("/(tabs)/sources");
-    expect(onboardingDestination(0, true)).toBe("/(tabs)/settings");
-    expect(onboardingDestination(2, true)).toBe("/(tabs)/settings");
-    expect(onboardingDestination(2, false, 1)).toBe("/(tabs)/saved");
-    expect(onboardingDestination(2, true, 1)).toBe("/(tabs)/settings");
+  test("completing or replaying setup lands on Today and scopes discovery to its viewer", () => {
+    expect(onboardingDestination("owner", false)).toBe("/(tabs)");
+    expect(onboardingDestination("owner", true)).toEqual({ pathname: "/(tabs)", params: { picksFor: "owner" } });
   });
   test("keeps a just-saved card visible without bringing back previously handled videos", () => {
     const result = onboardingSelection([item("pending"), item("saved-now", { disposition: "saved", position: 1 }), item("saved-before", { disposition: "saved" }), item("dismissed", { disposition: "dismissed" })], "owner", new Set(["source"]), new Map(), now, new Set(["saved-now"]));

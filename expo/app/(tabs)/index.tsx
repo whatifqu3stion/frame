@@ -1,3 +1,6 @@
+import InterestPicksReveal from "@/components/InterestPicksReveal";
+import { interestPickWatchItem } from "@/domain/onboarding";
+import { useProviderKeyStatus } from "@/hooks/useProviderKeyStatus";
 import PrimaryAction from "@/components/PrimaryAction";
 import CollectionPrompt, { CollectionAction } from "@/components/CollectionPrompt";
 import Text from "@/components/FrameText";
@@ -10,7 +13,7 @@ import MotionView from "@/components/motion/MotionView";
 import PositionedRow from "@/components/motion/PositionedRow";
 import { useFeedback } from "@/hooks/useFeedback";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, CloudOff, RotateCcw, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { AccessibilityInfo, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -45,7 +48,10 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { prefs, activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching, sourcesError, refreshLibrary } = useApp();
+  const { prefs, interests, activeProfileId, activeProfile, followedChannels, sourcesLoading, sessions, saveVideo, updateSessionVideos, createSession, requirePurchase, getPlaybackAllowance, getManagedContentOverview, ready, profileSwitching, sourcesError, refreshLibrary } = useApp();
+  const { picksFor } = useLocalSearchParams<{ picksFor?: string }>();
+  const keyStatus = useProviderKeyStatus();
+  const scroll = useRef<ScrollView>(null);
   const [clock, setClock] = useState<number>(Date.now());
   const actionLock = useRef(false);
   const handledHere = useRef(false);
@@ -78,24 +84,26 @@ export default function TodayScreen() {
     const approved = new Set(managedOverview.approvedSources.map((source) => source.id));
     return followedChannels.filter((source) => approved.has(source.id)).map((source) => source.id);
   }, [activeProfile?.role, followedChannels, managedOverview]);
-  const sourceIdentity = sourceIds.join(",");
-  const queryKey = useMemo(() => ["today", activeProfileId, period.key] as const, [activeProfileId, period.key]);
+  const sourceIdentity = [...sourceIds].sort().join(",");
+  const queryKey = useMemo(() => ["today", activeProfileId, period.key, sourceIdentity] as const, [activeProfileId, period.key, sourceIdentity]);
   const rulesQuery = useQuery({ queryKey: ["today-rules", activeProfileId], networkMode: "always", queryFn: () => listTodaySourceRules(activeProfileId), enabled: ready, staleTime: Infinity });
   const rules = useMemo<Map<string, TodaySourceRule>>(() => new Map((rulesQuery.data ?? []).map((rule) => [rule.sourceId, rule])), [rulesQuery.data]);
   const sourcesReady = ready && !sourcesLoading && !sourcesError && (activeProfile?.role !== "managed" || managedContentQuery.isSuccess);
   const todayQuery = useQuery({
     queryKey,
     networkMode: "always",
-    queryFn: () => todayService.load({ maxItems: prefs.todayVideoCount, profileId: activeProfileId, followedSourceIds: sourceIds, now: clock }),
+    queryFn: () => todayService.load({ maxItems: prefs.todayVideoCount, profileId: activeProfileId, followedSourceIds: sourceIds, periodAt: clock }),
     enabled: sourcesReady,
     retry: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
   const snapshot = todayQuery.data?.snapshot ?? null;
-  const visible = useMemo(() => visibleTodayItems(snapshot?.items ?? [], new Set(sourceIds), rules, clock), [clock, rules, snapshot?.items, sourceIds]);
+  // Query completion can precede the next minute tick. Evaluate new items at read time.
+  const readAt = Date.now();
+  const visible = visibleTodayItems(snapshot?.items ?? [], new Set(sourceIds), rules, readAt);
   const nextReturn = nextSnoozedReturn(snapshot?.items ?? [], clock);
-  const hasExpiredPending = snapshot?.items.some((item) => ["pending", "snoozed"].includes(item.disposition) && !isMetadataCurrent(item.fetchedAt, clock)) ?? false;
+  const hasExpiredPending = snapshot?.items.some((item) => ["pending", "snoozed"].includes(item.disposition) && !isMetadataCurrent(item.fetchedAt, readAt)) ?? false;
 
   useEffect(() => {
     dispatchFeedback({ type: "clear" });
@@ -112,13 +120,13 @@ export default function TodayScreen() {
     if (!sourcesReady || !checkKey || checkedPeriodRef.current === checkKey) return;
     checkedPeriodRef.current = checkKey;
     const expectedProfile = activeProfileId;
-    void todayService.load({ maxItems: prefs.todayVideoCount, profileId: expectedProfile, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: true }).then((result) => {
+    void todayService.load({ maxItems: prefs.todayVideoCount, profileId: expectedProfile, followedSourceIds: sourceIds, refreshExisting: true }).then((result) => {
       if (activeProfileRef.current === expectedProfile) queryClient.setQueryData(queryKey, result);
     }).catch(() => {});
   }, [activeProfileId, period.key, queryClient, queryKey, snapshot, sourceIdentity, sourceIds, sourcesReady, prefs.todayVideoCount]);
 
   const reloadLocal = useCallback(async (): Promise<void> => {
-    const result = await todayService.load({ maxItems: prefs.todayVideoCount, profileId: activeProfileId, followedSourceIds: sourceIds, now: Date.now() });
+    const result = await todayService.load({ maxItems: prefs.todayVideoCount, profileId: activeProfileId, followedSourceIds: sourceIds });
     if (activeProfileRef.current === activeProfileId) queryClient.setQueryData(queryKey, result);
   }, [activeProfileId, queryClient, queryKey, sourceIds, prefs.todayVideoCount]);
 
@@ -127,12 +135,12 @@ export default function TodayScreen() {
     setIsRefreshing(true);
     const expectedProfile = activeProfileId;
     try {
-      const result = await todayService.load({ maxItems: prefs.todayVideoCount, profileId: expectedProfile, followedSourceIds: sourceIds, now: Date.now(), refreshExisting: Boolean(snapshot) });
+      const result = await todayService.load({ maxItems: prefs.todayVideoCount, profileId: expectedProfile, followedSourceIds: sourceIds, refreshExisting: true });
       if (activeProfileRef.current === expectedProfile) queryClient.setQueryData(queryKey, result);
     } catch { notifyUser("Couldn’t refresh Today", "Check your connection and try again."); } finally {
       if (activeProfileRef.current === expectedProfile) setIsRefreshing(false);
     }
-  }, [activeProfileId, isRefreshing, queryClient, queryKey, snapshot, sourceIds, sourcesReady, prefs.todayVideoCount]);
+  }, [activeProfileId, isRefreshing, queryClient, queryKey, sourceIds, sourcesReady, prefs.todayVideoCount]);
 
   const handle = useCallback(async (item: TodaySnapshotItem, disposition: TodayDisposition, snoozedUntil: number | null = null): Promise<boolean> => {
     if (profileSwitching || activeProfileRef.current !== activeProfileId || item.profileId !== activeProfileId) return false;
@@ -273,6 +281,8 @@ export default function TodayScreen() {
   const status = isRefreshing ? "Refreshing…" : snapshot && isOffline ? "Offline · showing saved selection" : snapshot && (snapshot.freshness === "stale" || snapshot.freshness === "offline") ? "Showing saved selection · refresh delayed" : null;
   const hasOnlySnoozed = Boolean(snapshot && visible.length === 0 && nextReturn !== null);
   const initialLoading = rulesQuery.isLoading || (activeProfile?.role === "managed" && managedContentQuery.isLoading) || (!snapshot && (sourcesLoading || todayQuery.isLoading));
+  const showWeeklyPicks = sourcesReady && !profileSwitching && activeProfile?.role === "owner" && interests.length > 0
+    && (picksFor === activeProfileId || !sourceIds.length);
   let showOpenSources = sourceIds.length > 0;
   let content;
   if (initialLoading) content = <VideoFeedSkeleton variant="full" count={3} accessibilityLabel="Loading today’s videos" />;
@@ -285,8 +295,8 @@ export default function TodayScreen() {
       ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)
       : <StateBlock title="No selected videos yet" body="Request a video for the Owner to review." action="Request a video" onPress={() => router.push({ pathname: "/(tabs)/sources", params: { requestVideo: "1" } })} styles={styles} success />;
   } else if (sourceIds.length === 0) {
-    showOpenSources = true;
-    content = activeProfile?.role === "managed"
+    showOpenSources = !showWeeklyPicks;
+    content = showWeeklyPicks ? null : activeProfile?.role === "managed"
       ? <StateBlock title="No approved sources yet" body="Ask the Owner to add or approve a source in Settings → Profiles & viewing limits." styles={styles} />
       : <CollectionPrompt caption="Follow a source to see videos here." />;
   } else if (sourceIds.filter((id) => (rules.get(id)?.mutedUntil ?? 0) <= Date.now()).length > PRODUCT_LIMITS.sourceFeedMaxSources) {
@@ -297,17 +307,30 @@ export default function TodayScreen() {
   else if (hasOnlySnoozed) content = <StateBlock title="Snoozed for later" body={`Your next snoozed video returns ${new Date(nextReturn as number).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}.`} styles={styles} />;
   else if (hasExpiredPending) content = <StateBlock title="Details need refreshing" body="Some video details need updating. Refresh to try again. Your choices are saved." action={isRefreshing ? "Refreshing…" : "Refresh"} onPress={() => { void refresh(); }} busy={isRefreshing} styles={styles} />;
   else if (snapshot && snapshot.items.length > 0) content = <StateBlock gallery animateCompletion={handledHere.current} onPresented={() => { handledHere.current = false; }} title="You’re caught up" body="You’ve reached the end of today’s selection." styles={styles} success />;
+  else if (todayQuery.data?.state === "empty" && !snapshot) content = <StateBlock title="No matching videos yet" body={todayQuery.data.message ?? "Check again for recent uploads from your sources."} action={isRefreshing ? "Checking…" : "Check again"} onPress={() => { void refresh(); }} busy={isRefreshing} styles={styles} />;
   else if (snapshot) content = <StateBlock gallery title="No new videos today" body="There are no videos from your sources that match your settings today. You can open a source directly below." styles={styles} success />;
+  else if (activeProfile?.role === "owner" && keyStatus.isSuccess && keyStatus.data.available && !keyStatus.data.youtube) content = <StateBlock title="Connect YouTube" body="Use your YouTube key to load videos from the creators you follow." action="Connect YouTube" onPress={() => router.push("/settings/keys")} styles={styles} />;
   else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="Connect to the internet, then try again." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
   else if (todayQuery.data?.state === "no_cache") content = <StateBlock title="Your videos aren’t ready yet" body="Frame is still preparing videos from your sources. Try again later, or open a source directly below." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
-  else content = <StateBlock title="Today couldn’t load" body="Check your connection and try again. Your sources and saved videos are still here." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
+  else content = <StateBlock title="Today couldn’t load" body={todayQuery.data?.message ?? "Check your connection and try again. Your sources and saved videos are still here."} action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, bottomBarHeight) + Math.max(120, notice ? noticeHeight + spacing.lg : 0) }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
+      <ScrollView ref={scroll} contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, bottomBarHeight) + Math.max(120, notice ? noticeHeight + spacing.lg : 0) }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
         <View style={styles.page}>
           <ScreenHeader editorial compact={compactHeader} eyebrow="Today" title="Today" />
 
+          {showWeeklyPicks && <View style={styles.content}><InterestPicksReveal key={activeProfileId}
+            interestIds={interests.map(topic => topic.id)}
+            onChooseTopics={() => router.push("/settings/interests")}
+            onSetUpKeys={() => router.push("/settings/keys")}
+            onBrowse={() => scroll.current?.scrollTo({ y: 0, animated: false })}
+            onWatch={pick => {
+              if (!requirePurchase("library")) return;
+              const video = interestPickWatchItem(pick, activeProfileId, Date.now());
+              if (!video) { notifyUser("This pick is unavailable", "Its video details need to be refreshed."); return; }
+              router.push({ pathname: FRAME_PLAYBACK_ROUTE, params: { id: video.id, title: video.title, channelId: video.sourceId, channelTitle: video.sourceTitle, thumbnailUrl: video.thumbnailUrl, durationSeconds: String(video.durationSeconds), publishedAt: video.publishedAt, fetchedAt: String(video.fetchedAt), cachedMetadata: "1" } });
+            }} /></View>}
           {!initialLoading && activeProfile?.role !== "managed" && visible.length > 0 ? <Text style={styles.statusText} accessibilityLiveRegion="polite">{visible.length} {visible.length === 1 ? "video" : "videos"} in today’s selection</Text> : null}
           {status ? <View style={styles.status} accessibilityLiveRegion="polite">{isRefreshing ? <RotateCcw size={14} color={palette.inkMuted} /> : isOffline ? <CloudOff size={14} color={palette.inkMuted} /> : null}<Text style={styles.statusText}>{status}</Text></View> : null}
           {currentSession ? <Pressable onPress={() => router.push({ pathname: "/session/[id]", params: { id: currentSession.id } })} style={styles.boundaryRow} accessibilityRole="button"><View style={{ flex: 1 }}><Text style={styles.secondaryText}>Open {currentSession.name}</Text><Text style={styles.statusText}>Video {sessionPosition(currentSession) + 1} of {currentSession.orderedVideoIds.length}</Text></View><ArrowRight size={18} color={palette.active} /></Pressable> : null}

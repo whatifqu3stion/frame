@@ -1,16 +1,16 @@
 # Frame
 
-**Worth watching. At your pace.**
+**Great videos, minus the rabbit holes.**
 
-Frame is a mobile app for collecting videos from creators you choose and watching them in short, deliberate sessions.
+Frame is a React Native app for a quieter YouTube experience: discover worthwhile creators, keep a small daily selection, and watch on your own terms.
 
 The product question is simple: can a video app make it easier to find something worthwhile, keep it for later, and reach a satisfying stopping point?
 
-## Preview
+## Earlier prototype
 
 <img src="docs/previews/onboarding.jpg" alt="Frame onboarding with Technology selected and a bounded interest-selection workflow" width="320" />
 
-Interest selection in Frame's onboarding, rendered from the Expo web app at a phone-sized viewport. This is a local interface preview; native playback and real-device acceptance are separate checks.
+An October 2 onboarding prototype, rendered from Expo web at a phone-sized viewport. The current onboarding has since been rebuilt with animated research screens, an app demonstration, interest selection and a personalized video reveal. This image documents the earlier design, not the current release.
 
 [Capture notes](docs/previews/README.md) record the source revision and demo conditions.
 
@@ -21,16 +21,33 @@ Interest selection in Frame's onboarding, rendered from the Expo web app at a ph
 - **Saved:** a personal collection of videos to return to.
 - **Sessions:** an ordered viewing plan with an ending.
 - **Profiles:** separate collections and viewing boundaries, including Owner approval for Managed profiles.
+- **Viewing room:** a focused player with optional house-light transitions, viewing-time tracking and explicit next-video choices.
 
 Today is designed to stay stable during the day rather than refill as items are handled. The selection logic uses a 4 a.m. local reset, at most 12 videos, and at most two from each source.
 
 ## Current status
 
-**Active development project preparing for native acceptance testing.** The repository contains the mobile app, backend code, automated checks, and detailed release checklists.
+**Updated November 20, 2026.** The latest source on `codex/full-app-byok` includes the redesigned onboarding and Settings, textured editorial artwork, interest-based discovery, and playback/session recovery fixes.
+
+The latest verification passes **506 tests** and TypeScript, with **zero lint errors** and one existing generated-file warning. Regression coverage includes profile switching during playback, failed saves after leaving Watch, session-timer recovery, reset safety and batched metadata access. See the [technical review and completed fixes](expo/docs/TECHNICAL_CRITIQUE_2026-11-20.md).
+
+**The available Android build 4 is older than this source.** These updates have not yet been packaged into a new APK. The [release handoff](expo/docs/RELEASE_CANDIDATE.md) identifies the existing artifact and the remaining build/device checks.
 
 A source-level implementation or passing automated test does not establish that the native experience is ready to ship. Real-device visual, accessibility, motion, and playback checks remain part of the [acceptance plan](expo/docs/SMOKE_TEST.md).
 
-This branch is the full-access BYOK edition: no subscription tiers or paywalls. Owners configure their own YouTube and optional Gemini keys in Settings → Your API keys. See [BYOK setup and security](expo/docs/BYOK.md).
+This branch is the full-access BYOK edition: no subscription tiers or paywalls. Owners configure their own YouTube and optional Gemini keys in onboarding or Settings → YouTube & Gemini. Native keys are stored on the device using SecureStore. Gemini discovery uses the owner's provider account and may incur charges. Google account sign-in/subscription import is retired; add creators by channel link or @handle. See [BYOK setup and security](expo/docs/BYOK.md).
+
+## Run locally
+
+Requires Node.js and Bun:
+
+```sh
+cd expo
+bun install
+bun run start-web
+```
+
+Use `/welcome-preview` to review onboarding in the local web app, `bun run start` for native development, and `bun run verify` for TypeScript, lint and tests. See the [app development guide](expo/README.md) for native builds and preview limitations.
 
 ## Design decisions
 

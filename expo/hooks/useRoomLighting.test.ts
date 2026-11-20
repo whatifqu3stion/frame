@@ -45,9 +45,9 @@ function harness(initialWatching = false) {
     "@/constants/motion": { motion },
     "@/hooks/useReducedMotion": { useReducedMotion: () => reduced },
   };
-  const context = { exports: {} as { useRoomLighting(watching: boolean): Value }, require: (id: string) => modules[id] };
+  const context = { exports: {} as { useRoomLighting(watching: boolean, finished?: boolean, enabled?: boolean): Value }, require: (id: string) => modules[id] };
   runInNewContext(transpileModule(readFileSync(new URL("./useRoomLighting.ts", import.meta.url), "utf8"), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText, context);
-  const render = (watching: boolean) => context.exports.useRoomLighting(watching);
+  const render = (watching: boolean, finished = false, enabled = true) => context.exports.useRoomLighting(watching, finished, enabled);
   const value = render(initialWatching);
   calls.length = 0;
   return { value, calls, render, reduce: () => { reduced = true; }, background: () => { app.currentState = "background"; listeners.forEach(fn => fn("background")); }, foreground: () => { app.currentState = "active"; listeners.forEach(fn => fn("active")); }, dispose: () => cleanup?.(), listeners };
@@ -82,4 +82,23 @@ test("backgrounding settles; resuming and direct watch entry do not flash the li
   h.foreground(); h.render(true); expect(h.calls.length).toBe(1);
   h.dispose();
   const direct = harness(true); expect(direct.value.value).toBe(1); direct.dispose();
+});
+
+test("final lights rise from the current level and replay reverses an unfinished rise", () => {
+  const h = harness(true);
+  h.render(true, true);
+  expect(h.calls[0]).toMatchObject({ from: 1, toValue: 0, duration: motion.roomRise });
+  h.value.value = 0.5;
+  h.render(true, false);
+  expect(h.calls[1]).toMatchObject({ from: 0.5, toValue: 1, duration: motion.roomDim / 2 });
+  h.dispose();
+});
+
+test("disabling the cue fixes the room at its lit level through film and ending", () => {
+  const h = harness(true);
+  h.render(true, false, false);
+  h.render(true, true, false);
+  expect(h.value.value).toBe(0);
+  expect(h.calls).toHaveLength(0);
+  h.dispose();
 });
