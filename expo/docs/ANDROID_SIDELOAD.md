@@ -1,6 +1,6 @@
 # Personal Android build
 
-Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). The existing build 4 predates the current working source. Historical verification below does not certify a new candidate.
+Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). Build 5 packages the November 20 app updates. Historical build-1/build-2 verification below does not certify this candidate.
 
 Frame's sideload build is a standalone, release-mode APK. It bundles the app and fonts, uses the existing `app.rork.vabp4o345ww8b0akdpr7p` application ID, and needs neither Expo Go nor Metro. Internet remains necessary for YouTube playback and provider requests. Your YouTube and Gemini keys are entered during onboarding or in Settings → YouTube & Gemini and stored by native SecureStore.
 
@@ -15,7 +15,7 @@ export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 npm run android:apk
 ```
 
-For a **first installation on a new signing identity only**, add `-- --init-key`. The current workspace already has its private signing identity; do not regenerate it. The script fails instead of silently substituting Android's public debug key. It regenerates Android project configuration, applies private release signing, builds all configured Android architectures, and copies the result to `artifacts/Frame-<version>-<versionCode>.apk`. Allocate a new versionCode before the next release; do not overwrite build 4 with different source.
+For a **first installation on a new signing identity only**, add `-- --init-key`. The current workspace already has its private signing identity; do not regenerate it. The script fails instead of silently substituting Android's public debug key. It regenerates Android project configuration, applies private release signing, builds all configured Android architectures, and copies the result to `artifacts/Frame-<version>-<versionCode>.apk`. Allocate a new versionCode before the next release; do not overwrite a previously published build with different source.
 
 The generated `android/` project is disposable. Use this script for signed release builds; do not rely on the generated template's default signing. The script ignores `.env` and inherited `EXPO_PUBLIC_*` values except the two explicitly supported production Google OAuth client IDs. YouTube and Gemini API keys must never be build variables. Google account import is retired; following channels and BYOK discovery do not require OAuth setup.
 

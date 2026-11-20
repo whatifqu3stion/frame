@@ -51,4 +51,4 @@ The app began with Rork tooling. This guide describes the actual project rather 
 
 Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.
 
-The existing **1.0.0 / build 4 APK predates the current source**. Allocate a new versionCode before packaging these updates; do not overwrite the old artifact with different code under the same build number. See [release status](docs/RELEASE_CANDIDATE.md) for the exact artifact identity and outstanding native/live-provider checks.
+The signed **1.0.0 / build 5 APK** includes the November 20 app updates and is available from the [GitHub prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.5). It uses the same signing identity as build 4. See [release status](docs/RELEASE_CANDIDATE.md) for the source revision, checksum and outstanding native/live-provider checks.

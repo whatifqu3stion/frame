@@ -31,7 +31,7 @@ Today is designed to stay stable during the day rather than refill as items are 
 
 The latest verification passes **506 tests** and TypeScript, with **zero lint errors** and one existing generated-file warning. Regression coverage includes profile switching during playback, failed saves after leaving Watch, session-timer recovery, reset safety and batched metadata access. See the [technical review and completed fixes](expo/docs/TECHNICAL_CRITIQUE_2026-11-20.md).
 
-**The available Android build 4 is older than this source.** These updates have not yet been packaged into a new APK. The [release handoff](expo/docs/RELEASE_CANDIDATE.md) identifies the existing artifact and the remaining build/device checks.
+**Android build 5 packages these updates.** Download the signed APK from the [build 5 prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.5). It can update build 4 in place. The [release handoff](expo/docs/RELEASE_CANDIDATE.md) records its source revision, checksum, packaging verification and remaining device checks.
 
 A source-level implementation or passing automated test does not establish that the native experience is ready to ship. Real-device visual, accessibility, motion, and playback checks remain part of the [acceptance plan](expo/docs/SMOKE_TEST.md).
 
