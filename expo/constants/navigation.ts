@@ -32,5 +32,8 @@ export const PLAYER_AND_RECOVERY_ROUTES = [
   "/add-to-queue",
 ] as const;
 
-export const ONBOARDING_STEPS = ["keys", "study", "intentions", "recall", "welcome", "contrast", "source", "bespoke", "your-frame"] as const;
+/** The main setup stays short; the supporting story is an optional detour. */
+export const ONBOARDING_STEPS = ["keys", "welcome", "source", "your-frame"] as const;
+export const WHY_FRAME_STEPS = ["study", "intentions", "recall", "contrast"] as const;
+export type OnboardingStage = typeof ONBOARDING_STEPS[number] | typeof WHY_FRAME_STEPS[number];
 

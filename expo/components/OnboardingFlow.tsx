@@ -47,7 +47,7 @@ import { AccessibilityInfo, findNodeHandle, ActivityIndicator, Keyboard, Keyboar
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import OnboardingReveal from "@/components/OnboardingReveal";
 import MediaImage from "@/components/MediaImage";
-import { FRAME_PLAYBACK_ROUTE, ONBOARDING_STEPS } from "@/constants/navigation";
+import { FRAME_PLAYBACK_ROUTE, ONBOARDING_STEPS, WHY_FRAME_STEPS, type OnboardingStage } from "@/constants/navigation";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { resolvedOnboardingFilm, interestPickWatchItem, onboardingDestination, onboardingNextAction, type OnboardingWatchItem } from "@/domain/onboarding";
@@ -115,21 +115,22 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
   const scroll = useRef<ScrollView>(null);
   const progress = useRef<View>(null);
   const lastStage = useRef<string | null>(null);
-  const current = steps[step];
+  const [whyStep, setWhyStep] = useState<typeof WHY_FRAME_STEPS[number] | null>(null);
+  const current: OnboardingStage = whyStep ?? steps[step];
   const [finishedStudy, setFinishedStudy] = useState<string | null>(null);
   const studyDone = useCallback(() => setFinishedStudy(current), [current]);
   const studyPage = current === "study" || current === "intentions" || current === "recall";
   const presentationDone = studyPage ? finishedStudy === current : current === "welcome" ? welcomeComplete : current === "contrast" ? benefitsComplete : true;
   const { showCue, onActivity } = useOnboardingIdleCue(current, setup.ready && presentationDone && !busy);
-  const progressSteps = manual ? steps.filter(name => name !== "bespoke") : steps;
+  const progressSteps: readonly OnboardingStage[] = whyStep ? WHY_FRAME_STEPS : steps;
   const progressIndex = progressSteps.findIndex(name => name === current);
   const [finding, setFinding] = useState(false);
   const [searchStage, setSearchStage] = useState<DiscoveryRunSnapshot | null>(null);
   useEffect(() => { if (finding) scroll.current?.scrollTo({ y: 0, animated: false }); }, [finding]);
   const onFinding = useCallback((value: boolean) => { setFinding(value); onStepBusyChange(value); }, [onStepBusyChange]);
   const topicIds = interests.map((topic) => topic.id).sort();
-  const canGenerate = current === "bespoke" && !manual && Boolean(hasYouTubeKey && keyStatus.data?.gemini && topicIds.length);
-  const edition = useQuery({ queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), topicIds.join(",")], queryFn: () => weeklyEditionService.preview(topicIds, activeProfileId), enabled: current === "bespoke" && !manual && topicIds.length > 0, networkMode: "always", staleTime: Infinity, retry: false, refetchOnWindowFocus: false });
+  const canGenerate = current === "source" && !manual && Boolean(hasYouTubeKey && keyStatus.data?.gemini && topicIds.length);
+  const edition = useQuery({ queryKey: ["onboarding-picks", activeProfileId, weeklyDiscoveryPeriodKey(), topicIds.join(",")], queryFn: () => weeklyEditionService.preview(topicIds, activeProfileId), enabled: current === "source" && !manual && topicIds.length > 0, networkMode: "always", staleTime: Infinity, retry: false, refetchOnWindowFocus: false });
   const offerGeneration = canGenerate && (finding || edition.data?.reason === "configuration");
   useEffect(() => {
     const changed = lastStage.current !== null && lastStage.current !== current;
@@ -154,7 +155,7 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
   if (current === "keys" && manual && sourceInput && returnTo === "source") nextLabel = parseSourceInput(sourceInput).kind === "video" ? "Back to my video link" : "Back to my creator";
   if (openLinkedVideo) nextLabel = "Open linked video";
   const quietNext = !openLinkedVideo && (current === "keys" ? missingConnection && !returnTo : manual && current === "source" && followedChannels.length === 0);
-  const savingTopic = busy && current === "source" && !manual && !locked.current;
+  const savingTopic = busy && current === "source" && !manual && !locked.current && !finding;
   const showFooterBusy = busy && !savingTopic;
   const finish = async (target?: "/(tabs)/sources", video?: OnboardingWatchItem, requestedLink?: string) => {
     if (locked.current || sourceLock.current || profileSwitching || (video && (video.profileId !== activeProfileId || !requirePurchase("library")))) return;
@@ -198,7 +199,15 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
     if (feedback) onboardingTouch.capture()(feedback);
     scroll.current?.scrollTo({ y: 0, animated: false });
   };
+  const openWhy = (stage: typeof WHY_FRAME_STEPS[number] | null) => {
+    if (locked.current || sourceLock.current) return;
+    if (whyStep) setVisitedStorySteps(seen => new Set(seen).add(whyStep));
+    setWhyStep(stage);
+    onboardingTouch.capture()("selection");
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  };
   const goBack = () => {
+    if (whyStep) { openWhy(WHY_FRAME_STEPS[WHY_FRAME_STEPS.indexOf(whyStep) - 1] ?? null); return; }
     if (sampleReveal) { router.replace("/welcome-preview"); return; }
     if (current === "source" && manual && activeProfile?.role === "owner") {
       choosePath(false);
@@ -206,11 +215,15 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
     } else if (current === "your-frame" && manual) goTo(steps.indexOf("source"));
     else goTo(returnTo ? steps.indexOf(returnTo) : step - 1);
   };
-  useOnboardingBack(replay, step, () => locked.current || sourceLock.current, goBack, Boolean(returnTo));
+  useOnboardingBack(replay, step, () => locked.current || sourceLock.current, goBack, Boolean(returnTo || whyStep));
   const advance = () => {
+    if (whyStep) {
+      openWhy(WHY_FRAME_STEPS[WHY_FRAME_STEPS.indexOf(whyStep) + 1] ?? null);
+      return;
+    }
     if (openLinkedVideo && linkedVideo) void finish(undefined, undefined, linkedVideo);
     else if (nextAction.finish) void finish();
-    else goTo(nextAction.target ? steps.indexOf(nextAction.target) : step + 1);
+    else goTo(nextAction.target ? steps.indexOf(nextAction.target as typeof steps[number]) : step + 1);
   };
   if (!setup.ready) return <View style={[styles.screen, { justifyContent: "center" }]}><ActivityIndicator color={palette.active} accessibilityLabel="Restoring setup" /></View>;
   const connectionsHeader = current === "keys" && activeProfile?.role === "owner" ? <ConnectionHeader
@@ -225,9 +238,9 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
   return <KeyboardAvoidingView onTouchStart={onActivity} style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]} enabled={Platform.OS === "ios"} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={[styles.topRow, { paddingTop: insets.top + spacing.sm }]}>
       <OnboardingIdentity />
-      <Pressable disabled={busy} onPress={() => { void finish(); }} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>{replay ? "Close setup" : "Skip setup"}</Text></Pressable>
+      <Pressable disabled={busy} onPress={() => { if (whyStep) openWhy(null); else void finish(); }} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>{whyStep ? "Back to setup" : replay ? "Close setup" : "Skip setup"}</Text></Pressable>
     </View>
-    <View ref={progress} tabIndex={-1} style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel={`Setup progress: ${["API connections", "Autoplay study", "Short-video break study", "Video recall study", "Welcome", "How Frame works", manual ? "Video or creator" : "Your interests", "Personal interests", "Your first selection"][step]}`} accessibilityValue={{ min: 1, max: progressSteps.length, now: progressIndex + 1, text: `Step ${progressIndex + 1} of ${progressSteps.length}` }}>
+    <View ref={progress} tabIndex={-1} style={styles.progress} accessible accessibilityRole="progressbar" accessibilityLabel={`${whyStep ? "Why Frame" : "Setup"}: ${{ keys: "API connections", study: "Autoplay study", intentions: "Short-video break study", recall: "Video recall study", welcome: "Welcome", contrast: "A different way to watch", source: manual ? "Video or creator" : "Your interests", "your-frame": "Your first selection" }[current]}`} accessibilityValue={{ min: 1, max: progressSteps.length, now: progressIndex + 1, text: `Step ${progressIndex + 1} of ${progressSteps.length}` }}>
       {progressSteps.map((name, i) => <ProgressSegment key={name} complete={i <= progressIndex} />)}
     </View>
     {connectionsHeader && <View style={styles.connectionsHeader}>{connectionsHeader}</View>}
@@ -238,8 +251,7 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
       {(current === "intentions" || current === "recall") && <ShortVideoStudy onComplete={studyDone} key={current} topic={current} firstVisit={!visitedStorySteps.has(current)} />}
       {current === "contrast" && <ViewingContrast firstVisit={!visitedStorySteps.has(current)} onCompletionChange={setBenefitsComplete} />}
       {current === "welcome" && <WelcomeShowcase onCompletionChange={setWelcomeComplete} />}
-      {current === "source" && !manual && <TasteStep onChooseCreator={() => choosePath(true)} onBusyChange={onStepBusyChange} />}
-      {current === "bespoke" && (finding && searchStage ? <CuratingSelection stage={searchStage.stage} reviewedCount={searchStage.reviewedCount} startedAt={searchStage.startedAt} /> : <BespokeStep disabled={busy} onBusyChange={onStepBusyChange} />)}
+      {current === "source" && !manual && (finding && searchStage ? <CuratingSelection stage={searchStage.stage} reviewedCount={searchStage.reviewedCount} startedAt={searchStage.startedAt} /> : <TasteStep disabled={busy} onChooseCreator={() => choosePath(true)} onBusyChange={onStepBusyChange} />)}
       {current === "source" && manual ? <SourceStep onWatch={(video) => { void finish(undefined, video); }} finishing={busy} firstSelection={!replay} link={sourceInput} setLink={setSourceInput} onFollowed={() => goTo(steps.indexOf("your-frame"))} scrollToSource={() => scroll.current?.scrollTo({ y: 0, animated: false })} onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onStepBusyChange} /> : null}
       {showLinkedVideo && <Text style={type.bodySoft} accessibilityLiveRegion="polite">
         {youtubeConnected ? "Your linked video is ready to open." : "Frame has kept your video link. Connect YouTube to open it."}
@@ -253,8 +265,9 @@ function ProfileOnboarding({ replay, sampleReveal, loadingPreview }: { replay: b
       </> : null}
       </StepBody>
     </ScrollView>
+    {current === "welcome" && <Pressable disabled={busy} accessibilityRole="button" accessibilityHint="Optional research and the ideas behind Frame. Returns you to setup." onPress={() => openWhy("study")} style={styles.whyLink}><Text style={styles.link}>Why Frame?</Text></Pressable>}
     <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-      {step > 0 || returnTo ? <Pressable disabled={busy} onPress={goBack} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>Back</Text></Pressable> : null}
+      {step > 0 || returnTo || whyStep ? <Pressable disabled={busy} onPress={goBack} style={styles.textButton} accessibilityRole="button" accessibilityState={{ disabled: busy }}><Text style={styles.link}>Back</Text></Pressable> : null}
       {offerGeneration ? <View style={{ flexGrow: 1, flexBasis: 240 }}><GenerateWeeklyPicks onSetUpKeys={() => { setReturnTo("source"); goTo(steps.indexOf("keys")); }} onBusyChange={onFinding} onPresentationStage={setSearchStage} onPrepared={(hasPicks) => { onFinding(false); goTo(steps.indexOf("your-frame"), hasPicks ? "milestone" : false); }} />{!busy && <Pressable accessibilityRole="button" onPress={() => { void finish(); }} style={styles.continueLink}><Text style={styles.link}>Open Today</Text>{showCue && <OnboardingGlimmer quiet />}</Pressable>}</View> : storyPage ? <WelcomeContinueAction showCue={showCue} key={current} complete={current === "welcome" ? welcomeComplete : benefitsComplete} label={nextLabel} disabled={busy} onPress={advance} style={styles.primary} /> : <PrimaryAction keepAppearance={savingTopic} textured={!quietNext} depth={!quietNext && palette.primaryButtonDepth} disabled={busy} onPress={advance} style={[styles.primary, quietNext && styles.quietNext, showFooterBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={nextLabel} accessibilityState={{ busy, disabled: busy }} testID="onboarding-next">
         {showCue && <OnboardingGlimmer quiet={Boolean(quietNext)} />}
         {showFooterBusy ? <ActivityIndicator color={quietNext ? palette.active : palette.onDark} /> : <Text style={quietNext ? styles.link : styles.primaryText}>{nextLabel}</Text>}
@@ -278,8 +291,8 @@ function BespokeStep({ disabled, onBusyChange }: { disabled: boolean; onBusyChan
   return <View style={{ gap: spacing.lg, paddingVertical: spacing.sm }}>
     <View style={{ gap: spacing.md }}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
-        <View style={{ paddingTop: spacing.xs }}><TexturedHeart size={40} /></View>
-        <Text accessibilityRole="header" style={[type.title, { flex: 1, fontSize: 32, lineHeight: 40, maxWidth: 460 }]}>What could you talk about for hours?</Text>
+        <View style={{ paddingTop: spacing.xs }}><TexturedHeart size={24} /></View>
+        <Text accessibilityRole="header" style={[type.heading, { flex: 1, maxWidth: 460 }]}>What could you talk about for hours?</Text>
       </View>
       <Text style={[type.bodySoft, { maxWidth: 440 }]}>Make your picks more personal with a few specifics.</Text>
     </View>
@@ -299,7 +312,7 @@ function BespokeStep({ disabled, onBusyChange }: { disabled: boolean; onBusyChan
   </View>;
 }
 
-function TasteStep({ onChooseCreator, onBusyChange }: { onChooseCreator(): void; onBusyChange(value: boolean): void }) {
+function TasteStep({ disabled, onChooseCreator, onBusyChange }: { disabled: boolean; onChooseCreator(): void; onBusyChange(value: boolean): void }) {
   const { type, palette } = useFrameTheme();
   const { interests, toggleInterest } = useApp();
   const feedback = useFeedback();
@@ -307,8 +320,9 @@ function TasteStep({ onChooseCreator, onBusyChange }: { onChooseCreator(): void;
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const ids = interests.map((topic) => topic.id);
+  const [specificsOpen, setSpecificsOpen] = useState(() => ids.some(isCustomInterest));
   const select = async (id: string) => {
-    if (busy || lock.current) return;
+    if (disabled || busy || lock.current) return;
     lock.current = true; setBusy(true); onBusyChange(true);
     const done = feedback.capture();
     try { const changed = await toggleInterest(id); done("selection", changed); return changed; }
@@ -318,7 +332,7 @@ function TasteStep({ onChooseCreator, onBusyChange }: { onChooseCreator(): void;
   return <View style={{ gap: spacing.lg }}>
     <View style={{ gap: spacing.sm, paddingTop: spacing.sm }}>
       <Text accessibilityRole="header" style={[type.title, tasteStyles.title]}>What draws you in?</Text>
-      <Text style={type.bodySoft}>Pick the subjects you love. Add specifics next.</Text>
+      <Text style={type.bodySoft}>Pick the subjects you love. We’ll find somewhere good to start.</Text>
     </View>
     <View style={{ gap: spacing.sm }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: spacing.sm, paddingTop: spacing.sm }}>
@@ -327,13 +341,20 @@ function TasteStep({ onChooseCreator, onBusyChange }: { onChooseCreator(): void;
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
         {INTEREST_LIBRARY.map(({ id, name }) => <ChoiceOption key={id} role="checkbox" variant="topic" dimWhenDisabled={false} label={name}
-          selected={ids.includes(id)} disabled={busy} unselectedMark={<Plus size={15} color={palette.inkMuted} />}
+          selected={ids.includes(id)} disabled={disabled || busy} unselectedMark={<Plus size={15} color={palette.inkMuted} />}
           onPress={() => { void select(id); }} style={{ flexGrow: 1, flexBasis: width < 320 || fontScale > 1.3 ? "100%" : "45%", borderCurve: "continuous" }}
           testID={`setup-topic-${id}`} />)}
       </View>
     </View>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft, paddingTop: spacing.sm }}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: specificsOpen, disabled }} disabled={disabled} onPress={() => setSpecificsOpen(open => !open)} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm }}>
+        <Text style={[type.label, { color: palette.active, flexShrink: 1 }]}>{specificsOpen ? "Your specific interests" : "Add specific interests (optional)"}</Text>
+        {specificsOpen ? <X size={16} color={palette.active} /> : <Plus size={16} color={palette.active} />}
+      </Pressable>
+      {specificsOpen && <BespokeStep disabled={disabled} onBusyChange={onBusyChange} />}
+    </View>
     <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft }}>
-      <Pressable accessibilityRole="button" disabled={busy} onPress={onChooseCreator} style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Start with a creator instead</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={disabled || busy} onPress={onChooseCreator} style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Start with a creator instead</Text></Pressable>
     </View>
   </View>;
 }
@@ -421,6 +442,7 @@ function createStyles(p: FramePalette, t: FrameType) {
     content: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.xl },
     connectionsHeader: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: spacing.page, paddingTop: spacing.sm, paddingBottom: spacing.xs },
     welcomeContent: { flexGrow: 1, paddingBottom: 0 }, welcomeBody: { flexGrow: 1 },
+    whyLink: { alignSelf: "center", minHeight: 48, paddingHorizontal: spacing.lg, justifyContent: "center" },
     quietNext: { backgroundColor: p.activeSoft },
     previewNavigation: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: spacing.md },
     interestGroup: { marginTop: spacing.lg, gap: spacing.lg }, featuredTitle: { ...t.heading, fontSize: 24, lineHeight: 32 }, interestMatch: { ...t.caption, color: p.active },

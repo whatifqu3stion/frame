@@ -24,7 +24,7 @@
         "backgroundColor": "#F3F0EA"
       },
       "package": "app.rork.vabp4o345ww8b0akdpr7p",
-      "versionCode": 5,
+      "versionCode": 6,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.CAMERA",

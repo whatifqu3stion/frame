@@ -51,7 +51,7 @@ export default function CustomInterestInput({ selectedIds, onAdd, disabled = fal
     {expanded ? <>
       <Text style={type.label}>Type an interest, then tap + to add.</Text>
       <View style={{ position: "relative", minHeight: 56 }}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radii.pill, borderCurve: "continuous", borderWidth: 1, borderColor: palette.active, backgroundColor: palette.activeSoft, opacity: readyToAdd ? 1 : 0, transitionProperty: "opacity", transitionDuration: "180ms", transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)" }]} />
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radii.pill, borderCurve: "continuous", borderWidth: 1, borderColor: palette.active, backgroundColor: palette.activeSoft, opacity: readyToAdd ? 1 : 0, transitionProperty: "opacity", transitionDuration: "180ms", transitionTimingFunction: "ease-out" }]} />
         <Animated.View pointerEvents="none" style={{ position: "absolute", left: spacing.md, right: spacing.md, bottom: 0, height: 1, backgroundColor: focused ? palette.active : palette.border, opacity: readyToAdd ? 0 : 1, transitionProperty: "opacity", transitionDuration: "180ms" }} />
         <TextField accessibilityLabel="Custom interest" accessibilityHint="Type one interest. After a brief pause, tap the plus to add it, or use the keyboard Done key."
           placeholder="e.g. Japanese joinery" placeholderTextColor={isDark ? "#A89E95" : "#746E67"}
@@ -60,7 +60,7 @@ export default function CustomInterestInput({ selectedIds, onAdd, disabled = fal
           value={draft} onChangeText={changeDraft} maxLength={CUSTOM_INTEREST_MAX_LENGTH} editable={!busy && !disabled}
           returnKeyType="done" submitBehavior="submit" onSubmitEditing={() => { void add(); }} testID="custom-interest-input"
           trailing={<Animated.View pointerEvents={readyToAdd ? "auto" : "none"} aria-hidden={!readyToAdd} accessibilityElementsHidden={!readyToAdd} importantForAccessibility={readyToAdd ? "auto" : "no-hide-descendants"}
-            style={{ opacity: readyToAdd ? 1 : 0, transform: [{ scale: reduced || readyToAdd ? 1 : 0.95 }], transitionProperty: ["opacity", "transform"], transitionDuration: "180ms", transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)" }}>
+            style={{ opacity: readyToAdd ? 1 : 0, transform: [{ scale: reduced || readyToAdd ? 1 : 0.95 }], transitionProperty: ["opacity", "transform"], transitionDuration: "180ms", transitionTimingFunction: "ease-out" }}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Add ${draft.trim() || "interest"}`} accessibilityState={{ disabled: disabled || busy || !readyToAdd, busy }}
               disabled={disabled || busy || !readyToAdd} onPress={() => { void add(); }} testID="add-custom-interest" pressRetentionOffset={16}
               style={({ pressed }) => ({ width: 48, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.pill, opacity: pressed || disabled ? 0.55 : 1 })}>

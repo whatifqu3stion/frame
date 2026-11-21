@@ -11,16 +11,16 @@ function item(id: string, extra: Partial<TodaySnapshotItem> = {}): TodaySnapshot
 }
 describe("onboarding first value", () => {
   test("next actions name their destination and allow setup without optional choices", () => {
-    expect(onboardingNextAction("welcome", 0, false)).toEqual({ label: "See how Frame works", finish: false, target: "contrast" });
-    expect(onboardingNextAction("keys", 0, false)).toEqual({ label: "Continue", finish: false, target: "study" });
+    expect(onboardingNextAction("welcome", 0, false)).toEqual({ label: "Choose my interests", finish: false, target: "source" });
+    expect(onboardingNextAction("keys", 0, false)).toEqual({ label: "Continue", finish: false, target: "welcome" });
     expect(onboardingNextAction("keys", 0, false, "source")).toEqual({ label: "Back to your source", finish: false, target: "source" });
     expect(onboardingNextAction("keys", 0, false, "your-frame")).toEqual({ label: "Back to my picks", finish: false, target: "your-frame" });
     expect(onboardingNextAction("study", 0, false).target).toBe("intentions");
     expect(onboardingNextAction("intentions", 0, false).target).toBe("recall");
-    expect(onboardingNextAction("recall", 0, false).target).toBe("welcome");
-    expect(onboardingNextAction("contrast", 0, false).target).toBe("source");
-    expect(onboardingNextAction("source", 0, false).target).toBe("bespoke");
-    expect(onboardingNextAction("bespoke", 0, false)).toEqual({ label: "See my discoveries", finish: false, target: "your-frame" });
+    expect(onboardingNextAction("recall", 0, false).target).toBe("contrast");
+    expect(onboardingNextAction("contrast", 0, false).target).toBe("welcome");
+    expect(onboardingNextAction("source", 0, false).target).toBe("your-frame");
+    expect(onboardingNextAction("source", 0, false)).toEqual({ label: "See my discoveries", finish: false, target: "your-frame" });
     expect(onboardingNextAction("source", 0, false, null, true)).toEqual({ label: "Finish for now", finish: true });
     expect(onboardingNextAction("source", 1, false, null, true)).toEqual({ label: "See my selection", finish: false, target: "your-frame" });
     expect(onboardingNextAction("source", 0, true, null, true)).toEqual({ label: "Preview selection", finish: false, target: "your-frame" });

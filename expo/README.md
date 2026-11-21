@@ -34,7 +34,7 @@ This runs the configured typecheck, lint, and test commands. The [native accepta
 
 Last verified November 20, 2026: **506 passing tests, 3960 assertions across 97 files**, passing TypeScript and zero lint errors (one existing generated-file warning). [The latest technical review](docs/TECHNICAL_CRITIQUE_2026-11-20.md) records the session-completion and timer-recovery fixes and their regression coverage.
 
-Open `/welcome-preview` in the local web app to review onboarding. Its research animations, phone demonstration, interest selection and final discovery reveal are part of the current source. Provider-backed results require working keys; a browser demonstration is not native acceptance evidence.
+Open `/welcome-preview` in the local web app to review onboarding. The current source uses four main steps: connections, the phone demonstration, interests (with optional specifics), and the final discovery reveal. “Why Frame?” on the demonstration screen opens the three research animations and the “Great videos” sequence, then returns to setup. Existing saved setup positions migrate into the shorter flow. Provider-backed results require working keys; a browser demonstration is not native acceptance evidence.
 
 ## Find your way around
 
@@ -51,4 +51,4 @@ The app began with Rork tooling. This guide describes the actual project rather 
 
 Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.
 
-The signed **1.0.0 / build 5 APK** includes the November 20 app updates and is available from the [GitHub prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.5). It uses the same signing identity as build 4. See [release status](docs/RELEASE_CANDIDATE.md) for the source revision, checksum and outstanding native/live-provider checks.
+The signed **1.0.0 / build 6 APK** fixes the Android custom-interest crash and updates build 5 in place. Download it from the [GitHub prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.6). See the [release status](docs/RELEASE_CANDIDATE.md) for verification and device coverage.

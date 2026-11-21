@@ -2,7 +2,7 @@ import { isLongFormVideo } from "./contentPolicy";
 import type { TodaySnapshotItem, TodaySourceRule } from "../models/today";
 import { isMetadataCurrent } from "./metadataRetention";
 import { visibleTodayItems } from "./today";
-import { ONBOARDING_STEPS } from "../constants/navigation";
+import { type OnboardingStage } from "../constants/navigation";
 import type { SourceResolution, WeeklyPickSourceSuggestion } from "../types";
 
 export type OnboardingWatchItem = Pick<TodaySnapshotItem, "profileId" | "id" | "title" | "sourceId" | "sourceTitle" | "thumbnailUrl" | "publishedAt" | "durationSeconds" | "fetchedAt"> & { periodKey?: string; madeForKids?: boolean | null };
@@ -27,16 +27,15 @@ export function resolvedOnboardingFilm(result: SourceResolution | null, profileI
   };
 }
 
-export function onboardingNextAction(step: typeof ONBOARDING_STEPS[number], sourceCount: number, replay: boolean, returnTo: "source" | "your-frame" | null = null, manual = false): { label: string; finish: boolean; target?: typeof ONBOARDING_STEPS[number] } {
+export function onboardingNextAction(step: OnboardingStage, sourceCount: number, replay: boolean, returnTo: "source" | "your-frame" | null = null, manual = false): { label: string; finish: boolean; target?: OnboardingStage } {
   if (step === "study") return { label: "What happens after scrolling?", finish: false, target: "intentions" };
   if (step === "intentions") return { label: "What stays with you?", finish: false, target: "recall" };
-  if (step === "recall") return { label: "Meet Frame", finish: false, target: "welcome" };
-  if (step === "welcome") return { label: "See how Frame works", finish: false, target: "contrast" };
-  if (step === "contrast") return { label: manual ? "Choose a creator" : "Choose my interests", finish: false, target: "source" };
+  if (step === "recall") return { label: "A different way to watch", finish: false, target: "contrast" };
+  if (step === "welcome") return { label: manual ? "Choose a creator" : "Choose my interests", finish: false, target: "source" };
+  if (step === "contrast") return { label: "Back to setup", finish: false, target: "welcome" };
   if (step === "keys" && returnTo) return { label: returnTo === "source" ? "Back to your source" : "Back to my picks", finish: false, target: returnTo };
-  if (step === "keys") return { label: "Continue", finish: false, target: "study" };
-  if (step === "source" && !manual) return { label: "Continue", finish: false, target: "bespoke" };
-  if (step === "bespoke" && !manual) return { label: "See my discoveries", finish: false, target: "your-frame" };
+  if (step === "keys") return { label: "Continue", finish: false, target: "welcome" };
+  if (step === "source" && !manual) return { label: "See my discoveries", finish: false, target: "your-frame" };
   if (step === "source") return sourceCount === 0 && !replay
     ? { label: "Finish for now", finish: true }
     : { label: sourceCount > 0 ? "See my selection" : "Preview selection", finish: false, target: "your-frame" };

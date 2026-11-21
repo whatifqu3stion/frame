@@ -1,4 +1,4 @@
-import { ONBOARDING_STEPS } from "../constants/navigation";
+import { ONBOARDING_STEPS, type OnboardingStage } from "../constants/navigation";
 import { parseSourceInput } from "./sourceInput";
 
 // Save only the YouTube identity. A pasted URL can carry unrelated query data.
@@ -12,16 +12,17 @@ export function onboardingSourceLink(input: string): string | undefined {
   }
 }
 
-export type OnboardingDraft = { version: 8; step: number; savedIds: string[]; path?: "creator"; youtubeGuide?: "credentials"; sourceLink?: string; returnTo?: "source" | "your-frame" };
-export const emptyOnboardingDraft: OnboardingDraft = { version: 8, step: 0, savedIds: [] };
-const draftSteps: Record<number, readonly (typeof ONBOARDING_STEPS[number])[]> = {
+export type OnboardingDraft = { version: 9; step: number; savedIds: string[]; path?: "creator"; youtubeGuide?: "credentials"; sourceLink?: string; returnTo?: "source" | "your-frame" };
+export const emptyOnboardingDraft: OnboardingDraft = { version: 9, step: 0, savedIds: [] };
+const draftSteps: Record<number, readonly (OnboardingStage | "bespoke")[]> = {
   2: ["source", "source", "your-frame"],
   3: ["keys", "source", "source", "your-frame"],
   4: ["keys", "source", "your-frame"],
   5: ["welcome", "keys", "source", "your-frame"],
   6: ["keys", "welcome", "source", "your-frame"],
   7: ["keys", "study", "welcome", "contrast", "source", "bespoke", "your-frame"],
-  8: ONBOARDING_STEPS,
+  8: ["keys", "study", "intentions", "recall", "welcome", "contrast", "source", "bespoke", "your-frame"],
+  9: ONBOARDING_STEPS,
 };
 export function parseOnboardingDraft(raw: string | null): OnboardingDraft {
   try {
@@ -34,7 +35,10 @@ export function parseOnboardingDraft(raw: string | null): OnboardingDraft {
     if (!stage || !Array.isArray(draft.savedIds) || !draft.savedIds.every((id) => typeof id === "string")) return emptyOnboardingDraft;
     const creator = draft.version === 4 || modern ? draft.path === "creator" : draft.version === 2 ? draft.step! > 0 : draft.step! > 1;
     const sourceLink = modern && creator && typeof draft.sourceLink === "string" ? onboardingSourceLink(draft.sourceLink) : undefined;
-    return { version: 8, step: ONBOARDING_STEPS.indexOf(stage), savedIds: [...new Set(draft.savedIds)], ...(creator ? { path: "creator" as const } : {}),
+    // Resume old research drafts at the demo; custom interests now live within topics.
+    const mainStage = stage === "bespoke" ? "source"
+      : stage === "study" || stage === "intentions" || stage === "recall" || stage === "contrast" ? "welcome" : stage;
+    return { version: 9, step: ONBOARDING_STEPS.indexOf(mainStage), savedIds: [...new Set(draft.savedIds)], ...(creator ? { path: "creator" as const } : {}),
       ...(modern && draft.youtubeGuide === "credentials" ? { youtubeGuide: "credentials" as const } : {}),
       ...(modern && stage === "keys" && (draft.returnTo === "source" || draft.returnTo === "your-frame") ? { returnTo: draft.returnTo } : {}),
       ...(sourceLink ? { sourceLink } : {}) };
