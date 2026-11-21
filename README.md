@@ -27,11 +27,11 @@ Today is designed to stay stable during the day rather than refill as items are 
 
 ## Current status
 
-**Updated November 20, 2026.** The latest source on `codex/full-app-byok` includes the redesigned onboarding and Settings, textured editorial artwork, interest-based discovery, and playback/session recovery fixes.
+**Updated November 21, 2026.** Android build 6 fixes the custom-interest onboarding crash, introduces a shorter setup with optional Why Frame screens and updates the launcher icon.
 
-The latest verification passes **506 tests** and TypeScript, with **zero lint errors** and one existing generated-file warning. Regression coverage includes profile switching during playback, failed saves after leaving Watch, session-timer recovery, reset safety and batched metadata access. See the [technical review and completed fixes](expo/docs/TECHNICAL_CRITIQUE_2026-11-20.md).
+[Download the signed build 6 APK](https://github.com/whatifqu3stion/frame/releases/download/v1.0.0-android.6/Frame-1.0.0-6.apk) and install it over build 5 to keep local data. The update was tested on an Android 14 emulator from the stuck onboarding screen through to a cold start on Today with both keys blank.
 
-**Android build 5 packages these updates.** Download the signed APK from the [build 5 prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.5). It can update build 4 in place. The [release handoff](expo/docs/RELEASE_CANDIDATE.md) records its source revision, checksum, packaging verification and remaining device checks.
+TypeScript and all 506 tests passed. Lint reported zero errors and one existing warning. See the [release handoff](expo/docs/RELEASE_CANDIDATE.md) for the exact source revision, checksum and remaining device checks.
 
 A source-level implementation or passing automated test does not establish that the native experience is ready to ship. Real-device visual, accessibility, motion, and playback checks remain part of the [acceptance plan](expo/docs/SMOKE_TEST.md).
 
