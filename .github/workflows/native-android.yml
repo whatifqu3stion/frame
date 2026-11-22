@@ -1,0 +1,79 @@
+name: Native Android build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/native-android.yml"
+      - ".nvmrc"
+      - "expo/app.json"
+      - "expo/app.config.*"
+      - "expo/package.json"
+      - "expo/bun.lock"
+      - "expo/bunfig.toml"
+      - "expo/patches/**/*.patch"
+      - "expo/babel.config.*"
+      - "expo/metro.config.*"
+      - "expo/react-native.config.*"
+      - "expo/plugins/**"
+      - "expo/modules/**"
+      - "expo/assets/images/icon.png"
+      - "expo/assets/images/splash-icon.png"
+      - "expo/android/**"
+      - "expo/assets/images/adaptive-icon.png"
+      - "expo/scripts/build-android-apk.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-debug:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: expo
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Set up Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Android project
+        run: bun run expo prebuild --platform android --no-install
+
+      - name: Compile debug APK
+        run: cd android && ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frame-android-debug
+          path: expo/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
