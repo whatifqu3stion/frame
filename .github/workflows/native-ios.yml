@@ -1,0 +1,88 @@
+name: Native iOS build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/native-ios.yml"
+      - ".nvmrc"
+      - "expo/app.json"
+      - "expo/app.config.*"
+      - "expo/package.json"
+      - "expo/bun.lock"
+      - "expo/bunfig.toml"
+      - "expo/patches/**/*.patch"
+      - "expo/babel.config.*"
+      - "expo/metro.config.*"
+      - "expo/react-native.config.*"
+      - "expo/plugins/**"
+      - "expo/modules/**"
+      - "expo/assets/images/icon.png"
+      - "expo/assets/images/splash-icon.png"
+      - "!expo/plugins/android-tv/**"
+      - "!expo/plugins/withAndroidTv.cjs"
+      - "expo/ios/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-simulator:
+    name: iOS Simulator app
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: expo
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate iOS project
+        run: bun run expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        run: cd ios && pod install
+
+      - name: Compile Simulator app
+        run: |
+          xcodebuild \
+            -workspace ios/Frame.xcworkspace \
+            -scheme Frame \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Archive Simulator app
+        run: ditto -c -k --keepParent ios/build/Build/Products/Debug-iphonesimulator/Frame.app Frame-simulator.zip
+
+      - name: Upload Simulator app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frame-ios-simulator
+          path: expo/Frame-simulator.zip
+          if-no-files-found: error
+          retention-days: 7
