@@ -1,7 +1,7 @@
-import type { Video, VideoQueue } from "../types";
+import type { ResumePosition, Video, VideoQueue } from "../types";
 import { PRODUCT_LIMITS } from "../constants/productConfig";
 
-/** Keeps one-to-three unique IDs in the order selected. */
+/** Bounded storage safety limit; session duration, not item count, controls viewing. */
 export function normalizeSessionIds(ids: readonly string[]): string[] {
   return [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 128))].slice(0, PRODUCT_LIMITS.sessionDraftMaxItems);
 }
@@ -42,4 +42,39 @@ export function defaultSessionName(sessions: readonly Pick<VideoQueue, "name">[]
   let number = 1;
   while (names.has(`Session ${number}`)) number += 1;
   return `Session ${number}`;
+}
+
+/** A runtime estimate; the actual playback clock controls when the session pauses. */
+export function sessionBudgetSummary(runtime: { seconds: number; unknown: number }, minutes: number): string {
+  const difference = minutes * 60 - runtime.seconds;
+  if (difference < 0) return `${Math.ceil(-difference / 60)} min over your target${runtime.unknown ? ", with more time unaccounted for" : ""}. Frame will pause at your duration and offer to finish the current video.`;
+  if (runtime.unknown) return "Some durations are unavailable, so Frame can’t confirm this plan fits your target.";
+  return difference === 0 ? "This plan fits your target exactly, before breaks." : difference < 60 ? "Less than 1 min remaining in your target, before breaks." : `${Math.floor(difference / 60)} min remaining in your target, before breaks.`;
+}
+
+
+export const SESSION_TARGET_MINUTES = [15, 30, 60, 90] as const;
+export function normalizeSessionTarget(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 1440 ? value : null;
+}
+
+/** Subtract progress only from the current item and only when recorded in this session. */
+export function sessionRemainingRuntime(queue: VideoQueue, videos: readonly Video[], resumes: readonly ResumePosition[]): { seconds: number; unknown: number } {
+  const position = sessionPosition(queue);
+  const remaining = sessionRuntime(queue.orderedVideoIds, videos, position);
+  const currentId = queue.orderedVideoIds[position];
+  const duration = videos.find((video) => video.id === currentId)?.durationSeconds;
+  const resume = resumes.find((item) => item.videoId === currentId && item.sessionId === queue.id);
+  if (!duration || !Number.isFinite(duration) || duration <= 0 || !resume || !Number.isFinite(resume.timestampSeconds)) return remaining;
+  return { ...remaining, seconds: remaining.seconds - Math.max(0, Math.min(duration, resume.timestampSeconds)) };
+}
+
+/** A planning estimate: videos may extend beyond the chosen session duration. */
+export function sessionAdditionSummary(runtime: { seconds: number; unknown: number }, candidateSeconds: number, minutes: number): string {
+  if (!Number.isFinite(candidateSeconds) || candidateSeconds <= 0 || runtime.unknown) return "Fit unknown until durations are verified.";
+  const left = minutes * 60 - runtime.seconds - candidateSeconds;
+  if (left < 0) return `Would put the plan ${Math.ceil(-left / 60)} min over target`;
+  if (left === 0) return "Would fit the target exactly";
+  if (left < 60) return "Would leave less than 1 min";
+  return `Would leave ${Math.floor(left / 60)} min`;
 }

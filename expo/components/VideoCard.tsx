@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import Text from "@/components/FrameText";
+import { durationDecision, SHORT_FORM_MESSAGE } from "@/domain/contentPolicy";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -22,16 +24,18 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
 
   const { palette, type } = useFrameTheme();
   const { requirePurchase, activeProfileId } = useApp();
-  const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, video.id], enabled: false });
+  const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, video.id], queryFn: skipToken, enabled: false });
   video = expireVideo(recovered.data && (recovered.data.fetchedAt ?? 0) > (video.fetchedAt ?? 0) ? recovered.data : video, Date.now());
   const expired = !isMetadataCurrent(video.fetchedAt, Date.now());
+  const shortForm = durationDecision(video.durationSeconds) === "short";
+  const policyNotice = shortForm ? <Text style={[type.bodySoft, { paddingVertical: spacing.sm }]}>{SHORT_FORM_MESSAGE}</Text> : null;
   const recovery = expired || recovered.data ? <VideoDetailsRecovery key={`${activeProfileId}:${video.id}`} videoId={video.id} expired={expired} /> : null;
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const navigationLocked = useRef<boolean>(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState<boolean>(true);
   const progressFraction = progressSeconds && video.durationSeconds ? Math.min(1, Math.max(0, progressSeconds / video.durationSeconds)) : 0;
-  const accessibilityLabel = `${sessionLabel ? `${sessionLabel}. ` : ""}${progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
-  const dateLabel = formatRelativeDate(video.publishedAt);
+  const accessibilityLabel = `${sessionLabel ? `${sessionLabel}. ` : ""}${shortForm ? "Unavailable short-form video" : progressSeconds ? "Resume" : "Play"} ${video.title}${video.channelTitle ? ` by ${video.channelTitle}` : ""}${progressSeconds ? `, ${formatDuration(progressSeconds)} watched${video.durationSeconds ? ` of ${formatDuration(video.durationSeconds)}` : ""}` : ""}`;
+  const dateLabel = progressSeconds && progressSeconds > 0 ? `Resume at ${formatDuration(progressSeconds)}` : formatRelativeDate(video.publishedAt);
 
   useEffect(() => {
     setIsThumbnailLoading(Boolean(video.thumbnailUrl));
@@ -45,7 +49,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
   }, [activeProfileId, requirePurchase, sessionId, video]);
 
   const thumbnail = (wrapStyle: object, imageStyle: object) => (
-    <View style={wrapStyle}>
+    <View style={wrapStyle}><View style={{ flex: 1 }}>
       {video.thumbnailUrl ? <Image
         source={{ uri: video.thumbnailUrl }}
         style={imageStyle}
@@ -60,7 +64,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
       {video.thumbnailUrl && isThumbnailLoading ? <ThumbnailSkeleton /> : null}
       {!isThumbnailLoading && video.durationSeconds > 0 ? <View style={styles.durationBadge}><Text style={styles.durationText}>{formatDuration(video.durationSeconds)}</Text></View> : null}
       {!isThumbnailLoading && progressFraction > 0 ? <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progressFraction * 100)} percent watched`}><View style={[styles.progressFill, { width: `${progressFraction * 100}%` }]} /></View> : null}
-    </View>
+    </View></View>
   );
 
   if (variant === "compact") return (
@@ -73,7 +77,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
-    {recovery}
+    {policyNotice}{recovery}
     </View>
   );
 
@@ -87,7 +91,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
-    {recovery}
+    {policyNotice}{recovery}
     </View>
   );
 
@@ -101,7 +105,7 @@ function VideoCard({ video, variant = "full", progressSeconds, sessionId, sessio
         {dateLabel ? <Text style={[type.caption, styles.date]}>{dateLabel}</Text> : null}
       </View>
     </Pressable>
-    {recovery}
+    {policyNotice}{recovery}
     </View>
   );
 }

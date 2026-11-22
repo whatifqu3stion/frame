@@ -1,18 +1,26 @@
+import Constants from "expo-constants";
+import Text from "@/components/FrameText";
+import Heading from "@/components/Heading";
+import SettingsRow from "@/components/SettingsRow";
+import TodaySelectionSetting from "@/components/TodaySelectionSetting";
+import DiscoveryFocus from "@/components/DiscoveryFocus";
+import { HELP_TOPICS } from "@/constants/helpTopics";
+import SettingsGroup from "@/components/SettingsGroup";
+import CustomInterestInput from "@/components/CustomInterestInput";
+import ProviderKeySettings from "@/components/ProviderKeySettings";
 import ChoiceOption from "@/components/ChoiceOption";
 import type { SettingsSection } from "@/constants/settings";
 import { useScreenAction } from "@/hooks/useScreenAction";
-import Pressable from "@/components/motion/ChoicePressable";
 import { useFeedback, useFeedbackPreference } from "@/hooks/useFeedback";
 import { setFeedbackEnabled } from "@/services/feedback";
-import { router, type Href } from "expo-router";
-import { ActivityIndicator, Alert, Platform, Switch, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, Crown, FileText, Link2, Lock, LogOut, Moon, RotateCcw, Sun, Trash2 } from "lucide-react-native";
+import { router } from "expo-router";
+import { Platform, Switch, ScrollView, StyleSheet, View } from "react-native";
+import { Moon, Sun } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FullResetModal from "@/components/FullResetModal";
-import { FEATURE_FLAGS, IS_CLOSED_BETA } from "@/constants/config";
 import { GroupedInterestChoices } from "@/components/InterestChoices";
-import { ONBOARDING_INTEREST_MAX, PRODUCT_LIMITS, TODAY_MAX_ITEMS } from "@/constants/productConfig";
+import { confirmUser, notifyUser } from "@/services/notifyUser";
 import { accentOptions, createPalette, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
@@ -21,75 +29,71 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
   const insets = useSafeAreaInsets();
   const feedback = useFeedback();
   const haptics = useFeedbackPreference();
-  const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const [hapticsBusy, setHapticsBusy] = useState(false);
   const { isDark, palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const {
-    interests, toggleInterest, openPremium, isPremium, premiumAccessState, refreshPremiumAccess,
-    googleConfigured, googleConnected, googleEmail, importing, signInWithGoogle,
-    signOutGoogle, prefs, setTheme, setAccent, activeProfile,
+    interests, toggleInterest,
+    hasLegacyGoogleConnection, googleEmail,
+    signOutGoogle, prefs, setTheme, setAccent, setHouseLights, activeProfile,
     requestOwnerAuthorization,
   } = useApp();
   const { busy: accountBusy, run: accountAction, capture } = useScreenAction(`${activeProfile?.id ?? ""}:${section}`);
   const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
 
-  const onConnect = async (): Promise<void> => {
-    await accountAction(signInWithGoogle, (result) => {
-      if (result.ok) router.push("/google-import");
-      else Alert.alert("Google connection", result.message);
-    }, () => Alert.alert("Google connection", "Google couldn’t connect. Try again when you’re ready."));
-  };
+  const weeklyAvailable = activeProfile?.role !== "managed";
+  const selectedTopics = interests.map((item) => item.name);
+  const topicSummary = selectedTopics.length > 2
+    ? `${selectedTopics.slice(0, 2).join(", ")} and ${selectedTopics.length - 2} more`
+    : selectedTopics.join(", ") || "Choose topics for weekly source suggestions";
 
   const onSignOut = (): void => {
     const isCurrent = capture();
-    Alert.alert("Disconnect Google?", "Frame will revoke Google access. Followed sources stay on this device.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Disconnect", style: "destructive", onPress: () => {
-        if (!isCurrent()) return;
-        void accountAction(signOutGoogle, (result) => {
-          Alert.alert(result.ok ? "Disconnected" : "Couldn’t disconnect", result.message);
-        }, () => Alert.alert("Couldn’t disconnect", "Check the connection status and try again."));
-      } },
-    ]);
+    confirmUser("Disconnect Google?", "Frame will revoke Google access. The sources you follow will stay in your library.", "Disconnect", (accepted) => {
+      if (!accepted || !isCurrent()) return;
+      void accountAction(signOutGoogle, (result) => {
+        notifyUser(result.ok ? "Disconnected" : "Couldn’t disconnect", result.message);
+      }, () => notifyUser("Couldn’t disconnect", "Check the connection status and try again."));
+    }, true);
   };
   const onWipe = (): void => {
     void accountAction(() => requestOwnerAuthorization(), (authorized) => {
       if (authorized) setFullResetOpen(true);
-    }, () => Alert.alert("Couldn’t open data controls", "Try again. No data has been erased."));
+    }, () => notifyUser("Couldn’t open data controls", "Try again. No data has been erased."));
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ width: "100%", maxWidth: 640, alignSelf: "center", paddingLeft: insets.left, paddingRight: insets.right, paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.xl }} showsVerticalScrollIndicator={false}>
-      {section === "google" ? <Section hint="Choose which subscriptions to follow in Frame.">
-        {googleConnected ? (
-          <View style={styles.accountBlock}>
-            <Text style={type.label} numberOfLines={1}>{googleEmail ?? "Google connected"}</Text>
-            <Pressable onPress={() => router.push("/google-import")} style={styles.inlineAction} accessibilityRole="button" testID="settings-google-import">
-              <Text style={styles.linkText}>Choose subscriptions</Text><ChevronRight size={15} color={palette.active} />
-            </Pressable>
-            <Pressable onPress={onSignOut} style={styles.inlineAction} disabled={accountBusy} accessibilityState={{ busy: accountBusy, disabled: accountBusy }} accessibilityRole="button" testID="sign-out-google">
-              {accountBusy ? <ActivityIndicator size="small" color={palette.inkMuted} /> : <LogOut size={15} color={palette.inkMuted} />}
-              <Text style={styles.inlineActionText}>Disconnect Google</Text>
-            </Pressable>
-          </View>
-        ) : googleConfigured ? (
-          <Pressable onPress={() => { void onConnect(); }} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]} disabled={accountBusy || importing} accessibilityState={{ busy: accountBusy || importing, disabled: accountBusy || importing }} accessibilityRole="button" testID="connect-google">
-            {accountBusy || importing ? <><ActivityIndicator color={palette.onDark} /><Text style={styles.googleText}>Connecting…</Text></> : <><Link2 size={18} color={palette.onDark} /><Text style={styles.googleText}>Connect Google</Text><ChevronRight size={17} color={palette.onDarkSoft} /></>}
-          </Pressable>
-        ) : <Text style={styles.infoText}>Google connection isn’t available in this version. You can still add sources with a link or @handle.</Text>}
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS === "ios"} style={styles.screen} contentContainerStyle={{ width: "100%", maxWidth: 640, alignSelf: "center", paddingLeft: insets.left, paddingRight: insets.right, paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.xl }} showsVerticalScrollIndicator={false}>
+      {section === "today" ? <>
+        <Section><TodaySelectionSetting /></Section>
+        {weeklyAvailable && <Section label="Weekly discovery"><SettingsRow title="Weekly interests" summary={topicSummary} onPress={() => router.push("/settings/interests")} testID="settings-interests" /></Section>}
+      </> : null}
+      {section === "google" ? <Section label="Previous Google connection" hint="Google account import is no longer part of Frame. Add sources by channel link or @handle.">
+        {hasLegacyGoogleConnection ? <View style={styles.accountBlock}>
+          <Text style={type.bodySoft}>{googleEmail ?? "Connection saved by an earlier version"}</Text>
+          <SettingsRow title="Disconnect Google" summary="Your followed sources stay in Frame." onPress={onSignOut} busy={accountBusy} destructive navigation={false} testID="sign-out-google" />
+        </View> : <SettingsRow title="Add a source" summary="Use a channel link or @handle." onPress={() => router.push(activeProfile?.role === "managed" ? "/(tabs)/sources" : "/add-source")} />}
       </Section> : null}
 
-      {section === "interests" ? <Section hint={`Choose up to ${ONBOARDING_INTEREST_MAX} interests for weekly source suggestions. This is optional.`}>
-        <Text style={[type.label, { marginBottom: spacing.md }]} accessibilityLiveRegion="polite">{interests.length} of {ONBOARDING_INTEREST_MAX} selected</Text>
-        <GroupedInterestChoices selectedIds={interests.map((interest) => interest.id)} onToggle={(id) => { const done = feedback.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} accessibilityLabel="Weekly source interests" limitHint="Remove a selected interest before choosing this one." testIDPrefix="interest" />
+      {section === "interests" && weeklyAvailable ? <View style={styles.helpGroups}>
+        <Text style={type.bodySoft}>Frame uses these interests to find creators for your next weekly picks.</Text>
+        <SettingsGroup label="Your topics">
+          <SettingsRow grouped last title={interests.length ? "Edit topics" : "Choose topics"} summary={selectedTopics.join(", ") || "Pick from the list or add an interest of your own."} onPress={() => router.push("/settings/topics")} testID="edit-weekly-topics" />
+        </SettingsGroup>
+        {interests.length > 0 && <DiscoveryFocus key={activeProfile?.id} overview />}
+      </View> : null}
+      {section === "topics" && weeklyAvailable ? <Section hint="Open a category to select topics. Your changes save as you go.">
+        <GroupedInterestChoices customLast customAction={<CustomInterestInput compact selectedIds={interests.map((interest) => interest.id)} onAdd={toggleInterest} />} headingLevel={3} collapsible selectedIds={interests.map((interest) => interest.id)} onToggle={(id) => { const done = feedback.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => notifyUser("Couldn’t save interests", "Try again in a moment.")); }} accessibilityLabel="Weekly source interests" testIDPrefix="interest" />
       </Section> : null}
+      {section === "priorities" && weeklyAvailable ? <Section><DiscoveryFocus key={activeProfile?.id} /></Section> : null}
+      {["interests", "topics", "priorities"].includes(section) && !weeklyAvailable ? <Section><Text style={type.bodySoft}>Managed profiles watch videos and sources approved by the Owner.</Text><SettingsRow title="View sources" onPress={() => router.push("/(tabs)/sources")} /></Section> : null}
 
-      {section === "appearance" ? <><Section label="Theme" hint="The video player always uses a dark background.">
+      {section === "appearance" ? <><Section label="Theme">
         <View style={styles.choiceRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
-          <ChoiceOption label="Light · Bone" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
-          <ChoiceOption label="Dark · Smoked umber" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
+          <ChoiceOption label="Light" selected={prefs.theme === "warm"} onPress={() => { if (prefs.theme === "warm") return; const done = feedback.capture(); void setTheme("warm").then(() => done("selection")).catch(() => notifyUser("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Sun size={18} color={prefs.theme === "warm" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
+          <ChoiceOption label="Dark" selected={prefs.theme === "ink"} onPress={() => { if (prefs.theme === "ink") return; const done = feedback.capture(); void setTheme("ink").then(() => done("selection")).catch(() => notifyUser("Couldn’t save appearance", "Try again in a moment.")); }} leading={<Moon size={18} color={prefs.theme === "ink" ? palette.active : palette.inkMuted} />} style={styles.appearanceChoice} />
         </View>
+
       </Section>
       <Section label="Accent color">
         <View style={styles.accentRow} accessibilityRole="radiogroup" accessibilityLabel="Accent color">
@@ -97,105 +101,93 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
             const selected = prefs.accent === option.id;
             const swatch = createPalette(isDark, option.id).accent;
             return (
-              <ChoiceOption key={option.id} label={option.label} selected={selected} onPress={() => { if (prefs.accent === option.id) return; const done = feedback.capture(); void setAccent(option.id).then(() => done("selection")).catch(() => Alert.alert("Couldn’t save appearance", "Try again in a moment.")); }} style={styles.accentChoice} accessibilityLabel={`${option.label} accent`} leading={<View style={[styles.swatch, { backgroundColor: swatch }]} />} />
+              <ChoiceOption key={option.id} label={option.label} selected={selected} onPress={() => { if (prefs.accent === option.id) return; const done = feedback.capture(); void setAccent(option.id).then(() => done("selection")).catch(() => notifyUser("Couldn’t save appearance", "Try again in a moment.")); }} variant="ruled" style={styles.accentChoice} accessibilityLabel={`${option.label} accent`} leading={<View style={[styles.swatch, { backgroundColor: swatch }]} />} />
             );
           })}
         </View>
       </Section>
 
-      <Section label="Touch feedback" hint={Platform.OS === "web" ? "Touch feedback is available in the mobile app on supported phones." : "Subtle feedback for choices and completed actions. Applies to every profile on this device."}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, minHeight: 48 }}>
-          <Text style={[type.label, styles.flex]}>Haptic feedback</Text>
-          <Switch value={Platform.OS !== "web" && haptics.enabled} disabled={Platform.OS === "web" || !haptics.ready || hapticsBusy} accessibilityLabel="Haptic feedback" onValueChange={(value) => { setHapticsBusy(true); void setFeedbackEnabled(value).catch(() => Alert.alert("Couldn’t save touch feedback", "Try again in a moment.")).finally(() => setHapticsBusy(false)); }} />
+      <Section label="Viewing room">
+        <View style={styles.switchRow}>
+          <View style={styles.flex}>
+            <Text style={type.body}>House lights</Text>
+            <Text style={styles.supporting}>Dim the viewing screen during playback. Bring the lights up when you finish.</Text>
+          </View>
+          <Switch accessibilityLabel="House lights" testID="settings-house-lights"
+            trackColor={{ false: palette.surfaceDim, true: palette.active }} thumbColor={palette.surfaceHigh} ios_backgroundColor={palette.surfaceDim}
+            value={prefs.houseLights} onValueChange={value => {
+              if (value === prefs.houseLights) return;
+              const acknowledge = feedback.capture();
+              void setHouseLights(value).then(() => acknowledge("selection")).catch(() => notifyUser("Couldn’t save house lights", "Try again in a moment."));
+            }} />
         </View>
-      </Section></> : null}
+      </Section>
+      {Platform.OS !== "web" && <Section label="Touch feedback">
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, minHeight: 48 }}>
+          <View style={styles.flex}><Text style={type.body}>Haptic feedback</Text><Text style={styles.supporting}>For all profiles on this device.</Text></View>
+          <Switch trackColor={{ false: palette.surfaceDim, true: palette.active }} thumbColor={palette.surfaceHigh} ios_backgroundColor={palette.surfaceDim} value={haptics.enabled} disabled={!haptics.ready || hapticsBusy} accessibilityLabel="Haptic feedback" onValueChange={(value) => { setHapticsBusy(true); void setFeedbackEnabled(value).then(() => { if (value) feedback.selection(); }).catch(() => notifyUser("Couldn’t save touch feedback", "Try again in a moment.")).finally(() => setHapticsBusy(false)); }} />
+        </View>
+      </Section>}</> : null}
 
-      {section === "premium" && FEATURE_FLAGS.paidAccess ? <Section>
-        {premiumAccessState === "checking" ? <StatusRow title="Checking Premium" body="Confirming your access." loading />
-          : isPremium ? <StatusRow title="Premium active" body="Your complete Frame library is unlocked." />
-          : premiumAccessState === "inactive" ? (
-            <Pressable onPress={() => openPremium("library")} style={({ pressed }) => [styles.premiumCard, pressed && styles.pressed]} accessibilityRole="button" testID="open-premium">
-              <Crown size={19} color={palette.onAccent} /><View style={styles.flex}><Text style={styles.premiumTitle}>Frame Premium</Text><Text style={styles.premiumBody}>View plans or restore your purchase.</Text></View><ChevronRight size={17} color={palette.onDarkSoft} />
-            </Pressable>
-          ) : premiumAccessState === "unavailable" ? (
-            <View><StatusRow title="Premium status unavailable" body="Frame could not verify access." /><Pressable onPress={() => { void refreshPremiumAccess(); }} style={styles.inlineAction}><Text style={styles.linkText}>Try again</Text></Pressable></View>
-          ) : <Text style={styles.infoText}>Premium is not configured for this build.</Text>}
-        {premiumAccessState === "inactive" || premiumAccessState === "active" ? (
-          <Pressable onPress={() => openPremium("library")} style={styles.inlineAction} accessibilityRole="button" testID="settings-restore-purchases"><RotateCcw size={15} color={palette.inkMuted} /><Text style={styles.inlineActionText}>Restore purchases</Text></Pressable>
-        ) : null}
-      </Section> : null}
+      {section === "keys" ? <Section><ProviderKeySettings /></Section> : null}
 
-      {section === "privacy" ? <Section hint="Your library and preferences are stored on this device.">
-        <Pressable onPress={() => router.push("/privacy")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Privacy Policy</Text></Pressable>
-        <Pressable onPress={() => router.push("/terms")} style={styles.linkRow} accessibilityRole="link"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Terms of Use</Text></Pressable>
-        <Pressable onPress={onWipe} disabled={accountBusy} accessibilityState={{ busy: accountBusy, disabled: accountBusy }} style={styles.dangerRow} accessibilityRole="button" testID="wipe-data">{accountBusy ? <ActivityIndicator color={palette.danger} /> : <Trash2 size={17} color={palette.danger} />}<View style={styles.flex}><Text style={styles.dangerText}>Erase all Frame data and start over</Text><Text style={styles.supporting}>Deletes every local profile, PIN, playback and content boundary, usage record, request, and library item.</Text></View></Pressable>
-      </Section> : null}
+      {section === "privacy" ? <>
+        <Section label="Your library" hint={Platform.OS === "web" ? "This browser preview keeps your library in memory. Refreshing the page resets it." : "Your library, settings and viewing history stay on this device. Frame has no cloud backup."}>
+          <Text style={type.bodySoft}>Saved videos are links. Playback requires an internet connection.</Text>
+        </Section>
+        <Section label="Policies">
+          <SettingsRow title="Privacy Policy" onPress={() => router.push("/privacy")} accessibilityRole="link" />
+          <SettingsRow title="Terms of Use" onPress={() => router.push("/terms")} accessibilityRole="link" />
+        </Section>
+        <Section label="Erase device data">
+          <Text style={type.bodySoft}>Erasing permanently removes all profiles, libraries and both API keys from this device. It also clears the Owner PIN, viewing limits and schedules, usage records, content approvals and pending requests.</Text>
+          <SettingsRow title="Erase all Frame data" onPress={onWipe} busy={accountBusy} destructive navigation={false} testID="wipe-data" />
+        </Section>
+      </> : null}
 
       {section === "about" ? <>
-      <Section><Text style={styles.infoText}>Frame brings together the creators you choose, with space to watch at your own pace.</Text><Text style={styles.version}>Version 1.0</Text></Section>
-      <Section label="Using Frame">{HELP_TOPICS.map((topic) => <View key={topic.title} style={styles.helpTopic}>
-        <Pressable onPress={() => setHelpOpen(helpOpen === topic.title ? null : topic.title)} style={styles.linkRow} accessibilityRole="button" accessibilityState={{ expanded: helpOpen === topic.title }}><Text style={[type.label, styles.flex]}>{topic.title}</Text><ChevronRight size={17} color={palette.inkMuted} style={{ transform: [{ rotate: helpOpen === topic.title ? "90deg" : "0deg" }] }} /></Pressable>
-        {helpOpen === topic.title ? <View style={{ paddingBottom: spacing.md, gap: spacing.sm }}><Text style={type.bodySoft}>{topic.body}</Text><Pressable onPress={() => router.push(topic.href)} style={styles.linkRow} accessibilityRole="button"><Text style={styles.linkText}>{topic.action}</Text><ChevronRight size={15} color={palette.active} /></Pressable></View> : null}
-      </View>)}</Section>
-      {FEATURE_FLAGS.demoPaywall && !FEATURE_FLAGS.paidAccess ? <Section label="Demo"><Pressable onPress={() => router.push("/welcome-preview")} style={styles.linkRow} accessibilityRole="button" testID="preview-welcome"><RotateCcw size={17} color={palette.active} /><View style={styles.flex}><Text style={styles.linkText}>Preview welcome & Premium</Text><Text style={styles.supporting}>Try setup again. Sources, interests, and saved videos change this profile. Sample checkout makes no purchase.</Text></View><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
-      {IS_CLOSED_BETA ? <Section label="Beta support"><Pressable onPress={() => router.push("/diagnostics")} style={styles.linkRow} accessibilityRole="button" testID="open-beta-support"><FileText size={15} color={palette.accent} /><Text style={styles.linkText}>Device and cleanup status</Text><ChevronRight size={17} color={palette.inkMuted} /></Pressable></Section> : null}
+      <View style={styles.helpGroups}>
+        <SettingsGroup label="Using Frame">{HELP_TOPICS.filter(topic => weeklyAvailable || topic.id !== "interests").map(topic =>
+          <SettingsRow key={topic.id} grouped last={topic.id === "requests"} title={topic.title} onPress={() => router.push({ pathname: "/help/[topic]", params: { topic: topic.id } })} />
+        )}</SettingsGroup>
+        <SettingsGroup label="Setup & troubleshooting">
+          <SettingsRow grouped title="Revisit setup" onPress={() => router.push("/welcome-preview")} testID="preview-welcome" />
+          <SettingsRow grouped last title="Device diagnostics" onPress={() => router.push("/diagnostics")} testID="open-diagnostics" />
+        </SettingsGroup>
+      </View>
+      <Section label="About Frame">
+        <Text style={styles.version}>Version {Constants.expoConfig?.version ?? "1.0.0"}{Platform.OS === "android" && Constants.expoConfig?.android?.versionCode ? ` · Build ${Constants.expoConfig.android.versionCode}` : ""}</Text>
+        <Text style={styles.version}>Empty frames illustration by Yu luck, from the Noun Project.</Text>
+      </Section>
       </> : null}
       <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} />
     </ScrollView>
   );
 }
 
-const HELP_TOPICS: { title: string; body: string; action: string; href: Href }[] = [
-  { title: "Find something to watch", body: `Today brings you up to ${TODAY_MAX_ITEMS} videos from sources you follow. Save one for later or choose one to watch. Interests suggest sources; following a source shapes Today. Managed profiles also follow their Owner’s approvals.`, action: "Open Today", href: "/(tabs)" },
-  { title: "Add a favorite creator", body: "In Sources, review a suggestion or enter a supported channel or video link, @handle, or channel ID. Review the source, then choose Follow source. Open any followed source to browse its videos.", action: "Open Sources", href: "/(tabs)/sources" },
-  { title: "Change your weekly suggestions", body: "Choose interests in Settings. Changes apply to the next weekly edition; Sources shows its refresh date. Following or dismissing a pick doesn’t automatically replace it. If more are available, reveal another from the same edition.", action: "Choose interests", href: "/settings/interests" },
-  { title: "Find or remove a saved video", body: "In Saved, choose Search & filter to find a title or source, or show videos in progress. To remove a video, choose Edit Saved, then Remove from Saved. Use Undo in the removal message to put it back.", action: "Open Saved", href: "/(tabs)/saved" },
-  { title: "Resume watching or plan a session", body: `In Saved, Continue watching resumes your latest video. Open Sessions & progress to see all progress or create a session. Choose up to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos, name the session, and arrange their order. Frame waits for you between videos and ends after the last one. Drafts stay on this device.`, action: "Open Saved", href: "/(tabs)/saved" },
-  { title: "Review a Managed profile’s requests", body: "Open Settings → Profiles & boundaries and choose the Managed profile. Open a request to review its details. Approve video covers that video; Approve source covers videos from that creator. Viewing limits still apply. Decline request removes the request without adding an approval.", action: "Open Settings", href: "/(tabs)/settings" },
-  { title: "Understand storage and offline use", body: "Profiles, saves, sources, sessions, and progress stay on this device; they don’t sync between devices. Saved videos are links, not downloads. Playback and new suggestions need internet. Removing the app or erasing Frame data can remove your local library.", action: "Open Privacy & data", href: "/settings/privacy" },
-];
-
 function Section({ label, hint, children }: { label?: string; hint?: string; children: React.ReactNode }) {
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  return <View style={styles.section}>{label ? <Text style={type.heading} accessibilityRole="header">{label}</Text> : null}{hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}<View style={styles.sectionContent}>{children}</View></View>;
+  return <View style={styles.section}>{label ? <Heading style={type.caption}>{label}</Heading> : null}{hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}<View style={(label || hint) ? styles.sectionContent : undefined}>{children}</View></View>;
 }
 
-function StatusRow({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
-  const { palette, type } = useFrameTheme();
-  const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  return <View style={styles.infoCard}>{loading ? <ActivityIndicator size="small" color={palette.active} /> : <Lock size={18} color={palette.active} />}<View style={styles.flex}><Text style={type.label}>{title}</Text><Text style={styles.supporting}>{body}</Text></View></View>;
-}
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    helpTopic: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.borderSoft },
-    screen: { flex: 1, backgroundColor: palette.wall },
-    flex: { flex: 1 },
-    section: { paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.md },
+    helpGroups: { paddingHorizontal: spacing.page, gap: spacing.lg },
+    screen: { flex: 1, backgroundColor: "transparent" },
+    flex: { flex: 1, minWidth: 0 },
+    section: { paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.lg },
     sectionHint: { ...type.bodySoft, marginTop: spacing.xs },
     sectionContent: { marginTop: spacing.md },
     supporting: { ...type.bodySoft, color: palette.inkMuted, marginTop: 2 },
     accountBlock: { gap: spacing.sm },
-    googleButton: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
-    googleText: { ...type.label, flex: 1, color: palette.onDark },
     choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    appearanceChoice: { flexGrow: 1, flexBasis: 220 },
-    accentRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    accentChoice: { flexGrow: 1, flexBasis: 150 },
+    switchRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 48 },
+    appearanceChoice: { flexGrow: 1, flexBasis: 118, paddingHorizontal: spacing.md },
+    accentRow: { backgroundColor: palette.surfaceHigh, borderRadius: radii.card, borderCurve: "continuous", overflow: "hidden" },
+    accentChoice: { paddingHorizontal: spacing.md, borderRadius: 0 },
     swatch: { width: 24, height: 24, borderRadius: 12 },
-    infoCard: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.borderSoft },
-    infoText: { ...type.bodySoft, color: palette.inkMuted },
-    premiumCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.card, backgroundColor: palette.accentDeep },
-    premiumTitle: { ...type.heading, color: palette.onDark, fontSize: 18 },
-    premiumBody: { ...type.bodySoft, color: palette.onDarkSoft, marginTop: 2 },
-    inlineAction: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.sm, paddingRight: spacing.md },
-    inlineActionText: { ...type.label, color: palette.inkMuted },
-    linkRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm },
-    linkText: { ...type.label, flexShrink: 1, color: palette.accent },
-    dangerRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginTop: spacing.md, borderRadius: radii.card, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderSoft },
-    dangerText: { ...type.label, color: palette.danger },
-    version: { ...type.caption, color: palette.inkMuted, marginTop: spacing.lg },
-    pressed: { opacity: 0.78 },
+    version: { ...type.caption, color: palette.inkMuted, marginBottom: spacing.sm },
   });
 }

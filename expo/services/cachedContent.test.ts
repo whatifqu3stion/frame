@@ -17,7 +17,7 @@ describe("cache-only source shelves", () => {
     expect(captured).toEqual([[channelId]]);
     expect(shelf.channel.title).toBe("A trusted source");
     expect(shelf.videos).toEqual([]);
-    expect(shelf.message).toContain("cached");
+    expect(shelf.message).toContain("previously loaded");
   });
 
   test("rejects invalid IDs before any network work", async () => {
@@ -37,7 +37,7 @@ describe("cache-only source shelves", () => {
   test("a missing source never falls back to a provider lookup", async () => {
     let calls = 0;
     const service = createCachedContentService({ async getCachedFeeds() { calls++; return { ...response, response: { state: "unavailable", feeds: [], unavailableSourceIds: [channelId], fetchedAt: null } }; } });
-    await expect(service.getChannelShelf(channelId)).rejects.toThrow("No live lookup");
+    await expect(service.getChannelShelf(channelId)).rejects.toThrow("Check your YouTube key");
     expect(calls).toBe(1);
   });
 });

@@ -43,6 +43,6 @@ export async function confirmSourceFollow(
     fetchedAt: resolution.fetchedAt ?? null,
   });
   dependencies.reconcile();
-  return { ok: true, message: `Following ${resolution.source.displayName}. It can appear in your next daily selection.` };
+  return { ok: true, message: `Following ${resolution.source.displayName}. Open the source to check its Today setting. Extra sources stay in your library when Today is full.` };
 }
 

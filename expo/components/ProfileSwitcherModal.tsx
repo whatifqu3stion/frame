@@ -1,6 +1,7 @@
+import Text from "@/components/FrameText";
 import { Check, ChevronRight, Clock3, LockKeyhole, UserRound, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -35,7 +36,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: ProfileSwitch
   };
 
   return (
-    <Sheet visible={visible} onClose={close}>
+    <Sheet label="Switch profile" visible={visible} onClose={close}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}><Text style={styles.eyebrow}>This device</Text><Text style={styles.heading}>Who’s watching?</Text></View>
             <Pressable onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">

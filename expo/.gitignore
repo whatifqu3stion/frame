@@ -43,3 +43,9 @@ yarn-error.*
 core
 node_modules
 .expo
+
+# Private local release signing and build caches
+.local/
+artifacts/
+credentials.json
+*.keystore

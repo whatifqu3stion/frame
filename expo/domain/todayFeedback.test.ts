@@ -11,6 +11,16 @@ const dismissedVideo: TodaySnapshotItem = {
 };
 
 describe("Today result feedback", () => {
+  test("a save timeout can dismiss only the confirmation that scheduled it", () => {
+    const saved = todayFeedbackReducer(null, { type: "saved", profileId: "owner", videoId: "video-b" })!;
+    const repeatedSave = todayFeedbackReducer(saved, { type: "saved", profileId: "owner", videoId: "video-b" });
+    const undo = todayFeedbackReducer(saved, { type: "dismissed", item: dismissedVideo });
+    const expiry = { type: "expireCollection" as const, notice: saved };
+    expect(todayFeedbackReducer(saved, expiry)).toBeNull();
+    expect(todayFeedbackReducer(repeatedSave, expiry)).toBe(repeatedSave);
+    expect(todayFeedbackReducer(undo, expiry)).toBe(undo);
+  });
+
   test("saving B after dismissing A replaces A's Undo with the Saved action", () => {
     const dismissed = todayFeedbackReducer(null, { type: "dismissed", item: dismissedVideo });
     expect(dismissed?.action).toBe("undoDismiss");
@@ -22,8 +32,9 @@ describe("Today result feedback", () => {
   test("adding to or creating a session opens the exact resulting session", () => {
     let state = todayFeedbackReducer(null, { type: "dismissed", item: dismissedVideo });
     for (const sessionId of ["existing-session-b", "newly-created-session-c"]) {
-      state = todayFeedbackReducer(state, { type: "session", profileId: "owner", sessionId });
+      state = todayFeedbackReducer(state, { type: "session", profileId: "owner", sessionId, name: "A slow Sunday" });
       expect(state?.action).toBe("openSession");
+      expect(state?.message).toBe("Added to A slow Sunday");
       expect(todayFeedbackRoute(state!)).toEqual({ pathname: "/session/[id]", params: { id: sessionId } });
       expect(state?.target).toEqual({ sessionId });
     }

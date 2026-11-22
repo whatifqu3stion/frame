@@ -35,20 +35,23 @@ describe("profile-local Weekly Picks edition", () => {
     const first = await service.get("owner", ["tech", "science"], [], monday);
     expect(first.items.map((item) => item.providerSourceId)).toEqual(["tech-1", "science-1", "tech-2"]);
     expect(first.nextRefreshDate).toBe("2026-10-05");
-    expect(first.canShowMore).toBe(false);
+    expect(first.canShowMore).toBe(true);
 
     const dismissed = await service.dismiss("owner", "science-1", first, []);
     expect(dismissed.items.map((item) => item.providerSourceId)).toEqual(["tech-1", "tech-2"]);
     expect(dismissed.canShowMore).toBe(true);
     const more = await service.showMore("owner", dismissed, []);
-    expect(more.items.map((item) => item.providerSourceId)).toEqual(["tech-1", "tech-2", "science-2"]);
+    expect(more.items.map((item) => item.providerSourceId)).toEqual(["science-2", "tech-3", "science-3"]);
     expect(requests).toHaveLength(1);
 
     const reopened = await createWeeklyEditionService(client, storage).get("owner", ["science"], [], monday + 86_400_000);
     expect(reopened.items.map((item) => item.providerSourceId)).toEqual(more.items.map((item) => item.providerSourceId));
     expect(requests[1]).toEqual(["tech", "science"]);
     const followed = await service.get("owner", ["science"], ["tech-1"], monday + 86_400_000);
-    expect(followed.items.map((item) => item.providerSourceId)).toEqual(["tech-2", "science-2"]);
+    expect(followed.items.map((item) => item.providerSourceId)).toEqual(["science-2", "tech-3", "science-3"]);
+    const previous = await service.showPrevious("owner", followed, ["tech-1"]);
+    expect(previous.items.map((item) => item.providerSourceId)).toEqual(["tech-2"]);
+    await service.showMore("owner", previous, []);
     const clearedInterests = await service.get("owner", [], [], monday + 86_400_000);
     expect(clearedInterests.items.map((item) => item.providerSourceId)).toEqual(more.items.map((item) => item.providerSourceId));
     expect(requests.at(-1)).toEqual(["tech", "science"]);
@@ -130,4 +133,69 @@ describe("provisional onboarding preview", () => {
     }
     expect(storage.values.size).toBe(0);
   });
+});
+
+test("a new discovery policy replaces a legacy pool without carrying unreviewed source IDs forward", async () => {
+  const storage = new MemoryStorage();
+  const oldClient: WeeklyPicksClient = { async getWeeklyPicks() { return { status: "success", response: response() }; } };
+  await createWeeklyEditionService(oldClient, storage).get("owner", ["tech"], [], monday);
+  const upgraded: WeeklyPicksClient = { policyVersion: "nourishing-v1", async getWeeklyPicks() { const reviewed = response(); reviewed.interests = reviewed.interests.map((group) => ({ ...group, picks: group.picks.map((pick) => ({ ...pick, source: { ...pick.source, providerSourceId: `${pick.source.providerSourceId}-reviewed` } })) })); return { status: "success", response: reviewed }; } };
+  const result = await createWeeklyEditionService(upgraded, storage).get("owner", ["science"], [], monday);
+  expect(result.items.length).toBeGreaterThan(0);
+  expect(result.items.every((item) => item.providerSourceId.endsWith("-reviewed"))).toBeTrue();
+});
+
+test("twelve weekly picks are paged in threes, persist position, and retain dismissals across a compatible upgrade", async () => {
+  const storage = new MemoryStorage();
+  const expanded = response();
+  expanded.interests[0].picks = Array.from({ length: 12 }, (_, index) => ({ ...expanded.interests[0].picks[0], order: index + 1, source: { ...expanded.interests[0].picks[0].source, providerSourceId: `source-${index}` } }));
+  expanded.interests = [expanded.interests[0]];
+  const client: WeeklyPicksClient = { policyVersion: "v1", async getWeeklyPicks() { return { status: "success", response: expanded }; } };
+  let service = createWeeklyEditionService(client, storage);
+  let page = await service.get("owner", ["tech"], [], monday);
+  const all = page.items.map((item) => item.providerSourceId);
+  for (let index = 1; index < 4; index++) {
+    page = await service.showMore("owner", page, []);
+    expect(page.items).toHaveLength(3);
+    all.push(...page.items.map((item) => item.providerSourceId));
+  }
+  expect(new Set(all).size).toBe(12);
+  expect(page.canShowMore).toBeFalse();
+  page = await service.dismiss("owner", page.items[0].providerSourceId, page, []);
+  service = createWeeklyEditionService({ ...client, policyVersion: "v2", compatiblePolicyVersions: ["v1"] }, storage);
+  const reopened = await service.get("owner", ["science"], [], monday);
+  expect(reopened.items.map((item) => item.providerSourceId)).toEqual(page.items.map((item) => item.providerSourceId));
+  expect((await service.showPrevious("owner", reopened, [])).items.map((item) => item.providerSourceId)).toEqual(all.slice(6, 9));
+});
+
+test("a short first page does not skip a source when another page becomes available", async () => {
+  const storage = new MemoryStorage();
+  const service = createWeeklyEditionService({ async getWeeklyPicks() { return { status: "success", response: response() }; } }, storage);
+  const first = await service.get("owner", ["tech"], ["tech-2", "tech-3", "science-2", "science-3"], monday);
+  expect(first.items).toHaveLength(2);
+  const next = await service.showMore("owner", first, []);
+  expect(next.items.map((item) => item.providerSourceId)).toEqual(["tech-2", "science-2", "tech-3"]);
+  expect((await service.showPrevious("owner", next, [])).items.map((item) => item.providerSourceId)).toEqual(["tech-1", "science-1"]);
+});
+
+test("an edition opened during preparation grows its unseen pool without moving the first page", async () => {
+  let preparing = true;
+  let full = false;
+  const client: WeeklyPicksClient = {
+    isPreparing: () => preparing,
+    async getWeeklyPicks() {
+      const data = response();
+      if (!full) data.interests = [data.interests[0]];
+      return { status: "success", response: data };
+    },
+  };
+  const service = createWeeklyEditionService(client, new MemoryStorage());
+  const first = await service.get("owner", ["tech", "science"], [], monday);
+  expect(first.items.map(item => item.providerSourceId)).toEqual(["tech-1", "tech-2", "tech-3"]);
+  full = true; preparing = false;
+  const settled = await service.get("owner", ["tech", "science"], [], monday);
+  expect(settled.items.map(item => item.providerSourceId)).toEqual(first.items.map(item => item.providerSourceId));
+  expect(settled.canShowMore).toBe(true);
+  const more = await service.showMore("owner", settled, []);
+  expect(more.items.map(item => item.providerSourceId)).toEqual(["science-1", "science-2", "science-3"]);
 });

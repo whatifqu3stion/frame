@@ -1,0 +1,14 @@
+diff --git a/index.js b/index.js
+index d45e67d91d38c91d05e68e8b338e4bc2de591dcc..72b74265ce3e7542df4b40d3022fa2c12625b319 100644
+--- a/index.js
++++ b/index.js
+@@ -1,6 +1,8 @@
+ 'use strict';
+ const strictUriEncode = require('strict-uri-encode');
+-const decodeComponent = require('decode-uri-component');
++// The patched decoder is ESM; Metro and Node expose it as a namespace.
++const decoderModule = require('decode-uri-component');
++const decodeComponent = decoderModule.default || decoderModule;
+ const splitOnFirst = require('split-on-first');
+ const filterObject = require('filter-obj');
+ 

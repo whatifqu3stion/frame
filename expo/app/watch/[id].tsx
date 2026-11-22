@@ -1,39 +1,37 @@
+import { progressRecovery } from "@/services/progressRecoveryInstance";
+import PrimaryAction from "@/components/PrimaryAction";
+import Text from "@/components/FrameText";
+import PlaybackArtwork from "@/components/motion/PlaybackArtwork";
+import CompletionArtwork from "@/components/motion/CompletionArtwork";
+import { useFinishedRoom } from "@/providers/RoomLightingProvider";
+import ViewingRoom from "@/components/motion/ViewingRoom";
+import PreviewVideo from "@/preview/PreviewVideo";
+import { PREVIEW_LIBRARY_ENABLED } from "@/preview/mode";
+import { isPreviewVideo } from "@/preview/library";
+import { useSessionTimer } from "@/hooks/useSessionTimer";
+import { durationDecision, playbackDurationDecision, SHORT_FORM_MESSAGE, UNVERIFIED_DURATION_MESSAGE } from "@/domain/contentPolicy";
 import SavedRemovalNotice from "@/components/SavedRemovalNotice";
 import { useSavedRemoval } from "@/hooks/useSavedRemoval";
 import OutcomeIcon from "@/components/motion/OutcomeIcon";
 import { useScreenAction } from "@/hooks/useScreenAction";
-import MotionView from "@/components/motion/MotionView";
-import { motion } from "@/constants/motion";
 import { useFeedback } from "@/hooks/useFeedback";
+import { usePlaybackStall } from "@/hooks/usePlaybackStall";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
-import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, RotateCcw } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AccessibilityInfo,
-  ActivityIndicator,
-  Alert,
-  AppState,
-  BackHandler,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { BookOpen, Bookmark, ChevronLeft, ChevronRight, ExternalLink, Pause, Play, RotateCcw } from "lucide-react-native";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { AccessibilityInfo, ActivityIndicator, Alert, AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View,  } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
+import WatchPlayerLayout from "@/components/WatchPlayerLayout";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
-import { palette, radii, spacing, type, watchPalette } from "@/constants/theme";
+import { darkPalette, palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { expireVideo } from "@/domain/metadataRetention";
 import { createPlayerAttempt, playerLifecycle } from "@/domain/playerLifecycle";
 import { nextSessionStep } from "@/domain/sessionFlow";
@@ -52,7 +50,6 @@ const RESUME_WRITE_INTERVAL_MS = 15000;
 const ALLOWANCE_CHECKPOINT_INTERVAL_MS = 15000;
 const FINAL_PROGRESS_DELAY_MS = 250;
 const KEEP_AWAKE_TAG = "frame-video-playback";
-const LANDSCAPE_RAIL_WIDTH = 64;
 const CONTROL_HIT_SLOP = { top: 8, right: 8, bottom: 8, left: 8 } as const;
 const DARK_CONTROL_RIPPLE = { color: "rgba(250,249,246,0.16)", borderless: false } as const;
 const LIGHT_CONTROL_RIPPLE = { color: "rgba(21,30,27,0.12)", borderless: false } as const;
@@ -85,7 +82,13 @@ function playbackRemaining(status: ViewingAllowanceStatus): number | null {
   return Math.min(daily, session);
 }
 
-export default function WatchScreen() {
+export default function WatchRoute() {
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const id = firstParam(params.id) ?? "";
+  return <ViewingRoom>{PREVIEW_LIBRARY_ENABLED && isPreviewVideo(id) ? <PreviewVideo id={id} /> : <WatchScreen />}</ViewingRoom>;
+}
+
+function WatchScreen() {
   const navigation = useNavigation();
   const feedback = useFeedback();
   const insets = useSafeAreaInsets();
@@ -123,6 +126,7 @@ export default function WatchScreen() {
     savedVideos,
     sessions,
     updateSessionPosition,
+    completeSessionPosition,
     saveVideo,
     requirePurchase,
     canUseLibrary,
@@ -166,7 +170,7 @@ export default function WatchScreen() {
   });
   const isSession = sessionIds.length > 0;
 
-  const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, id], enabled: false });
+  const recovered = useQuery<Video>({ queryKey: ["recovered-video", activeProfileId, id], queryFn: skipToken, enabled: false });
   const baseVideo = useMemo<Video | undefined>(() => {
     const stored = savedVideos.find((candidate) => candidate.id === id) ?? locallyStoredVideo.data;
     if (recovered.data && (recovered.data.fetchedAt ?? 0) > (stored?.fetchedAt ?? 0)) return recovered.data;
@@ -200,16 +204,21 @@ export default function WatchScreen() {
   const hasLocallyTrustedMetadata = Boolean(savedVideos.some((candidate) => candidate.id === id) || locallyStoredVideo.data);
   const needsManagedSourceVerification = managedMode === "approvedSources" && !locallyStoredVideo.isLoading && !hasLocallyTrustedMetadata;
 
+  const trustedDurationEvidence = [savedVideos.find((candidate) => candidate.id === id), locallyStoredVideo.data, recovered.data];
+  const needsDurationVerification = playbackDurationDecision(id, trustedDurationEvidence, Date.now()) === "unverified";
   const metadataQuery = useQuery({
-    queryKey: ["video", id],
+    queryKey: ["video", activeProfileId, id],
     queryFn: ({ signal }) => resolveVideoDetails(id, signal),
     retry: false,
-    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true && (needsManagedSourceVerification || (contentAccessStatus?.canPlay === true && !usesCachedMetadata)),
+    enabled: VIDEO_ID_PATTERN.test(id) && allowanceStatus?.canPlay === true && (needsDurationVerification || needsManagedSourceVerification || (contentAccessStatus?.canPlay === true && !usesCachedMetadata)),
     staleTime: 5 * 60_000,
   });
   const verifiedVideo = metadataQuery.data?.status === "success" ? metadataQuery.data.data : null;
   const accessVideo = needsManagedSourceVerification ? verifiedVideo ?? undefined : baseVideo;
-  const [retentionClock, setRetentionClock] = useState<number>(Date.now());
+  const [lastRetentionCheck, setRetentionClock] = useState<number>(Date.now());
+  // A lookup may finish between periodic checks. Evaluate it at its local
+  // arrival time so fresh details can unlock playback immediately.
+  const retentionClock = Math.min(Date.now(), Math.max(lastRetentionCheck, metadataQuery.dataUpdatedAt));
   useEffect(() => {
     const timer = setInterval(() => setRetentionClock(Date.now()), 60_000);
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") setRetentionClock(Date.now()); });
@@ -221,16 +230,23 @@ export default function WatchScreen() {
     return expireVideo({ ...baseVideo, ...verifiedVideo, description: verifiedVideo.description ?? baseVideo.description }, retentionClock);
   }, [baseVideo, verifiedVideo, retentionClock]);
 
+  const durationPolicy = playbackDurationDecision(id, [...trustedDurationEvidence, verifiedVideo], retentionClock);
+  const runtimeRejectedRef = useRef(false);
+  const [runtimeDurationRejected, setRuntimeDurationRejected] = useState(false);
+  useEffect(() => { setRuntimeDurationRejected(false); runtimeRejectedRef.current = false; }, [id, activeProfileId]);
+  const longFormAllowed = durationPolicy === "allowed" && !runtimeDurationRejected;
+  const durationMessage = runtimeDurationRejected || durationPolicy === "short" ? SHORT_FORM_MESSAGE : metadataQuery.data?.status !== "success" && metadataQuery.data?.message ? metadataQuery.data.message : UNVERIFIED_DURATION_MESSAGE;
+
   const removal = useSavedRemoval(id);
-  const [aboutExpanded, setAboutExpanded] = useState(false);
-  useEffect(() => { setAboutExpanded(false); }, [id]);
   const [startAt, setStartAt] = useState<number>(0);
   const [resumeReady, setResumeReady] = useState<boolean>(false);
+  const [tvDetailsOpen, setTvDetailsOpen] = useState(false);
   const [playbackState, setPlaybackState] = useState<YouTubePlaybackState>("unstarted");
   const [playerReady, setPlayerReady] = useState<boolean>(false);
   const [playerError, setPlayerError] = useState<YouTubePlayerError | null>(null);
   const [playerKey, setPlayerKey] = useState<number>(0);
   const attempt = useRef(createPlayerAttempt()).current;
+  const playIntent = useRef(0);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isScreenFocused, setIsScreenFocused] = useState<boolean>(true);
@@ -244,25 +260,35 @@ export default function WatchScreen() {
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(video?.durationSeconds ?? 0);
   const didEndRef = useRef<boolean>(false);
-  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+  // Recovery outlives this route; returning to the same video reuses its ordered writer.
+  const progressWriter = useMemo(() => progressRecovery.getWriter(activeProfileId, id), [activeProfileId, id]);
+  useEffect(() => progressWriter.retain(), [progressWriter]);
+  const progressSave = useSyncExternalStore(progressWriter.subscribe, progressWriter.getSnapshot, progressWriter.getSnapshot);
+  const [resumeReadError, setResumeReadError] = useState(false);
+  const [resumeReadAttempt, setResumeReadAttempt] = useState(0);
   const pendingActionRef = useRef<PendingAction>(null);
   const navigationLockedRef = useRef<boolean>(false);
   const isFullscreenRef = useRef<boolean>(false);
   const todayWatchedRef = useRef<boolean>(false);
 
-  const isLandscape = width > height;
-  const isImmersiveLandscape = isLandscape && (Platform.OS !== "web" || width < 900);
-  const landscapeAvailableWidth = Math.max(
-    160,
-    width - insets.left - insets.right - LANDSCAPE_RAIL_WIDTH - spacing.sm,
-  );
-  const landscapeAvailableHeight = Math.max(90, height - insets.top - insets.bottom);
-  const landscapePlayerHeight = Math.min(landscapeAvailableHeight, (landscapeAvailableWidth * 9) / 16);
-  const landscapePlayerWidth = Math.min(landscapeAvailableWidth, (landscapePlayerHeight * 16) / 9);
-  const portraitPlayerHeight = Math.max(180, Math.min((width * 9) / 16, height * 0.52));
-  const portraitPlayerWidth = Math.min(width, (portraitPlayerHeight * 16) / 9);
+  const saveTimedResume = useRef<() => Promise<void>>(async () => {});
+  const sessionTimer = useSessionTimer(activeProfileId, savedSession?.id, savedSession?.targetMinutes ?? null, id,
+    playbackState === "playing" && playerReady && isScreenFocused && isAppActive && allowanceStatus?.canPlay === true && contentAccessStatus?.canPlay === true,
+    () => { playIntent.current++; playerRef.current?.pause(); playerRef.current?.exitFullscreen(); setIsFullscreen(false); isFullscreenRef.current = false; void clearOrientationRequest("fullscreen"); setStartAt(Math.max(0, currentTimeRef.current)); setPlaybackState("paused"); void saveTimedResume.current(); });
+  const timedSessionBlocked = Boolean(savedSessionId && sessionTimer.ready && !sessionTimer.allowed);
 
-  const lifecycle = playerLifecycle({ resumeReady, contentAllowed: contentAccessStatus?.canPlay === true, allowanceAllowed: allowanceStatus?.canPlay === true, focused: isScreenFocused, active: isAppActive, ended: playbackState === "ended", failed: Boolean(playerError), ready: playerReady });
+  const sessionEndsHere = !nextSessionId || sessionTimer.run.finishVideoId === id || sessionTimer.remaining === 0 || sessionTimer.run.ended;
+  const canContinueSession = !sessionEndsHere && allowanceStatus?.canPlay !== false;
+  const atFinalEnding = playbackState === "ended" && !canContinueSession;
+  useFinishedRoom(atFinalEnding);
+
+  const lifecycle = playerLifecycle({ resumeReady, contentAllowed: contentAccessStatus?.canPlay === true && longFormAllowed && sessionTimer.allowed, allowanceAllowed: allowanceStatus?.canPlay === true, focused: isScreenFocused, active: isAppActive, ended: playbackState === "ended", failed: Boolean(playerError), ready: playerReady });
+
+  useLayoutEffect(() => {
+    const intent = playIntent;
+    if (!lifecycle.mount) { intent.current++; void stopAllowancePlayback().catch(() => {}); }
+    return () => { intent.current++; void stopAllowancePlayback().catch(() => {}); };
+  }, [activeProfileId, id, lifecycle.mount, stopAllowancePlayback]);
 
   const showAllowanceWarning = useCallback((warning: ViewingAllowanceWarning | undefined): void => {
     if (!warning) return;
@@ -317,13 +343,14 @@ export default function WatchScreen() {
         if (mounted) setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Ask the Owner to review this profile’s daily viewing allowance in Settings before continuing." });
       });
     }
-    return () => { mounted = false; void stopAllowancePlayback(); };
+    return () => { mounted = false; void stopAllowancePlayback().catch(() => {}); };
   }, [accessVideo, activeProfile?.role, activeProfileId, applyAllowanceStatus, getManagedContentAccess, getPlaybackAllowance, locallyStoredVideo.isLoading, managedOverviewQuery.isError, managedOverviewQuery.isLoading, metadataQuery.data, metadataQuery.isError, needsManagedSourceVerification, stopAllowancePlayback]);
 
   useEffect(() => {
     let mounted = true;
     setPlayerKey(attempt.cancel());
     setResumeReady(false);
+    setResumeReadError(false);
     setPlayerReady(false);
     setPlayerError(null);
     setPlaybackState("unstarted");
@@ -354,29 +381,28 @@ export default function WatchScreen() {
         setResumeReady(true);
       })
       .catch(() => {
-        if (mounted) setResumeReady(true);
+        if (mounted) setResumeReadError(true);
       });
     return () => { mounted = false; };
-  }, [activeProfileId, attempt, id, canUseLibrary, setAction, video?.durationSeconds]);
+  }, [activeProfileId, attempt, id, canUseLibrary, setAction, video?.durationSeconds, resumeReadAttempt]);
 
   const persist = useCallback((): Promise<void> => {
-    if (!video || !canUseLibrary || didEndRef.current) return Promise.resolve();
+    if (!longFormAllowed || runtimeRejectedRef.current || !video || !canUseLibrary || didEndRef.current) return Promise.resolve();
     const current = currentTimeRef.current;
     const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
-    if (current <= 5 || (duration > 0 && current >= duration - 10)) return Promise.resolve();
+    if (current <= 0 || (!savedSessionId && (current <= 5 || (duration > 0 && current >= duration - 10)))) return Promise.resolve();
     const normalizedVideo = duration > 0 && duration !== video.durationSeconds
       ? { ...video, durationSeconds: Math.floor(duration) }
       : video;
-    writeChainRef.current = writeChainRef.current
-      .then(async () => {
-        if (didEndRef.current) return;
-        await recordResume(normalizedVideo, current, savedSessionId ?? null);
-      })
-      .catch(() => {});
-    return writeChainRef.current;
-  }, [canUseLibrary, recordResume, savedSessionId, video]);
+    return progressWriter.write(async () => {
+      await recordResume(normalizedVideo, current, savedSessionId ?? null);
+    });
+  }, [canUseLibrary, longFormAllowed, recordResume, savedSessionId, video, progressWriter]);
+
+  saveTimedResume.current = persist;
 
   const failClosedAllowance = useCallback((): void => {
+    playIntent.current++;
     playerRef.current?.pause();
     setPlaybackState("paused");
     setAllowanceStatus({ kind: "ownerReview", canPlay: false, remainingSeconds: 0, reason: "Frame couldn’t save your viewing time. Ask the Owner to review this profile’s daily viewing allowance before continuing." });
@@ -384,14 +410,16 @@ export default function WatchScreen() {
   }, [persist]);
 
   const pauseAndPersist = useCallback((): void => {
-    setPlayerKey(attempt.cancel());
+    playIntent.current++;
+    const ticket = attempt.cancel();
+    setPlayerKey(ticket);
     setAction(null);
     playerRef.current?.requestProgress();
     playerRef.current?.pause();
     setPlaybackState((state) => state === "playing" ? "paused" : state);
     void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
     void persist();
-    setTimeout(() => { void persist(); }, FINAL_PROGRESS_DELAY_MS);
+    setTimeout(() => { if (attempt.isCurrent(ticket)) void persist(); }, FINAL_PROGRESS_DELAY_MS);
   }, [applyAllowanceStatus, attempt, failClosedAllowance, persist, setAction, stopAllowancePlayback]);
 
   const leaveFullscreen = useCallback((): void => {
@@ -401,6 +429,8 @@ export default function WatchScreen() {
     void clearOrientationRequest("fullscreen");
   }, []);
 
+  const pauseOnBlur = useRef(pauseAndPersist);
+  useEffect(() => { pauseOnBlur.current = pauseAndPersist; }, [pauseAndPersist]);
   useFocusEffect(useCallback(() => {
     setIsScreenFocused(true);
     void setOrientationRequest("watch", ScreenOrientation.OrientationLock.DEFAULT);
@@ -408,14 +438,14 @@ export default function WatchScreen() {
       playerRef.current?.exitFullscreen();
       isFullscreenRef.current = false;
       setIsFullscreen(false);
-      pauseAndPersist();
+      pauseOnBlur.current();
       setStartAt(Math.max(0, Math.floor(currentTimeRef.current)));
       setPlayerReady(false);
       setIsScreenFocused(false);
       void clearOrientationRequest("fullscreen");
       void clearOrientationRequest("watch");
     };
-  }, [pauseAndPersist]));
+  }, []));
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -433,10 +463,14 @@ export default function WatchScreen() {
 
   useEffect(() => {
     if (playbackState !== "playing" || !playerReady || allowanceStatus?.canPlay !== true) return;
+    let active = true;
     const resumeInterval = setInterval(() => { void persist(); }, RESUME_WRITE_INTERVAL_MS);
     const allowanceInterval = setInterval(() => {
       if (!accessVideo) return;
+      const intent = playIntent.current;
+      const current = () => active && intent === playIntent.current;
       void getManagedContentAccess(accessVideo).then(async (access) => {
+        if (!current()) return;
         setContentAccessStatus(access);
         if (!access.canPlay) {
           playerRef.current?.pause();
@@ -445,12 +479,13 @@ export default function WatchScreen() {
           return;
         }
         const status = await checkpointAllowancePlayback();
+        if (!current()) return;
         applyAllowanceStatus(status);
         if (!status.canPlay) {
           playerRef.current?.pause();
           void persist();
         }
-      }).catch(failClosedAllowance);
+      }).catch(() => { if (current()) failClosedAllowance(); });
     }, ALLOWANCE_CHECKPOINT_INTERVAL_MS);
     const countdownInterval = setInterval(() => {
       setAllowanceStatus((current) => {
@@ -473,6 +508,7 @@ export default function WatchScreen() {
     }, 1000);
     void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
     return () => {
+      active = false;
       clearInterval(resumeInterval);
       clearInterval(allowanceInterval);
       clearInterval(countdownInterval);
@@ -505,6 +541,9 @@ export default function WatchScreen() {
 
   const handleReady = useCallback((durationSeconds: number): void => {
     if (!attempt.isCurrent(playerKey) || !lifecycle.mount) return;
+    if (durationSeconds > 0 && durationDecision(durationSeconds) !== "allowed") {
+      runtimeRejectedRef.current = true; playerRef.current?.pause(); setRuntimeDurationRejected(true); return;
+    }
     if (__DEV__) console.log("[player] ready", { id, durationSeconds });
     if (durationSeconds > 0) {
       durationRef.current = durationSeconds;
@@ -514,12 +553,16 @@ export default function WatchScreen() {
     setPlayerError(null);
     setAction(null);
     if (attempt.consumeReplay(playerKey)) {
-      playerRef.current?.seekTo(0);
+      playerRef.current?.seekTo(sessionTimer.run.finishVideoId === id ? currentTimeRef.current : 0);
       playerRef.current?.play();
     }
-  }, [attempt, id, lifecycle.mount, playerKey, setAction]);
+  }, [attempt, id, lifecycle.mount, playerKey, setAction, sessionTimer.run.finishVideoId]);
 
   const handleProgress = useCallback((nextCurrentSeconds: number, durationSeconds: number): void => {
+    if (!attempt.isCurrent(playerKey) || !lifecycle.mount) return;
+    if (durationSeconds > 0 && durationDecision(durationSeconds) !== "allowed") {
+      runtimeRejectedRef.current = true; playerRef.current?.pause(); setRuntimeDurationRejected(true); return;
+    }
     const safeCurrentSeconds = Math.max(0, nextCurrentSeconds);
     currentTimeRef.current = safeCurrentSeconds;
     setCurrentSeconds(safeCurrentSeconds);
@@ -527,7 +570,7 @@ export default function WatchScreen() {
       durationRef.current = durationSeconds;
       setPlayerDurationSeconds(durationSeconds);
     }
-  }, []);
+  }, [attempt, playerKey, lifecycle.mount]);
 
   const jumpToChapter = useCallback((chapter: VideoChapter): void => {
     if (!playerReady || playerError) return;
@@ -539,14 +582,19 @@ export default function WatchScreen() {
   }, [feedback, playerError, playerReady]);
 
   const handleStateChange = useCallback((state: YouTubePlaybackState): void => {
+    if (!attempt.isCurrent(playerKey) || !lifecycle.mount) return;
+    const intent = ++playIntent.current;
+    const current = () => playIntent.current === intent && attempt.isCurrent(playerKey) && AppState.currentState === "active";
     setPlaybackState(state);
     if (state === "playing") {
+      if (!longFormAllowed || runtimeRejectedRef.current || !sessionTimer.allowed) { playerRef.current?.pause(); return; }
       allowanceEndingRef.current = false;
       if (!accessVideo) {
         playerRef.current?.pause();
         return;
       }
       void getManagedContentAccess(accessVideo).then(async (access) => {
+        if (!current()) return;
         setContentAccessStatus(access);
         if (!access.canPlay) {
           allowanceEndingRef.current = true;
@@ -554,7 +602,8 @@ export default function WatchScreen() {
           void persist();
           return;
         }
-        const status = await beginAllowancePlayback();
+        const status = await beginAllowancePlayback(current);
+        if (!status || !current()) return;
         applyAllowanceStatus(status);
         if (!status.canPlay) {
           allowanceEndingRef.current = true;
@@ -566,14 +615,14 @@ export default function WatchScreen() {
           todayWatchedRef.current = true;
           void todayRepository.setDisposition(activeProfileId, todayPeriodKey, id, "watched", Date.now()).then((changed) => {
             if (changed) void queryClient.invalidateQueries({ queryKey: ["today", activeProfileId] });
-          });
+          }).catch(() => { if (current()) todayWatchedRef.current = false; });
         }
-      }).catch(failClosedAllowance);
+      }).catch(() => { if (current()) failClosedAllowance(); });
       return;
     }
-    void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
+    void stopAllowancePlayback().then((status) => { if (status && current()) applyAllowanceStatus(status); }).catch(() => { if (current()) failClosedAllowance(); });
     if (state === "paused") void persist();
-  }, [accessVideo, activeProfileId, applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, getManagedContentAccess, id, persist, queryClient, stopAllowancePlayback, todayPeriodKey, todayProfileId]);
+  }, [attempt, playerKey, lifecycle.mount, accessVideo, activeProfileId, longFormAllowed, sessionTimer.allowed, applyAllowanceStatus, beginAllowancePlayback, failClosedAllowance, getManagedContentAccess, id, persist, queryClient, stopAllowancePlayback, todayPeriodKey, todayProfileId]);
 
   const handleConnectivityChange = useCallback((nextOnline: boolean): void => {
     setIsOnline(nextOnline);
@@ -590,25 +639,27 @@ export default function WatchScreen() {
   }, []);
 
   const handleEnded = useCallback((): void => {
+    if (!attempt.isCurrent(playerKey) || !lifecycle.mount) return;
+    playIntent.current++;
     if (!video || didEndRef.current) return;
     if (__DEV__) console.log("[player] ended", { id: video.id, sessionIndex: isSession ? sessionIndex : null });
     didEndRef.current = true;
+    if (savedSessionId && sessionEndsHere) void sessionTimer.end().catch(failClosedAllowance);
     currentTimeRef.current = 0;
     setPlaybackState("ended");
     void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
     setAction(null);
     if (isFullscreenRef.current) leaveFullscreen();
-    writeChainRef.current = writeChainRef.current
-      .then(async () => {
-        await clearVideoResume(video.id);
-        if (savedSessionId && sessionIndex >= 0) await updateSessionPosition(savedSessionId, video.id, sessionIndex, nextSessionStep(sessionIds, sessionIndex));
-      })
-      .catch(() => {});
-    void AccessibilityInfo.announceForAccessibility(isSession && nextSessionId ? "Video complete. Next video ready." : "Video complete.");
-  }, [applyAllowanceStatus, clearVideoResume, failClosedAllowance, isSession, leaveFullscreen, nextSessionId, savedSessionId, sessionIds, sessionIndex, setAction, stopAllowancePlayback, updateSessionPosition, video]);
+    void progressWriter.write(async () => {
+      await clearVideoResume(video.id);
+      if (savedSessionId && sessionIndex >= 0) await completeSessionPosition(savedSessionId, video.id, sessionIndex, nextSessionStep(sessionIds, sessionIndex));
+    });
+    void AccessibilityInfo.announceForAccessibility(isSession && !sessionEndsHere ? "Video complete. Next video ready." : "Video complete.");
+  }, [attempt, playerKey, lifecycle.mount, progressWriter, sessionTimer, sessionEndsHere, applyAllowanceStatus, clearVideoResume, failClosedAllowance, isSession, leaveFullscreen, savedSessionId, sessionIds, sessionIndex, setAction, stopAllowancePlayback, completeSessionPosition, video]);
 
   const handlePlayerError = useCallback((error: YouTubePlayerError): void => {
     if (!attempt.isCurrent(playerKey) || !lifecycle.mount) return;
+    playIntent.current++;
     setPlayerKey(attempt.cancel());
     if (__DEV__) console.warn("[player] error", { id, code: error.code ?? null });
     playerRef.current?.requestProgress();
@@ -620,6 +671,12 @@ export default function WatchScreen() {
     void stopAllowancePlayback().then((status) => { if (status) applyAllowanceStatus(status); }).catch(failClosedAllowance);
     void persist();
   }, [applyAllowanceStatus, attempt, failClosedAllowance, id, leaveFullscreen, lifecycle.mount, persist, playerKey, setAction, stopAllowancePlayback]);
+
+  usePlaybackStall(lifecycle.mount && playerReady && playbackState === "buffering", playerKey, () => {
+    handlePlayerError({ message: isOnline === false
+      ? "You’re offline. Reconnect, then retry this video."
+      : "Playback has stalled. Check your connection and retry from your current place." });
+  });
 
   const retryPlayer = useCallback((): void => {
     if (!beginAction("retry")) return;
@@ -643,12 +700,13 @@ export default function WatchScreen() {
   }, [navigation, leaveFullscreen, pauseAndPersist]);
 
   const playNext = useCallback(async (): Promise<void> => {
+    if (!sessionTimer.allowed || sessionTimer.run.finishVideoId) { closePlayer(); return; }
     if (!nextSessionId) { closePlayer(); return; }
     if (navigationLockedRef.current) return;
     navigationLockedRef.current = true;
     pauseAndPersist();
     try {
-      await writeChainRef.current;
+      await progressWriter.flush();
       if (savedSessionId) {
         const moved = await updateSessionPosition(savedSessionId, id, sessionIndex, sessionIndex + 1);
         if (!moved) throw new Error("Session changed");
@@ -664,13 +722,13 @@ export default function WatchScreen() {
       navigationLockedRef.current = false;
       Alert.alert("Couldn’t continue", "Your next video is still in the session. Open it from Saved to continue.");
     }
-  }, [activeProfileId, closePlayer, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition]);
+  }, [progressWriter, activeProfileId, closePlayer, id, nextSessionId, pauseAndPersist, savedSessionId, sessionIds, sessionIndex, updateSessionPosition, sessionTimer.allowed, sessionTimer.run.finishVideoId]);
 
   const rewatch = useCallback(async (): Promise<void> => {
     if (!beginAction("rewatch")) return;
     const ticket = attempt.cancel();
     try {
-      await writeChainRef.current;
+      await progressWriter.flush();
       if (!attempt.isCurrent(ticket)) return;
       if (savedSessionId && sessionIndex >= 0) {
         const moved = await updateSessionPosition(savedSessionId, id, sessionIndex, sessionIndex);
@@ -688,10 +746,10 @@ export default function WatchScreen() {
     } catch {
       if (attempt.isCurrent(ticket)) {
         setAction(null);
-        Alert.alert("Couldn’t restart", "Your place in the session is saved.");
+        Alert.alert("Couldn’t restart", "Retry saving your progress, then try again.");
       }
     }
-  }, [attempt, beginAction, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
+  }, [progressWriter, attempt, beginAction, id, savedSessionId, sessionIndex, setAction, updateSessionPosition]);
 
   const goToToday = useCallback((): void => {
     pauseAndPersist();
@@ -704,13 +762,14 @@ export default function WatchScreen() {
   }, [pauseAndPersist]);
 
   const openExternal = useCallback(async (url: string): Promise<void> => {
+    if (!longFormAllowed) { Alert.alert("Video unavailable in Frame", durationMessage); return; }
     if (!await authorizeProtectedAction(activeProfileId)) return;
     try {
       await Linking.openURL(url);
     } catch {
       Alert.alert("Couldn’t open video", "Try again when your browser is available.");
     }
-  }, [activeProfileId, authorizeProtectedAction]);
+  }, [activeProfileId, authorizeProtectedAction, longFormAllowed, durationMessage]);
 
   const openInYouTube = useCallback((): void => {
     void openExternal(`https://www.youtube.com/watch?v=${id}`);
@@ -723,11 +782,12 @@ export default function WatchScreen() {
         leaveFullscreen();
         return true;
       }
+      if (tvDetailsOpen) { setTvDetailsOpen(false); return true; }
       closePlayer();
       return true;
     });
     return () => subscription.remove();
-  }, [closePlayer, leaveFullscreen]);
+  }, [closePlayer, leaveFullscreen, tvDetailsOpen]);
 
   const isSaved = video ? savedVideos.some((candidate) => candidate.id === video.id) : false;
 
@@ -736,6 +796,7 @@ export default function WatchScreen() {
     const done = feedback.capture();
     try {
       if (!isSaved) {
+        if (!longFormAllowed) { Alert.alert("Video unavailable in Frame", durationMessage); return; }
         if (!requirePurchase("save")) return;
         const duration = firstPositiveDuration(durationRef.current, video.durationSeconds);
         const normalizedVideo = duration > 0 ? { ...video, durationSeconds: Math.floor(duration) } : video;
@@ -750,7 +811,7 @@ export default function WatchScreen() {
     } finally {
       setAction(null);
     }
-  }, [beginAction, feedback, isSaved, requirePurchase, saveVideo, setAction, removal, video]);
+  }, [beginAction, feedback, isSaved, longFormAllowed, durationMessage, requirePurchase, saveVideo, setAction, removal, video]);
 
   const requestAccess = useCallback(async (): Promise<void> => {
     if (!accessVideo) return;
@@ -788,21 +849,28 @@ export default function WatchScreen() {
     );
   }
 
-  const expandableAbout = (video.description?.length ?? 0) > 200 || (video.description?.split("\n").length ?? 0) > 3;
   const dateLabel = formatRelativeDate(video.publishedAt);
-  const durationLabel = formatDuration(firstPositiveDuration(durationRef.current, video.durationSeconds));
+  const durationLabel = durationPolicy === "unverified" ? "—" : formatDuration(firstPositiveDuration(durationRef.current, video.durationSeconds));
+  const saveDisabled = pendingAction === "save" || removal.busy || (!isSaved && !longFormAllowed);
   const detailLabel = [dateLabel, durationLabel === "—" ? "" : durationLabel].filter(Boolean).join(" · ");
   const showEnded = playbackState === "ended" && lifecycle.permitted;
   const contentBlocked = contentAccessStatus !== null && !contentAccessStatus.canPlay;
   const allowanceBlocked = allowanceStatus !== null && !allowanceStatus.canPlay;
   const shouldMountPlayer = lifecycle.mount;
-  const showPlayerError = lifecycle.permitted && playbackState !== "ended" && playerError;
+  const showPlayerError = !timedSessionBlocked && lifecycle.permitted && playbackState !== "ended" && playerError;
   const showPlayer = shouldMountPlayer && playerReady && !playerError;
   const playerBusy = pendingAction === "retry";
-  const hasMessage = contentBlocked || allowanceBlocked || Boolean(showPlayerError) || showEnded;
+  const hasMessage = resumeReadError || timedSessionBlocked || !longFormAllowed || contentBlocked || allowanceBlocked || Boolean(showPlayerError) || showEnded;
+
+  const progressNotice = progressSave.error ? <View style={{ paddingVertical: spacing.sm }} accessibilityLiveRegion="polite" testID="progress-save-error">
+    <Text style={styles.detailLabel}>Your latest progress couldn’t save. Retry to keep your place.</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ busy: progressSave.retrying, disabled: progressSave.retrying }} disabled={progressSave.retrying} onPress={() => { void progressWriter.retry(); }} style={styles.darkOutlineButton}>
+      <Text style={styles.darkButtonText}>{progressSave.retrying ? "Saving progress…" : "Retry saving progress"}</Text>
+    </Pressable>
+  </View> : null;
 
   const stage = (
-    <View style={[styles.playerStage, hasMessage && styles.messageStage]}>
+    <View style={{ flex: 1 }}><View style={[styles.playerStage, hasMessage && styles.messageStage, atFinalEnding && styles.litEnding]}>
       {shouldMountPlayer ? (
         <View
           style={[styles.playerEmbed, !showPlayer && styles.playerEmbedHidden]}
@@ -827,7 +895,20 @@ export default function WatchScreen() {
         </View>
       ) : null}
 
-      {contentBlocked ? (
+      {resumeReadError ? <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+        <Text style={styles.errorTitle} accessibilityRole="alert">Your place couldn’t load</Text>
+        <Text style={styles.errorBody}>Retry to restore your saved position. Your video hasn’t started.</Text>
+        <Pressable accessibilityRole="button" onPress={() => setResumeReadAttempt(value => value + 1)} style={styles.darkOutlineButton} testID="resume-read-retry"><Text style={styles.darkButtonText}>Retry</Text></Pressable>
+      </View> : null}
+      {!longFormAllowed ? (
+        <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+          <Text style={styles.endEyebrow}>Long-form only</Text>
+          <Text style={styles.endTitle}>{metadataQuery.isFetching ? "Checking video length…" : "Four minutes or longer."}</Text>
+          <Text style={styles.allowanceBody}>{durationMessage}</Text>
+          {durationPolicy === "unverified" && !runtimeDurationRejected ? <Pressable disabled={metadataQuery.isFetching} accessibilityRole="button" style={styles.darkOutlineButton} onPress={() => { void metadataQuery.refetch(); }}><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Checking…" : "Verify video details"}</Text></Pressable> : null}
+          <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={goToSaved} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Saved</Text></PrimaryAction>
+        </View>
+      ) : contentBlocked ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
           <Text style={styles.endEyebrow}>Content approval</Text>
           <Text style={styles.endTitle}>{contentAccessStatus.kind === "ownerReview" ? "Owner review needed." : contentAccessStatus.kind === "videoApprovalRequired" ? "This video needs approval." : "This source needs approval."}</Text>
@@ -835,7 +916,7 @@ export default function WatchScreen() {
           <View style={styles.stateActions}>
             {contentAccessStatus.kind === "ownerReview" && needsManagedSourceVerification ? <Pressable disabled={metadataQuery.isFetching} accessibilityState={{ busy: metadataQuery.isFetching, disabled: metadataQuery.isFetching }} onPress={() => { void metadataQuery.refetch(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Verifying…" : "Retry verification"}</Text></Pressable> : null}
             {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void requestAccess(); }} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>{accessAction.busy ? "Working…" : "Request approval"}</Text></Pressable> : null}
-            {contentAccessStatus.kind !== "ownerReview" ? <Pressable disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></Pressable> : null}
+            {contentAccessStatus.kind !== "ownerReview" ? <PrimaryAction depth={darkPalette.primaryButtonDepth} disabled={accessAction.busy} accessibilityState={{ busy: accessAction.busy, disabled: accessAction.busy }} onPress={() => { void ownerApproveAccess(); }} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Approve with PIN</Text></PrimaryAction> : null}
           </View>
           <Pressable onPress={goToToday} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Today</Text></Pressable>
         </View>
@@ -846,13 +927,23 @@ export default function WatchScreen() {
           <Text style={styles.allowanceBody}>{allowanceStatus.kind === "ownerReview" || allowanceStatus.kind === "restricted" ? allowanceStatus.reason : "Your place is saved. You can still browse Frame and manage your settings."}</Text>
           <View style={styles.stateActions}>
             <Pressable onPress={goToToday} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Today</Text></Pressable>
-            <Pressable onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></Pressable>
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={goToSaved} style={styles.lightStateButton} accessibilityRole="button"><Text style={styles.lightButtonText}>Saved</Text></PrimaryAction>
           </View>
+        </View>
+      ) : timedSessionBlocked ? (
+        <View style={styles.stateSurface} accessibilityLiveRegion="polite">
+          <Text style={styles.endTitle} accessibilityRole="header">{sessionTimer.error ? "Session time is unavailable." : !savedSession?.targetMinutes ? "Choose a session duration." : "Your session time is complete."}</Text>
+          <Text style={styles.allowanceBody}>{sessionTimer.error ? "Your video is paused. Retry to restore your session time." : !savedSession?.targetMinutes ? "Open this session to choose how long you want to watch." : sessionTimer.run.ended ? "Open the session when you’re ready to plan more time." : sessionTimer.canFinish ? "Your place is kept. You can stop here or finish this video without starting another." : "This session’s time has ended. Return to your session to begin again."}</Text>
+          {sessionTimer.error ? <PrimaryAction depth={darkPalette.primaryButtonDepth} style={styles.lightStateButton} accessibilityRole="button" accessibilityState={{ disabled: sessionTimer.retrying, busy: sessionTimer.retrying }} disabled={sessionTimer.retrying} onPress={() => { void sessionTimer.retry(); }}><Text style={styles.lightButtonText}>{sessionTimer.retrying ? "Restoring session time…" : "Retry session time"}</Text></PrimaryAction> : null}
+          {sessionTimer.canFinish && playbackState !== "ended" ? <PrimaryAction depth={darkPalette.primaryButtonDepth} style={styles.lightStateButton} accessibilityRole="button" onPress={() => { void sessionTimer.finish().then((allowed) => { if (allowed) { setStartAt(currentTimeRef.current); setPlaybackState("unstarted"); setPlayerReady(false); setPlayerKey(attempt.restart()); } }).catch(failClosedAllowance); }}><Text style={styles.lightButtonText}>Finish this video</Text></PrimaryAction> : null}
+          {!sessionTimer.error ? <Pressable style={styles.darkOutlineButton} accessibilityRole="button" onPress={() => { void sessionTimer.end().then(closePlayer).catch(failClosedAllowance); }}><Text style={styles.darkButtonText}>End session</Text></Pressable> : null}
+          <Pressable style={styles.skipButton} accessibilityRole="button" onPress={() => { pauseAndPersist(); router.replace({ pathname: "/session/[id]", params: { id: savedSessionId! } }); }}><Text style={styles.skipButtonText}>Open session</Text></Pressable>
         </View>
       ) : null}
 
-      {!contentBlocked && !allowanceBlocked && (!playerReady || allowanceStatus === null || contentAccessStatus === null) && !playerError && !showEnded ? (
+      {!resumeReadError && longFormAllowed && !timedSessionBlocked && !contentBlocked && !allowanceBlocked && (!playerReady || allowanceStatus === null || contentAccessStatus === null) && !playerError && !showEnded ? (
         <View style={[styles.stateSurface, StyleSheet.absoluteFillObject]} accessible accessibilityRole="progressbar" accessibilityLabel={resumeReady ? "Preparing video" : "Finding your place"}>
+          <PlaybackArtwork key={id} uri={video.thumbnailUrl} />
           <ActivityIndicator color={palette.wall} />
           <Text style={styles.playerStatusText}>{isOnline === false ? "You’re offline" : resumeReady ? "Preparing video…" : "Finding your place…"}</Text>
         </View>
@@ -882,36 +973,37 @@ export default function WatchScreen() {
             </Pressable>
           </View>
           {isSession ? (
-            <Pressable onPress={() => { void playNext(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={() => { void playNext(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]} accessibilityRole="button" testID="session-skip">
               <Text style={styles.skipButtonText}>{nextSessionId ? "Skip to next" : "End session"}</Text>
               {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-            </Pressable>
+            </PrimaryAction>
           ) : null}
         </View>
       ) : null}
 
-      {showEnded ? (
-        <MotionView enter duration={nextSessionId ? motion.state : motion.ending} style={styles.stateSurface} accessibilityLiveRegion="polite">
+      {showEnded && !timedSessionBlocked ? (
+        <View style={[styles.stateSurface, atFinalEnding && styles.litEnding]} accessibilityLiveRegion="polite">
+          <CompletionArtwork key={id} uri={video.thumbnailUrl} />
           <Text style={styles.endEyebrow}>
-            {isSession ? (nextSessionId ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
+            {isSession ? (canContinueSession ? `Session · ${sessionIndex + 1} of ${sessionIds.length}` : "Session complete") : "The end"}
           </Text>
-          <Text style={styles.endTitle} accessibilityRole="header">{nextSessionId ? "A moment between videos." : "A good place to stop."}</Text>
-          <Text style={styles.allowanceBody}>{nextSessionId ? "Continue to the next video, or finish for now." : "You’ve reached the end. Nothing plays automatically."}</Text>
-          {nextSessionId ? <Text style={styles.allowanceBody}>Up next: {nextVideo?.title ?? "Video details unavailable"}{nextVideo?.durationSeconds ? ` · ${formatDuration(nextVideo.durationSeconds)}` : ""}</Text> : null}
+          <Text style={styles.endTitle} accessibilityRole="header">{canContinueSession ? "A moment between videos." : "A good place to stop."}</Text>
+          <Text style={styles.allowanceBody}>{canContinueSession ? "Continue to the next video, or finish for now." : "You’ve reached the end. Nothing plays automatically."}</Text>
+          {canContinueSession ? <Text style={styles.allowanceBody}>Up next: {nextVideo?.title ?? "Video details unavailable"}{nextVideo?.durationSeconds ? ` · ${formatDuration(nextVideo.durationSeconds)}` : ""}</Text> : null}
           <View style={styles.stateActions}>
             <Pressable disabled={pendingAction === "rewatch"} accessibilityState={{ busy: pendingAction === "rewatch", disabled: pendingAction === "rewatch" }} onPress={() => { void rewatch(); }} hitSlop={CONTROL_HIT_SLOP} android_ripple={DARK_CONTROL_RIPPLE} style={({ pressed }) => [styles.darkOutlineButton, pressed && styles.pressed]} accessibilityRole="button" testID="rewatch">
               <RotateCcw size={15} color={palette.wall} />
               <Text style={styles.darkButtonText}>Watch again</Text>
             </Pressable>
-            <Pressable onPress={nextSessionId ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={nextSessionId ? "session-next" : "watch-done"}>
-              <Text style={styles.lightButtonText}>{nextSessionId ? "Continue" : "Done for now"}</Text>
-              {nextSessionId ? <ChevronRight size={15} color={palette.ink} /> : null}
-            </Pressable>
+            <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={canContinueSession ? playNext : closePlayer} hitSlop={CONTROL_HIT_SLOP} android_ripple={LIGHT_CONTROL_RIPPLE} style={({ pressed }) => [styles.lightStateButton, pressed && styles.pressed]} accessibilityRole="button" testID={canContinueSession ? "session-next" : "watch-done"}>
+              <Text style={styles.lightButtonText}>{canContinueSession ? "Continue" : "Done for now"}</Text>
+              {canContinueSession ? <ChevronRight size={15} color={palette.ink} /> : null}
+            </PrimaryAction>
           </View>
-          {nextSessionId ? <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for now</Text></Pressable> : null}
-        </MotionView>
+          {canContinueSession ? <Pressable onPress={closePlayer} style={styles.darkOutlineButton} accessibilityRole="button"><Text style={styles.darkButtonText}>Done for now</Text></Pressable> : null}
+        </View>
       ) : null}
-    </View>
+    </View></View>
   );
 
   if (hasMessage) {
@@ -922,17 +1014,19 @@ export default function WatchScreen() {
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingBottom: insets.bottom + spacing.lg }} showsVerticalScrollIndicator>{stage}<View style={styles.content}>
         {video.channelTitle ? <Text style={[type.caption, { color: watchPalette.inkSoft }]}>{video.channelTitle}</Text> : null}
         <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
+        {savedSession?.targetMinutes ? <Text style={styles.detailLabel}>{sessionTimer.run.finishVideoId ? "Finishing this video · session complete" : `${Math.ceil((sessionTimer.remaining ?? 0) / 60)} min of session time left`}</Text> : null}
         {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
+        {progressNotice}
 
         <View style={styles.actionRow} accessibilityRole="toolbar">
           <Pressable
             onPress={toggleSave}
             hitSlop={CONTROL_HIT_SLOP}
             android_ripple={DARK_CONTROL_RIPPLE}
-            disabled={pendingAction === "save" || removal.busy}
-            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "save") && styles.pressed]}
+            disabled={saveDisabled}
+            style={({ pressed }) => [styles.actionButton, (pressed || saveDisabled) && styles.pressed]}
             accessibilityRole="button"
-            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: pendingAction === "save" || removal.busy }}
+            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: saveDisabled }}
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
@@ -946,11 +1040,9 @@ export default function WatchScreen() {
     );
   }
 
-  if (isImmersiveLandscape) {
-    return (
-      <View style={[styles.landscapeScreen, { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left }]}>
-        <StatusBar style="light" hidden={isFullscreen} />
-        <View style={styles.landscapeRail}>
+  return (
+    <WatchPlayerLayout width={width} height={height} insets={insets} fullscreen={isFullscreen} tvDetailsOpen={tvDetailsOpen}
+      landscapeControls={<>
           <Pressable
             onPress={closePlayer}
             hitSlop={CONTROL_HIT_SLOP}
@@ -962,18 +1054,22 @@ export default function WatchScreen() {
           >
             <ChevronLeft color={palette.wall} size={23} />
           </Pressable>
+          {Platform.isTV && lifecycle.mount && playerReady && (
+            <Pressable accessibilityRole="button" accessibilityLabel={playbackState === "playing" ? "Pause video" : "Play video"}
+              style={[styles.landscapeClose, { marginTop: spacing.md }]}
+              onPress={() => playbackState === "playing" ? playerRef.current?.pause() : playerRef.current?.play()}>
+              {playbackState === "playing" ? <Pause size={23} color={palette.wall} /> : <Play size={23} color={palette.wall} />}
+            </Pressable>
+          )}
+          {Platform.isTV && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Video details" accessibilityState={{ expanded: tvDetailsOpen }}
+              style={[styles.landscapeClose, { marginTop: spacing.sm }]} onPress={() => setTvDetailsOpen(open => !open)}>
+              <BookOpen size={23} color={palette.wall} />
+            </Pressable>
+          )}
           {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.landscapeAllowance}>{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)}</Text> : null}
-        </View>
-        <View style={styles.landscapeStageArea}>
-          <View style={{ width: landscapePlayerWidth, height: landscapePlayerHeight }}>{stage}</View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.screen}>
-      <StatusBar style="light" hidden={isFullscreen} />
+      </>}
+      chrome={
       <View style={[styles.watchChrome, { paddingTop: insets.top }]}>
         <Pressable
           onPress={closePlayer}
@@ -988,26 +1084,24 @@ export default function WatchScreen() {
           <Text style={styles.closeLabel}>Close</Text>
         </Pressable>
         {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)} viewing time</Text> : isOnline === false ? <Text style={styles.fullscreenStatus} accessibilityLiveRegion="polite">Offline</Text> : isFullscreen ? <Text style={styles.fullscreenStatus}>Fullscreen</Text> : null}
-      </View>
-
-      <View style={[styles.portraitPlayerArea, { height: portraitPlayerHeight }]}>
-        <View style={{ width: portraitPlayerWidth, height: portraitPlayerHeight }}>{stage}</View>
-      </View>
-
+      </View>}
+      details={
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
         {video.channelTitle ? <Text style={[type.caption, { color: watchPalette.inkSoft }]}>{video.channelTitle}</Text> : null}
         <Text style={[type.title, styles.videoTitle, { marginTop: video.channelTitle ? spacing.sm : 0 }]}>{video.title}</Text>
+        {savedSession?.targetMinutes ? <Text style={styles.detailLabel}>{sessionTimer.run.finishVideoId ? "Finishing this video · session complete" : `${Math.ceil((sessionTimer.remaining ?? 0) / 60)} min of session time left`}</Text> : null}
         {detailLabel ? <Text style={[type.caption, styles.detailLabel]}>{detailLabel}</Text> : null}
+        {progressNotice}
 
         <View style={styles.actionRow} accessibilityRole="toolbar">
           <Pressable
             onPress={toggleSave}
             hitSlop={CONTROL_HIT_SLOP}
             android_ripple={DARK_CONTROL_RIPPLE}
-            disabled={pendingAction === "save" || removal.busy}
-            style={({ pressed }) => [styles.actionButton, (pressed || pendingAction === "save") && styles.pressed]}
+            disabled={saveDisabled}
+            style={({ pressed }) => [styles.actionButton, (pressed || saveDisabled) && styles.pressed]}
             accessibilityRole="button"
-            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: pendingAction === "save" || removal.busy }}
+            accessibilityState={{ selected: isSaved, busy: pendingAction === "save", disabled: saveDisabled }}
             accessibilityLabel={isSaved ? "Remove from saved videos" : "Save video"}
             testID="action-save"
           >
@@ -1018,14 +1112,6 @@ export default function WatchScreen() {
         {removal.removed ? <SavedRemovalNotice dark targetId={removal.removed.id} title={removal.removed.title} busy={removal.busy} onUndo={() => { void removal.undo(); }} onDismiss={removal.dismiss} /> : null}
 
         {!showEnded ? <VideoChapters chapters={chapters} currentSeconds={currentSeconds} onJump={jumpToChapter} disabled={!showPlayer} /> : null}
-
-        {video.description ? (
-          <View style={styles.notes}>
-            <Text style={[type.caption, { color: watchPalette.inkSoft }]}>About</Text>
-            <Text style={[type.body, styles.description]} numberOfLines={aboutExpanded || !expandableAbout ? undefined : 3}>{video.description}</Text>
-            {expandableAbout ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: aboutExpanded }} onPress={() => setAboutExpanded((value) => !value)} style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: watchPalette.ink }]}>{aboutExpanded ? "Show less" : "Read full description"}</Text></Pressable> : null}
-          </View>
-        ) : null}
 
         {video.channelId ? (
           <Pressable
@@ -1039,16 +1125,15 @@ export default function WatchScreen() {
             <Text style={[type.caption, styles.channelLinkLabel]}>View source →</Text>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </View>
+      </ScrollView>}
+    >{stage}</WatchPlayerLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: watchPalette.wall },
+  screen: { flex: 1 },
   watchChrome: {
     minHeight: 52,
-    backgroundColor: watchPalette.wall,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1065,10 +1150,10 @@ const styles = StyleSheet.create({
   },
   closeLabel: { ...type.label, color: palette.wall },
   fullscreenStatus: { ...type.caption, flexShrink: 1, textAlign: "right", color: palette.wall, marginRight: spacing.sm },
-  portraitPlayerArea: { width: "100%", backgroundColor: watchPalette.stage, alignItems: "center" },
   playerStage: { width: "100%", height: "100%", backgroundColor: watchPalette.stage, overflow: "hidden" },
   playerEmbed: { ...StyleSheet.absoluteFillObject, backgroundColor: watchPalette.stage },
   playerEmbedHidden: { opacity: 0 },
+  litEnding: { backgroundColor: "transparent" },
   messageStage: { height: "auto", overflow: "visible" },
   stateSurface: {
     backgroundColor: watchPalette.wall,
@@ -1089,19 +1174,14 @@ const styles = StyleSheet.create({
   endTitle: { ...type.title, color: palette.wall, marginTop: spacing.sm, textAlign: "center" },
   lightStateButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: watchPalette.ink, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radii.control, overflow: "hidden" },
   lightButtonText: { ...type.label, flexShrink: 1, textAlign: "center", color: palette.ink },
-  landscapeScreen: { flex: 1, backgroundColor: watchPalette.stage, flexDirection: "row" },
-  landscapeRail: { width: LANDSCAPE_RAIL_WIDTH, alignItems: "center", paddingTop: spacing.sm },
   landscapeAllowance: { ...type.caption, color: palette.wall, fontSize: 10, textAlign: "center", marginTop: spacing.md, width: 56 },
   landscapeClose: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: watchPalette.border, backgroundColor: watchPalette.surface, borderRadius: radii.control, overflow: "hidden" },
-  landscapeStageArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingRight: spacing.sm },
-  content: { padding: spacing.page, paddingTop: spacing.lg, backgroundColor: watchPalette.wall },
+  content: { padding: spacing.page, paddingTop: spacing.lg },
   videoTitle: { color: palette.wall },
   detailLabel: { marginTop: spacing.md, color: watchPalette.inkSoft },
   actionRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
   actionButton: { minHeight: 56, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: watchPalette.surface, borderRadius: radii.control, borderWidth: 1, borderColor: watchPalette.border, overflow: "hidden" },
   actionLabel: { color: palette.wall },
-  notes: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: watchPalette.border },
-  description: { marginTop: spacing.sm, color: "rgba(250,249,246,0.76)" },
   channelLink: { marginTop: spacing.xl, paddingVertical: spacing.lg, minHeight: 48, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: watchPalette.border },
   channelTitle: { color: palette.wall },
   channelLinkLabel: { color: palette.accentSoft, marginTop: spacing.md },

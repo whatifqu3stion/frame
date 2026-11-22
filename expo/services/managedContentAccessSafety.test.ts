@@ -14,7 +14,7 @@ describe("Managed content access boundaries", () => {
     expect(watch).toContain("getManagedContentAccess(accessVideo), getPlaybackAllowance()");
     expect(watch).toContain("void getManagedContentAccess(accessVideo).then(async (access)");
     expect(watch).toContain("if (!access.canPlay)");
-    expect(watch.indexOf("if (!access.canPlay)", watch.indexOf("handleStateChange"))).toBeLessThan(watch.indexOf("beginAllowancePlayback()", watch.indexOf("handleStateChange")));
+    expect(watch.indexOf("if (!access.canPlay)", watch.indexOf("handleStateChange"))).toBeLessThan(watch.indexOf("beginAllowancePlayback(current)", watch.indexOf("handleStateChange")));
   });
 
   test("does not trust route-supplied source metadata for Approved Sources", async () => {

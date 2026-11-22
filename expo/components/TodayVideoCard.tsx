@@ -1,8 +1,10 @@
+import PlaybackAction from "@/components/PlaybackAction";
+import Text from "@/components/FrameText";
 import MediaMount from "@/components/MediaMount";
 import Image from "@/components/MediaImage";
-import { Bookmark, MoreHorizontal, Play, Rows3 } from "lucide-react-native";
+import { Bookmark, MoreHorizontal, Rows3 } from "lucide-react-native";
 import { memo, useMemo } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { formatDuration, formatRelativeDate } from "@/services/youtube";
@@ -10,25 +12,28 @@ import type { TodaySnapshotItem } from "@/models/today";
 
 function TodayVideoCard({ item, busy, disabled = false, onWatch, onSave, onSession, onMore }: { item: TodaySnapshotItem; busy: boolean; disabled?: boolean; onWatch: () => void; onSave: () => void; onSession: () => void; onMore: () => void }) {
   const { palette, type } = useFrameTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const compactActions = width < 360 || fontScale > 1.3;
+  const actionCell = compactActions ? { flexBasis: "46%" as const, flexGrow: 1, marginLeft: 0 } : undefined;
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   const detail = [formatRelativeDate(item.publishedAt), formatDuration(item.durationSeconds)].filter(Boolean).join(" · ");
   return (
     <View style={styles.card} testID={`today-card-${item.id}`}>
       <Pressable onPress={onWatch} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.media, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Watch ${item.title} by ${item.sourceTitle}`}>
-        <MediaMount><View style={styles.thumbnailWrap}>
+        <Text style={[styles.source, { marginTop: 0 }]} numberOfLines={1}>{item.sourceTitle}</Text>
+        <Text style={styles.title} numberOfLines={3}>{item.title}</Text>
+        <Text style={[styles.detail, { marginBottom: spacing.md }]}>{detail}</Text>
+        <MediaMount><View style={styles.thumbnailWrap}><View style={{ flex: 1 }}>
           <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} contentFit="cover" cachePolicy="none" transition={140} />
           <View style={styles.duration}><Text style={styles.durationText}>{formatDuration(item.durationSeconds)}</Text></View>
-        </View></MediaMount>
-        <Text style={styles.source} numberOfLines={1}>{item.sourceTitle}</Text>
-        <Text style={styles.title} numberOfLines={3}>{item.title}</Text>
-        <Text style={styles.detail}>{detail}</Text>
+        </View></View></MediaMount>
       </Pressable>
       {busy ? <View style={styles.progress} accessibilityLiveRegion="polite"><ActivityIndicator size="small" color={palette.accent} /><Text style={styles.quickText}>Working…</Text></View> : null}
       <View style={styles.actions}>
-        <Pressable onPress={onWatch} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.watch, pressed && styles.pressed]} accessibilityRole="button"><Play size={16} color={palette.onDark} fill={palette.onDark} /><Text style={styles.watchText}>Watch</Text></Pressable>
-        <Pressable onPress={onSave} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.quick, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Save ${item.title}`}><Bookmark size={17} color={palette.accent} /><Text style={styles.quickText}>Save</Text></Pressable>
-        <Pressable onPress={onSession} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.quick, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to a session`}><Rows3 size={17} color={palette.accent} /><Text style={styles.quickText}>Session</Text></Pressable>
-        <Pressable onPress={onMore} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.more, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`More actions for ${item.title}`}><MoreHorizontal size={20} color={palette.inkMuted} /></Pressable>
+        <PlaybackAction onPress={onWatch} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={() => [styles.watch, actionCell]} accessibilityRole="button" accessibilityLabel={`Watch ${item.title}`}><Text style={styles.watchText}>Watch</Text></PlaybackAction>
+        <Pressable onPress={onSave} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.quick, actionCell, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Save ${item.title}`}><Bookmark size={17} color={palette.accent} /><Text style={styles.quickText}>Save</Text></Pressable>
+        <Pressable onPress={onSession} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [styles.quick, actionCell, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to a session`}><Rows3 size={17} color={palette.accent} /><Text style={styles.quickText}>Session</Text></Pressable>
+        <Pressable onPress={onMore} disabled={disabled || busy} accessibilityState={{ disabled: disabled || busy, busy }} style={({ pressed }) => [compactActions ? styles.quick : styles.more, actionCell, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`More actions for ${item.title}`}><MoreHorizontal size={20} color={palette.inkMuted} />{compactActions ? <Text style={styles.quickText}>More</Text> : null}</Pressable>
       </View>
     </View>
   );

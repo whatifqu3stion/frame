@@ -1,13 +1,15 @@
+import Heading from "@/components/Heading";
+import Text from "@/components/FrameText";
+import { useApp } from "@/providers/AppProvider";
 import { Link } from "expo-router";
 import { useMemo } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { notifyUser } from "@/services/notifyUser";
+import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 const HELP_LINKS = [
   { label: "YouTube Terms of Service", url: "https://www.youtube.com/t/terms" },
-  { label: "Manage an Apple subscription", url: "https://support.apple.com/118428" },
-  { label: "Manage a Google Play subscription", url: "https://support.google.com/googleplay/answer/7018481" },
 ];
 
 const SECTIONS: { title: string; body: string }[] = [
@@ -24,12 +26,12 @@ const SECTIONS: { title: string; body: string }[] = [
     body: "Videos and creators may be removed, made private, restricted by age or region, or disabled for playback outside YouTube. Frame cannot guarantee that third-party content or every app feature will always remain available without interruption.",
   },
   {
-    title: "Frame Premium",
-    body: "Premium subscriptions are purchased through the App Store or Play Store at the price and billing period shown before purchase. Subscriptions renew automatically unless you cancel through your store settings. Restore Purchases checks the store account currently signed in on your device.",
+    title: "Full access and provider usage",
+    body: "This edition includes the full Frame app without subscription tiers or purchases. You supply your own YouTube and optional Gemini keys. You are responsible for your provider account, API restrictions, usage quotas, and any provider charges. AI suggestions can be inaccurate; source verification confirms existence, not quality, safety, or suitability. Review sources before following them.",
   },
   {
     title: "Your local library",
-    body: "Your Frame library is stored on your current device. Deleting Frame, clearing its data, or losing access to the device may permanently remove that library. A Premium subscription does not include cloud backup unless Frame clearly says otherwise.",
+    body: "Your Frame library is stored on your current device. Deleting Frame, clearing its data, or losing access to the device may permanently remove that library. This edition does not include cloud backup.",
   },
   {
     title: "Changes to Frame or these terms",
@@ -39,32 +41,32 @@ const SECTIONS: { title: string; body: string }[] = [
 
 export default function TermsScreen() {
   const { palette, type } = useFrameTheme();
+  const { hasLegacyGoogleConnection } = useApp();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={type.caption}>Frame</Text>
-      <Text accessibilityRole="header" style={styles.title}>Terms of Use</Text>
-      <Text style={styles.updated}>Effective August 4, 2026</Text>
+      <Heading level={2} style={styles.title}>Terms of Use</Heading>
+      <Text style={styles.updated}>Effective October 20, 2026</Text>
       <Text style={styles.intro}>By using Frame, you agree to use the app lawfully and respect the services and content it helps you access.</Text>
       {SECTIONS.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text accessibilityRole="header" style={styles.heading}>{section.title}</Text>
+          <Heading style={styles.heading}>{section.title}</Heading>
           <Text style={styles.body}>{section.body}</Text>
         </View>
       ))}
       <View style={styles.section}>
-        <Text accessibilityRole="header" style={styles.heading}>Service and subscription help</Text>
-        {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => Alert.alert("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
+        <Heading style={styles.heading}>Service help</Heading>
+        {HELP_LINKS.map(({ label, url }) => <Pressable key={url} accessibilityRole="link" accessibilityHint="Opens your browser" onPress={() => { void Linking.openURL(url).catch(() => notifyUser("Couldn’t open link", "Try again when your browser is available.")); }} style={{ minHeight: 48, justifyContent: "center", paddingVertical: spacing.sm }}><Text style={[type.label, { color: palette.active }]}>{label}</Text></Pressable>)}
       </View>
       <Link href="/settings/privacy" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, marginTop: spacing.lg, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Open device data controls</Text></Pressable></Link>
-      <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Manage Google connection</Text></Pressable></Link>
+      {hasLegacyGoogleConnection ? <Link href="/settings/google" asChild><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }}><Text style={[type.label, { color: palette.active }]}>Remove a previous Google connection</Text></Pressable></Link> : null}
     </ScrollView>
   );
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.wall },
+  root: { flex: 1, backgroundColor: "transparent" },
   content: { padding: spacing.lg, paddingBottom: spacing.xxxl, maxWidth: 680, width: "100%", alignSelf: "center" },
   title: { ...type.title, marginTop: spacing.sm },
   updated: { ...type.caption, color: palette.inkMuted, marginTop: spacing.sm },

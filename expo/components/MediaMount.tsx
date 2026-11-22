@@ -9,5 +9,5 @@ export default function MediaMount({ children }: { children: ReactNode }) {
   return <View style={[styles.mount, { backgroundColor: palette.mount, borderColor: palette.mountEdge }]}>{children}</View>;
 }
 const styles = StyleSheet.create({
-  mount: { padding: 8, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth },
+  mount: { padding: 8, borderRadius: radii.mount, borderWidth: StyleSheet.hairlineWidth },
 });

@@ -1,5 +1,6 @@
+import Text from "@/components/FrameText";
 import MotionView from "@/components/motion/MotionView";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 import { X } from "lucide-react-native";
 import { spacing, radii, watchPalette } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";

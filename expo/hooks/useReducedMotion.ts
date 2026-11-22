@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { AccessibilityInfo } from "react-native";
 
-let reduced = true;
+let reduced: boolean | null = null;
 const listeners = new Set<() => void>();
 let subscription: ReturnType<typeof AccessibilityInfo.addEventListener> | undefined;
 let generation = 0;
@@ -16,10 +16,15 @@ function subscribe(listener: () => void) {
   }
   return () => {
     listeners.delete(listener);
-    if (!listeners.size) { subscription?.remove(); subscription = undefined; generation += 1; reduced = true; }
+    if (!listeners.size) { subscription?.remove(); subscription = undefined; generation += 1; reduced = null; }
   };
 }
 /** One conservative OS preference subscription shared by all animated surfaces. */
 export function useReducedMotion(): boolean {
-  return useSyncExternalStore(subscribe, () => reduced, () => true);
+  return useReducedMotionPreference() !== false;
+}
+
+/** An authored entrance can wait for the OS answer without assuming motion is allowed. */
+export function useReducedMotionPreference(): boolean | null {
+  return useSyncExternalStore(subscribe, () => reduced, () => null);
 }

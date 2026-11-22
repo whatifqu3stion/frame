@@ -1,6 +1,7 @@
+import Text from "@/components/FrameText";
 import TextField from "@/components/TextField";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { formatMinute } from "@/domain/playbackControls";
 import { type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";

@@ -42,7 +42,7 @@ export function mapWeeklyPicksClientResult(result: WeeklyPicksClientResult): Dis
       status: "backend_allowance_unavailable",
       items: [],
       reason: "configuration",
-      message: "Weekly picks are not configured for this build.",
+      message: "Prepare this week’s picks with your YouTube and Gemini keys.",
     };
   }
   if (result.status === "network_error") {
@@ -150,6 +150,7 @@ function mapPublicSourceSuggestion(
     description: pick.source.description,
     thumbnailUrl: pick.source.thumbnailUrl,
     recommendationReason: pick.reason,
+    ...(pick.fetchedAt !== undefined ? { fetchedAt: pick.fetchedAt } : {}),
     interestId: interest.interestId,
     publicationPeriod: {
       start: interest.publicationPeriod.start,
@@ -174,6 +175,7 @@ function mapPublicSourceSuggestion(
 /** Converts a public cached suggestion into the existing explicit follow contract. */
 export function weeklyPickToSourceResolution(suggestion: WeeklyPickSourceSuggestion): SourceResolution {
   return {
+    ...(suggestion.fetchedAt !== undefined ? { fetchedAt: suggestion.fetchedAt } : {}),
     source: {
       provider: suggestion.provider,
       providerSourceId: suggestion.providerSourceId,

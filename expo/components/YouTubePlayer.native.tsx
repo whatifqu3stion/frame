@@ -1,5 +1,6 @@
+import { parsePlayerBridgeMessage } from "@/domain/playerBridge";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from "react-native-webview/lib/WebViewTypes";
 import type {
@@ -170,22 +171,15 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
   useImperativeHandle(ref, () => ({
     pause: () => runCommand("player.pauseVideo();reportProgress();"),
     play: () => runCommand("player.playVideo();"),
-    seekTo: (seconds: number) => runCommand(`player.seekTo(${Math.max(0, Math.floor(seconds))},true);reportProgress();`),
+    seekTo: (seconds: number) => runCommand(`player.seekTo(${Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0))},true);reportProgress();`),
     requestProgress: () => runCommand("reportProgress();"),
     exitFullscreen: () => runCommand("exitFullscreen();"),
   }), [runCommand]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent): void => {
     try {
-      const data = JSON.parse(event.nativeEvent.data) as {
-        type?: string;
-        current?: number;
-        duration?: number;
-        state?: number;
-        code?: number;
-        isFullscreen?: boolean;
-        isOnline?: boolean;
-      };
+      const data = parsePlayerBridgeMessage(event.nativeEvent.data);
+      if (!data) return;
       if (data.type === "ready") {
         onReady(data.duration ?? 0);
         return;
@@ -255,7 +249,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
       originWhitelist={[PLAYER_ORIGIN, "https://www.youtube.com", "https://www.youtube-nocookie.com", "about:blank"]}
       allowsFullscreenVideo
       allowsInlineMediaPlayback
-      mediaPlaybackRequiresUserAction
+      mediaPlaybackRequiresUserAction={!Platform.isTV}
       javaScriptEnabled
       domStorageEnabled
       scrollEnabled={false}

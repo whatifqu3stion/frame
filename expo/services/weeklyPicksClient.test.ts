@@ -189,11 +189,11 @@ describe("Round 2C Weekly Picks client", () => {
     }
   });
 
-  test("rejects more than three candidates for one interest", async () => {
+  test("rejects more than twelve candidates for one interest", async () => {
     const client = createWeeklyPicksClient({
       supabaseUrl: "https://example.supabase.co",
       publishableKey: "sb_publishable_test",
-      fetchImpl: (async () => jsonResponse(publishedResponse("fresh", 4))) as typeof fetch,
+      fetchImpl: (async () => jsonResponse(publishedResponse("fresh", 13))) as typeof fetch,
     });
     expect(await client.getWeeklyPicks(["tech"])).toEqual({ status: "invalid_response" });
   });

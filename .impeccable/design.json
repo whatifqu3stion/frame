@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-29T00:00:00Z",
+  "generatedAt": "2026-11-19T02:56:52.949895+00:00",
   "title": "Design System: Frame",
   "extensions": {
     "colorMeta": {
@@ -131,6 +131,30 @@
       "dark-on-accent": {
         "role": "primary",
         "displayName": "Dark On Accent"
+      },
+      "light-blue-programme": {
+        "role": "primary",
+        "displayName": "Light Blue Programme"
+      },
+      "light-green-programme": {
+        "role": "primary",
+        "displayName": "Light Green Programme"
+      },
+      "light-rose-programme": {
+        "role": "primary",
+        "displayName": "Light Rose Programme"
+      },
+      "dark-blue-programme": {
+        "role": "primary",
+        "displayName": "Dark Blue Programme"
+      },
+      "dark-green-programme": {
+        "role": "primary",
+        "displayName": "Dark Green Programme"
+      },
+      "dark-rose-programme": {
+        "role": "primary",
+        "displayName": "Dark Rose Programme"
       }
     },
     "typographyMeta": {
@@ -161,102 +185,166 @@
         },
         "elevation": 2
       },
-      "verification": "Current code inspected. Runtime verification unavailable; final visual approval pending.",
-      "motionScope": "Approved motion phase implemented with React Native Animated: quiet selections, measured ordering, first-selection reveal and deliberate ending; native presentation retained. Real-device tuning outstanding.",
+      "verification": "Source reconciled November 18, 2026. Prior browser reviews cover selected flows and six theme combinations; complete native visual, gesture, playback and haptic acceptance remains subject to device checks.",
+      "motionScope": "React Native Animated and Reanimated: explicit choices, benefits storytelling, first-discovery arrival, guarded haptics, and reversible House lights. Respect Reduce Motion and foreground/route visibility.",
       "previewPolicy": "Use real native components. No HTML/CSS shadow-DOM replicas or synthesized tonal ramps.",
       "programmeGrain": {
-        "asset": "expo/assets/textures/programme-grain.png",
-        "densityVariants": [
-          1,
-          2,
-          3
+        "assets": [
+          "expo/assets/textures/panel-ink.png",
+          "expo/assets/textures/button-ink.png"
         ],
-        "tileLogicalSize": 128,
-        "pixelAlphaMax": 0.12549019607843137,
-        "lightOpacity": 0.22,
-        "darkOpacity": 0.16,
-        "placement": "Behind programme content only; clipped; pointerEvents none; excluded from accessibility",
-        "generator": "expo/scripts/generate-programme-grain.py",
-        "origin": "Original deterministic procedural texture",
-        "motion": "Static; native image fade disabled"
+        "resizeMode": "cover",
+        "panelScale": 1.75,
+        "opacity": {
+          "sheetLight": 0.14,
+          "sheetDark": 0.085,
+          "paper": "palette.programmeGrainOpacity * (32 / 80)",
+          "panel": 0.65,
+          "wall": 0.14,
+          "button": 0.28
+        },
+        "placement": "Behind content, clipped, noninteractive, excluded from accessibility",
+        "motion": "Static; native image fade disabled",
+        "sourceOfTruth": "expo/components/ProgrammeGrain.tsx"
       }
-    }
+    },
+    "motion": [
+      {
+        "name": "choice",
+        "value": "180ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "state",
+        "value": "220ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "confirm",
+        "value": "360ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "reorder",
+        "value": "380ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "reveal",
+        "value": "720ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "roomDim",
+        "value": "1720ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "roomRise",
+        "value": "1480ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "roomRestore",
+        "value": "320ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "chart",
+        "value": "560ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      },
+      {
+        "name": "galleryArrival",
+        "value": "840ms",
+        "purpose": "Shared native timing from expo/constants/motion.ts."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "expandedNavigationWidth",
+        "value": "1000 native logical units; text-aware adjustments in navigator"
+      }
+    ]
   },
   "components": [
     {
       "name": "MediaMount",
       "kind": "custom",
       "refersTo": "media-mount-light",
-      "description": "expo/components/MediaMount.tsx \u2014 native matte surround with inset outside the media ratio."
+      "description": "expo/components/MediaMount.tsx — native matte surround with inset outside the media ratio."
     },
     {
       "name": "SessionProgramme",
       "kind": "custom",
       "refersTo": "session-programme-light",
-      "description": "expo/components/SessionProgramme.tsx \u2014 labelled native programme button with ordered metadata and current position."
+      "description": "expo/components/SessionProgramme.tsx — accent-toned editorial cover with up to three queue prints, current status, and a separate Start/Continue action."
     },
     {
       "name": "Watch button",
       "kind": "button",
       "refersTo": "watch-button-light-blue",
-      "description": "expo/components/TodayVideoCard.tsx \u2014 native Pressable with busy/disabled semantics; theme-resolved colors."
+      "description": "expo/components/TodayVideoCard.tsx — native Pressable with busy/disabled semantics; theme-resolved colors."
     },
     {
       "name": "Follow button",
       "kind": "button",
       "refersTo": "follow-button-light-blue",
-      "description": "expo/components/WeeklyPickCard.tsx \u2014 native follow/followed states and feedback."
+      "description": "expo/components/WeeklyPickCard.tsx — native follow/followed states and feedback."
     },
     {
       "name": "Saved search",
       "kind": "input",
       "refersTo": "saved-search-light",
-      "description": "expo/app/(tabs)/saved.tsx \u2014 labelled native TextInput and clear button."
+      "description": "expo/app/(tabs)/saved.tsx — labelled native TextInput and clear button."
     },
     {
       "name": "Saved filter",
       "kind": "chip",
       "refersTo": "saved-filter-light",
-      "description": "expo/app/(tabs)/saved.tsx \u2014 native radio group with selected-state semantics."
+      "description": "expo/app/(tabs)/saved.tsx — Videos / Sessions section switch, with contextual search and viewing filters within Videos."
     },
     {
       "name": "Sheet",
       "kind": "custom",
       "refersTo": "sheet-light",
-      "description": "expo/components/Sheet.tsx \u2014 native modal, safe areas, keyboard avoidance and scrollable content."
+      "description": "expo/components/Sheet.tsx — native modal, safe areas, keyboard avoidance and scrollable content."
     },
     {
       "name": "ScreenHeader",
       "kind": "custom",
-      "description": "expo/components/ScreenHeader.tsx \u2014 semantic native header and profile switcher."
+      "description": "expo/components/ScreenHeader.tsx — semantic native header and profile switcher."
     },
     {
       "name": "Tab navigation",
       "kind": "nav",
-      "description": "expo/app/(tabs)/_layout.tsx \u2014 four labelled native tabs with safe-area-aware bar."
+      "description": "expo/app/(tabs)/_layout.tsx — four labelled native tabs with safe-area-aware bar."
     }
   ],
   "narrative": {
     "northStar": "A curated museum-inspired viewing space",
-    "overview": "The approved direction is contemporary, calm and luxurious: warm stone-toned surfaces, deep umber programmes, matte media surrounds, crisp typography and restrained edges. Material character comes from tone, spacing and hierarchy. Libre Caslon Text and Hanken Grotesk remain the identity.\n\nThis is a code-led record of the Expo / React Native application, principally `expo/constants/theme.ts` and its consumers. It is not a mockup or a new product brief. Runtime verification was unavailable for this pass; these documented values do not constitute final visual approval. The approved motion phase is implemented in source. New custom transitions honor Reduced Motion; final timing and haptic strength need real-device approval.",
+    "overview": "Frame pairs warm paper surfaces, editorial serif titles, precise sans-serif controls, and textured grounds tinted by the selected accent. Classical imagery and printmaking provide character; contemporary composition and native interactions keep it useful. Luxury comes from spacing, material restraint, and thoughtful feedback rather than ornament.\n\nThis is the current implementation record, refreshed November 18, 2026. Runtime tokens in `expo/constants/theme.ts` and component behavior remain the implementation source of truth. Prior browser reviews cover selected flows and six theme combinations; they do not establish complete native visual or hardware acceptance. See `expo/docs/MOTION_REVIEW.md` and `expo/docs/SMOKE_TEST.md` for verification boundaries. Earlier conflicting design notes are preserved in [the historical snapshot](docs/design-history/2026-11-18-before-context-refresh.md), not active guidance.",
     "keyCharacteristics": [
-      "Warm tonal surfaces with restrained mineral accents.",
-      "Serif editorial hierarchy paired with precise sans-serif controls.",
-      "Matte-mounted media and an ordered, deep umber programme.",
-      "Four native tabs and explicit, finite viewing."
+      "Warm paper, large organic texture maps, and selectable mineral accents.",
+      "Libre Caslon Text hierarchy paired with Hanken Grotesk controls.",
+      "Real video artwork arranged as prints on accent-toned gallery grounds.",
+      "Four primary destinations, progressive disclosure, and deliberate viewing actions.",
+      "Expressive storytelling balanced with quiet everyday feedback."
     ],
     "rules": [],
     "dos": [
-      "Do resolve colors and typography through `useFrameTheme`; preserve all six theme combinations.",
-      "Do use the actual native components and metadata, including unavailable and unknown-runtime states.",
-      "Do preserve safe areas, scrollable sheets, meaningful accessibility labels and explicit viewing actions.",
-      "Do review the real app on target devices before granting final visual approval."
+      "Do resolve colors and typography through `useFrameTheme` and preserve all six themes.",
+      "Do use real native components, actual metadata, and explicit loading/error/unavailable states.",
+      "Do keep organic texture subordinate to content and use large cover-scaled assets.",
+      "Do preserve safe areas, visible focus, meaningful accessibility names, text scaling, and Reduce Motion alternatives.",
+      "Do verify gestures, playback, and haptic strength on real devices before claiming native acceptance."
     ],
     "donts": [
-      "Don't add literal marble veins, wood grain, curtains or gold luxury tropes.",
-      "Don't replace Libre Caslon Text or Hanken Grotesk, or collapse the six themes into one palette.",
-      "Don't substitute approximate HTML mockups for native implementation or introduce infinite viewing or autoplay.",
-      "Don't animate grain, live playback or private profile handoffs, or delay actions for effects."
+      "Don't restore universal brown programme backgrounds, small repeating texture tiles, or the retired four-stage onboarding flow.",
+      "Don't replace the approved fonts or add literal marble, curtains, wood grain, or gold luxury clichés.",
+      "Don't imply AI certainty, invent personalized results, or present demonstration charts as recorded history.",
+      "Don't obscure the official player, delay an action for an effect, or add haptics to every animation.",
+      "Don't treat the historical design snapshot as current product or visual authority."
     ]
   }
 }

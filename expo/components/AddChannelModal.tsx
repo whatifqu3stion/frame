@@ -1,3 +1,6 @@
+import PrimaryAction from "@/components/PrimaryAction";
+import Text from "@/components/FrameText";
+import { isShortsLink, SHORT_FORM_MESSAGE } from "@/domain/contentPolicy";
 import { parseSourceInput } from "@/domain/sourceInput";
 import TextField from "@/components/TextField";
 import MotionView from "@/components/motion/MotionView";
@@ -6,7 +9,7 @@ import Image from "@/components/MediaImage";
 import { router } from "expo-router";
 import { BookmarkPlus, Link2, Play, UserPlus, X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -53,6 +56,7 @@ export default function AddChannelModal({ visible, onClose, requestVideo = false
 
   const submit = async (): Promise<void> => {
     if (!value.trim() || locked.current || (!requestVideo && !requirePurchase("creators"))) return;
+    if (isShortsLink(value)) { setFeedback({ ok: false, message: SHORT_FORM_MESSAGE }); return; }
     if (requestVideo && parseSourceInput(value).kind !== "video") { setFeedback({ ok: false, message: "Paste an individual video link so the Owner can review it." }); return; }
     setFollowedSourceId(null);
     const request = ++requestId.current;
@@ -193,13 +197,13 @@ export default function AddChannelModal({ visible, onClose, requestVideo = false
           ) : null}
 
           {resolution ? (
-            <Pressable onPress={() => { if (requestVideo) void requestApproval(); else void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
+            <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => { if (requestVideo) void requestApproval(); else void follow(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy} accessibilityRole="button" testID="confirm-source-follow">
               {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <View style={styles.buttonContent}><UserPlus size={17} color={palette.onDark} /><Text style={styles.buttonText}>{requestVideo ? "Request approval" : "Follow source"}</Text></View>}
-            </Pressable>
+            </PrimaryAction>
           ) : (
-            <Pressable onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
+            <PrimaryAction depth={palette.primaryButtonDepth} onPress={() => { void submit(); }} style={({ pressed }) => [styles.button, pressed && styles.pressed]} disabled={busy || !value.trim()} accessibilityRole="button" testID="resolve-source-submit">
               {busy ? <ActivityIndicator color={palette.onDark} size="small" /> : <Text style={styles.buttonText}>{requestVideo ? "Find video" : "Find source"}</Text>}
-            </Pressable>
+            </PrimaryAction>
           )}
     </Sheet>
   );

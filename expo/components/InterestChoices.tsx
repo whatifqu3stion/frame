@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
+import Text from "@/components/FrameText";
+import InlineHelp from "@/components/InlineHelp";
+import Heading from "@/components/Heading";
 import { useFeedback } from "@/hooks/useFeedback";
 import ChoiceOption from "@/components/ChoiceOption";
-import { Lock } from "lucide-react-native";
-import { Alert, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import CustomInterestInput from "./CustomInterestInput";
+import { Alert, StyleSheet, View, useWindowDimensions } from "react-native";
 import { INTEREST_GROUPS, INTEREST_LIBRARY } from "@/constants/interests";
-import { ONBOARDING_INTEREST_MAX } from "@/constants/productConfig";
 import { spacing } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
-import { isInterestOptionDisabled } from "@/domain/interests";
+import { interestTopicFromId } from "@/domain/interests";
 import { useApp } from "@/providers/AppProvider";
 
 export default function InterestChoices() {
@@ -15,37 +18,46 @@ export default function InterestChoices() {
   const { type } = useFrameTheme();
   const ids = interests.map((item) => item.id);
   return <View style={{ gap: spacing.xl }}>
-    <Text style={type.bodySoft} accessibilityLiveRegion="polite">{ids.length} of {ONBOARDING_INTEREST_MAX} selected · optional</Text>
-    <GroupedInterestChoices selectedIds={ids} showLimitLock onToggle={(id) => { const done = touch.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} />
+    <Text style={type.bodySoft} accessibilityLiveRegion="polite">{ids.length} selected · optional</Text>
+    <GroupedInterestChoices headingLevel={3} selectedIds={ids} onToggle={(id) => { const done = touch.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => Alert.alert("Couldn’t save interests", "Try again in a moment.")); }} />
+    <CustomInterestInput selectedIds={ids} onAdd={toggleInterest} />
   </View>;
 }
 
 type GroupedInterestChoicesProps = {
+  headingLevel?: 2 | 3;
+  customLast?: boolean;
+  customAction?: ReactNode;
   selectedIds: readonly string[];
   onToggle(id: string): void;
   busy?: boolean;
-  showLimitLock?: boolean;
+  collapsible?: boolean;
   accessibilityLabel?: string;
-  limitHint?: string;
   testIDPrefix?: string;
 };
 
-export function GroupedInterestChoices({ selectedIds, onToggle, busy = false, showLimitLock = false, accessibilityLabel, limitHint = "Remove an interest before choosing another.", testIDPrefix }: GroupedInterestChoicesProps) {
-  const { palette, type } = useFrameTheme();
+export function GroupedInterestChoices({ headingLevel = 2, selectedIds, onToggle, busy = false, collapsible = false, accessibilityLabel, testIDPrefix, customLast = false, customAction }: GroupedInterestChoicesProps) {
+  const { type } = useFrameTheme();
   const { width, fontScale } = useWindowDimensions();
   const singleColumn = width < 360 || fontScale > 1.3;
-  return <View style={styles.groups} accessibilityLabel={accessibilityLabel}>
-    {INTEREST_GROUPS.map((group) => <View key={group.label}>
-      <Text style={type.heading} accessibilityRole="header">{group.label}</Text>
-      <View style={styles.choices}>
-        {INTEREST_LIBRARY.filter((interest) => (group.ids as readonly string[]).includes(interest.id)).map((interest) => {
-          const selected = selectedIds.includes(interest.id);
-          const atLimit = isInterestOptionDisabled(selectedIds, interest.id, ONBOARDING_INTEREST_MAX);
-          const disabled = busy || atLimit;
-          return <ChoiceOption key={interest.id} label={interest.name} selected={selected} role="checkbox" variant="ruled" onPress={() => onToggle(interest.id)} disabled={disabled} accessibilityHint={atLimit ? limitHint : undefined} testID={testIDPrefix ? `${testIDPrefix}-${interest.id}` : undefined} style={[styles.choice, singleColumn && { flexBasis: "100%" }]} unselectedMark={atLimit && showLimitLock ? <Lock size={14} color={palette.inkMuted} /> : undefined} />;
-        })}
-      </View>
-    </View>)}
+  const customSection = (selectedIds.some((id) => id.startsWith("custom:")) || customAction) ? <View>
+      <Heading level={headingLevel} style={customLast ? type.caption : type.heading}>Your specific interests</Heading>
+      {selectedIds.filter((id) => id.startsWith("custom:")).map((id) => <ChoiceOption key={id} label={interestTopicFromId(id)?.name ?? "Interest"} selected role="checkbox" variant="ruled" onPress={() => onToggle(id)} disabled={busy} accessibilityHint="Remove this interest from future weekly selections." />)}
+      {customAction}
+    </View> : null;
+  return <View style={collapsible ? undefined : styles.groups} accessibilityLabel={accessibilityLabel}>
+    {!customLast && customSection}
+    {INTEREST_GROUPS.map((group) => {
+      const topics = INTEREST_LIBRARY.filter((topic) => (group.ids as readonly string[]).includes(topic.id));
+      const count = topics.filter((topic) => selectedIds.includes(topic.id)).length;
+      const choices = <View style={styles.choices}>{topics.map((topic) => (
+        <ChoiceOption key={topic.id} label={topic.name} selected={selectedIds.includes(topic.id)} role="checkbox" variant="ruled" onPress={() => onToggle(topic.id)} disabled={busy} testID={testIDPrefix ? `${testIDPrefix}-${topic.id}` : undefined} style={[styles.choice, singleColumn && { flexBasis: "100%" }]} />
+      ))}</View>;
+      return collapsible
+        ? <InlineHelp key={group.label} label={`${group.label}${count ? ` · ${count} selected` : ""}`}>{choices}</InlineHelp>
+        : <View key={group.label}><Heading level={headingLevel} style={type.heading}>{group.label}</Heading>{choices}</View>;
+    })}
+    {customLast && <View style={{ marginTop: spacing.md }}>{customSection}</View>}
   </View>;
 }
 

@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
-import { Animated, Easing, type ViewProps } from "react-native";
+import { Animated, type ViewProps } from "react-native";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useMotionVisibility } from "@/hooks/useMotionVisibility";
 import { continuingRowOffset } from "@/domain/motionContinuity";
-import { motion } from "@/constants/motion";
+import { motionSpring } from "@/constants/motion";
 
 type Props = ViewProps & { transitionKey: string };
 /** Move surviving rows from their current visual position; never retain outgoing content. */
@@ -29,7 +29,7 @@ export default function PositionedRow({ transitionKey, style, onLayout, ...props
       y.stopAnimation((offset) => {
         if (ticket !== generation.current || !allowed.current) return;
         y.setValue(continuingRowOffset(before.y, next, offset));
-        Animated.timing(y, { toValue: 0, duration: motion.reorder, easing: Easing.out(Easing.cubic), useNativeDriver: true, isInteraction: false }).start();
+        Animated.spring(y, { toValue: 0, ...motionSpring, overshootClamping: true, useNativeDriver: true, isInteraction: false }).start();
       });
     } else { y.stopAnimation(); y.setValue(0); }
     onLayout?.(event);

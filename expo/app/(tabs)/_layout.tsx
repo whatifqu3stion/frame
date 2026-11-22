@@ -1,6 +1,9 @@
+import Text from "@/components/FrameText";
 import TabIconSurface from "@/components/motion/TabIconSurface";
-import { expandedNavigationWidth } from "@/constants/layout";
-import { StyleSheet, Text, useWindowDimensions } from "react-native";
+import TabBarGlass from "@/components/TabBarGlass";
+import PaperSurface from "@/components/PaperSurface";
+import { useNavigationLayout } from "@/hooks/useNavigationLayout";
+import { Platform, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,32 +11,34 @@ import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function TabLayout() {
-  const { palette } = useFrameTheme();
+  const { palette, isDark } = useFrameTheme();
   const insets = useSafeAreaInsets();
-  const { width, fontScale } = useWindowDimensions();
-  const sidebar = width >= expandedNavigationWidth + 208 * Math.max(0, fontScale - 1);
-  const bottomInset = Math.max(insets.bottom, 8);
+  const { sidebar, fontScale, bottomInset, bottomBarHeight } = useNavigationLayout();
 
   return (
     <Tabs
       initialRouteName="index"
+      screenLayout={({ children }) => <PaperSurface>{children}</PaperSurface>}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.active,
-        tabBarInactiveTintColor: palette.inkMuted,
+        sceneStyle: { backgroundColor: "transparent" },
+        tabBarActiveTintColor: sidebar ? palette.active : isDark ? palette.accentSoft : palette.accentDeep,
+        tabBarActiveBackgroundColor: sidebar ? palette.activeSoft : "transparent",
+        tabBarInactiveTintColor: sidebar ? palette.inkMuted : palette.inkSoft,
         tabBarShowLabel: true,
         tabBarPosition: sidebar ? "left" : "bottom",
         tabBarLabelPosition: sidebar ? "beside-icon" : "below-icon",
-        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, lineHeight: 16, color, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
+        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: Platform.isTV ? 19 : 12, lineHeight: Platform.isTV ? 25 : 16, color: sidebar ? color : palette.ink, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: sidebar ? 64 * fontScale : 48 },
+        tabBarBackground: sidebar ? undefined : () => <TabBarGlass />,
         tabBarStyle: {
-          backgroundColor: palette.surfaceHigh,
-          borderTopWidth: sidebar ? 0 : StyleSheet.hairlineWidth,
+          backgroundColor: sidebar ? palette.surfaceHigh : "transparent",
+          borderTopWidth: 0,
           borderRightWidth: sidebar ? StyleSheet.hairlineWidth : 0,
           borderRightColor: palette.border,
           borderTopColor: palette.border,
           elevation: 0,
-          ...(sidebar ? { width: 208 * Math.max(1, fontScale), paddingTop: insets.top + 16 } : { height: 64 + Math.max(0, fontScale - 1) * 48 + bottomInset, paddingTop: 8 }),
+          ...(sidebar ? { width: 208 * Math.max(1, fontScale), minWidth: 208 * Math.max(1, fontScale), paddingTop: insets.top + 16 } : { position: "absolute", height: bottomBarHeight, paddingTop: 8 }),
           paddingBottom: sidebar ? insets.bottom : bottomInset,
         },
       }}

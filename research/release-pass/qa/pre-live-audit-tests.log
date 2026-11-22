@@ -1,0 +1,61 @@
+bun test v1.4.4 (38afee6c8)
+
+constants/theme.test.ts:
+(pass) readable text across Frame appearances > light blue has at least 4.5:1 contrast for text roles [0.69ms]
+(pass) readable text across Frame appearances > light green has at least 4.5:1 contrast for text roles [0.07ms]
+(pass) readable text across Frame appearances > light rose has at least 4.5:1 contrast for text roles [0.07ms]
+(pass) readable text across Frame appearances > dark blue has at least 4.5:1 contrast for text roles [0.05ms]
+(pass) readable text across Frame appearances > dark green has at least 4.5:1 contrast for text roles [0.04ms]
+(pass) readable text across Frame appearances > dark rose has at least 4.5:1 contrast for text roles [0.25ms]
+(pass) viewing-room text remains readable on each dark surface [0.06ms]
+(pass) room lighting keeps text readable throughout entry and return in both themes [0.26ms]
+
+domain/exitConfirmation.test.ts:
+(pass) keep editing and repeated Back preserve work; discard proceeds once [0.05ms]
+(pass) an expired alert cannot navigate after authorization loss, save, or profile replacement [0.03ms]
+
+domain/managedContentAccess.test.ts:
+(pass) Managed content access > defaults new Managed profiles to fail-closed Selected Videos [0.78ms]
+(pass) Managed content access > does not apply Managed restrictions to Standard profiles [0.01ms]
+(pass) Managed content access > allows only exact selected videos in Selected Videos mode [0.35ms]
+(pass) Managed content access > allows only exact source IDs in Approved Sources mode [0.01ms]
+(pass) Managed content access > builds local requests for the active mode without private account data [0.37ms]
+
+domain/playerLifecycle.test.ts:
+(pass) player loading and restrictions > starts loading only after both authorization checks resolve and permit playback [0.03ms]
+(pass) player loading and restrictions > does not time out ready, ended, failed, departed, or unresolved players [0.02ms]
+(pass) player loading and restrictions > revoking eligibility stops a load; approval permits a fresh load
+(pass) explicit replay intent > normal load and retry never request autoplay [0.02ms]
+(pass) explicit replay intent > a replay waits for its own ready event and plays only once [0.02ms]
+(pass) explicit replay intent > leaving, backgrounding, blocking, or failing cancels pending replay
+(pass) explicit replay intent > a departed async restart cannot act after its persistence finishes
+
+domain/artworkGeometry.test.ts:
+(pass) artwork navigation geometry > preserves the source centre and aspect ratio across different screen offsets [0.02ms]
+(pass) artwork navigation geometry > rejects unmeasured and nonfinite artwork [0.04ms]
+(pass) chart scrubbing > clamps pointer excursions and respects scrolled plot coordinates [0.02ms]
+
+domain/providerKeyStatus.test.ts:
+(pass) pending and failed key reads cannot be mistaken for missing or usable credentials [0.03ms]
+(pass) storage recovery distinguishes a phone failure from an unsupported browser [0.03ms]
+
+hooks/useRoomLighting.test.ts:
+(pass) quick Back and re-entry retarget the current light, with a faster exit [7.00ms]
+(pass) player updates and next-video renders cannot replay the room entrance [5.80ms]
+(pass) Reduce Motion settles an in-flight entrance and skips the exit [3.92ms]
+(pass) backgrounding settles; resuming and direct watch entry do not flash the light [6.67ms]
+
+hooks/useOnboardingBack.test.ts:
+(pass) Android Back belongs to key setup while onboarding is underneath [2.78ms]
+
+services/managedContentAccessSafety.test.ts:
+(pass) Managed content access boundaries > gates every player mount, start, and checkpoint on current content approval [1.37ms]
+(pass) Managed content access boundaries > does not trust route-supplied source metadata for Approved Sources [0.20ms]
+(pass) Managed content access boundaries > protects Owner mutations with authorization and an established PIN [0.22ms]
+(pass) Managed content access boundaries > invalidates obsolete requests when the Owner changes access mode [0.29ms]
+(pass) Managed content access boundaries > keeps Managed Today and Sources finite and limited to active approvals [0.45ms]
+
+ 37 pass
+ 0 fail
+ 422 expect() calls
+Ran 37 tests across 9 files. [370.00ms]

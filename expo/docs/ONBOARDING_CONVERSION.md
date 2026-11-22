@@ -1,4 +1,6 @@
-# Frame onboarding: value, activation, and conversion
+# Historical onboarding conversion exploration
+
+> Archived November 17, 2026. This describes a superseded Premium-demo concept, not the current app. Frame has no paywall or purchases. Use [BYOK.md](BYOK.md) and the current first-run section in [DESIGN.md](../../DESIGN.md) for implementation guidance.
 
 Status: revised after the October 1, 2026 critique. Conversion performance is unmeasured. Native usability testing is still required. This document records the rationale and validation plan, not a claim of conversion lift.
 
