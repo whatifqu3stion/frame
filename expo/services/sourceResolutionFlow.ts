@@ -1,11 +1,26 @@
 import type { FollowedSourceRepository } from "@/repositories/followedSourceRepository";
+import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import type { AddChannelResult, SourceResolution } from "@/types";
 
 type FollowDependencies = {
-  followedSources: Pick<FollowedSourceRepository, "follow">;
+  followedSources: Pick<FollowedSourceRepository, "follow" | "listForProfile">;
   reconcile(): void;
   now?: () => number;
+  maxSources?: number;
 };
+
+/** Shared manual-follow guard for Add Link, Source detail, and Weekly Picks. */
+export async function checkSourceCapacity(
+  profileId: string,
+  sourceId: string,
+  followedSources: Pick<FollowedSourceRepository, "listForProfile">,
+  maxSources: number = PRODUCT_LIMITS.futureSourcesPerProfile,
+): Promise<{ allowed: boolean; alreadyFollowed: boolean; message?: string }> {
+  const existing = await followedSources.listForProfile(profileId);
+  if (existing.some((source) => source.id === sourceId)) return { allowed: true, alreadyFollowed: true };
+  if (existing.length >= maxSources) return { allowed: false, alreadyFollowed: false, message: `This profile can follow up to ${maxSources} sources. Unfollow a source in Sources to make room. Your saved videos stay kept.` };
+  return { allowed: true, alreadyFollowed: false };
+}
 
 /** Persists a resolved source only after the UI invokes this explicit confirmation boundary. */
 export async function confirmSourceFollow(
@@ -13,6 +28,11 @@ export async function confirmSourceFollow(
   resolution: SourceResolution,
   dependencies: FollowDependencies,
 ): Promise<AddChannelResult> {
+  const capacity = await checkSourceCapacity(profileId, resolution.source.providerSourceId, dependencies.followedSources, dependencies.maxSources);
+  if (capacity.alreadyFollowed) {
+    return { ok: true, message: `Already following ${resolution.source.displayName}.` };
+  }
+  if (!capacity.allowed) return { ok: false, message: capacity.message ?? "Source limit reached." };
   await dependencies.followedSources.follow(profileId, {
     id: resolution.source.providerSourceId,
     title: resolution.source.displayName,
@@ -23,5 +43,6 @@ export async function confirmSourceFollow(
     fetchedAt: resolution.fetchedAt ?? null,
   });
   dependencies.reconcile();
-  return { ok: true, message: `Following ${resolution.source.displayName}.` };
+  return { ok: true, message: `Following ${resolution.source.displayName}. Open the source to check its Today setting. Extra sources stay in your library when Today is full.` };
 }
+

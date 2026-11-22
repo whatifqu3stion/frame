@@ -1,5 +1,5 @@
-import { FOUNDATION_CAPABILITIES } from "../constants/productConfig";
-import type { DiscoveryResult, InterestId, TodayFeedResult, WeeklyPickSourceSuggestion } from "../types";
+import { FOUNDATION_CAPABILITIES, WEEKLY_DISCOVERY_DISPLAY_MAX } from "../constants/productConfig";
+import type { DiscoveryResult, InterestId, SourceResolution, TodayFeedResult, WeeklyPickSourceSuggestion } from "../types";
 import {
   weeklyPicksClient,
   type WeeklyPicksClient,
@@ -42,7 +42,7 @@ export function mapWeeklyPicksClientResult(result: WeeklyPicksClientResult): Dis
       status: "backend_allowance_unavailable",
       items: [],
       reason: "configuration",
-      message: "Weekly picks are not configured for this build.",
+      message: "Prepare this week’s picks with your YouTube and Gemini keys.",
     };
   }
   if (result.status === "network_error") {
@@ -93,7 +93,7 @@ function mapWeeklyPicksResponse(response: WeeklyPicksResponse): DiscoveryResult 
     return { status: "success", items: [], reason: "empty", message: response.message ?? "No Weekly Picks are published for these interests." };
   }
 
-  const items = mapPublicSourceSuggestions(response);
+  const items = selectWeeklyPickSuggestions(response);
   return {
     status: response.state === "cached" ? "cached_success" : "success",
     items,
@@ -101,8 +101,48 @@ function mapWeeklyPicksResponse(response: WeeklyPicksResponse): DiscoveryResult 
   };
 }
 
-function mapPublicSourceSuggestions(response: WeeklyPicksResponse): WeeklyPickSourceSuggestion[] {
-  return response.interests.flatMap((interest) => interest.picks.map((pick) => ({
+/**
+ * Selects one pick per interest before taking a second from any interest.
+ * The result is deterministic, globally bounded, and deduplicated by source.
+ */
+export function selectWeeklyPickSuggestions(
+  response: WeeklyPicksResponse,
+  maximum: number = WEEKLY_DISCOVERY_DISPLAY_MAX,
+): WeeklyPickSourceSuggestion[] {
+  if (!Number.isInteger(maximum) || maximum <= 0) return [];
+  const orderedGroups = response.interests.map((interest) => ({
+    interest,
+    picks: [...interest.picks].sort((left, right) => left.order - right.order),
+    cursor: 0,
+  }));
+  const suggestions: WeeklyPickSourceSuggestion[] = [];
+  const seenSources = new Set<string>();
+
+  let madeProgress = true;
+  while (madeProgress && suggestions.length < maximum) {
+    madeProgress = false;
+    for (const group of orderedGroups) {
+      while (group.cursor < group.picks.length) {
+        const pick = group.picks[group.cursor];
+        group.cursor += 1;
+        const sourceKey = `${pick.source.provider}:${pick.source.providerSourceId}`;
+        if (seenSources.has(sourceKey)) continue;
+        seenSources.add(sourceKey);
+        suggestions.push(mapPublicSourceSuggestion(group.interest, pick));
+        madeProgress = true;
+        break;
+      }
+      if (suggestions.length >= maximum) break;
+    }
+  }
+  return suggestions;
+}
+
+function mapPublicSourceSuggestion(
+  interest: WeeklyPicksResponse["interests"][number],
+  pick: WeeklyPicksResponse["interests"][number]["picks"][number],
+): WeeklyPickSourceSuggestion {
+  return {
     provider: pick.source.provider,
     providerSourceId: pick.source.providerSourceId,
     handle: pick.source.handle,
@@ -110,6 +150,7 @@ function mapPublicSourceSuggestions(response: WeeklyPicksResponse): WeeklyPickSo
     description: pick.source.description,
     thumbnailUrl: pick.source.thumbnailUrl,
     recommendationReason: pick.reason,
+    ...(pick.fetchedAt !== undefined ? { fetchedAt: pick.fetchedAt } : {}),
     interestId: interest.interestId,
     publicationPeriod: {
       start: interest.publicationPeriod.start,
@@ -128,7 +169,46 @@ function mapPublicSourceSuggestions(response: WeeklyPicksResponse): WeeklyPickSo
         isUpcomingPremiere: pick.featuredMedia.isUpcomingPremiere,
       },
     } : {}),
-  })));
+  };
+}
+
+/** Converts a public cached suggestion into the existing explicit follow contract. */
+export function weeklyPickToSourceResolution(suggestion: WeeklyPickSourceSuggestion): SourceResolution {
+  return {
+    ...(suggestion.fetchedAt !== undefined ? { fetchedAt: suggestion.fetchedAt } : {}),
+    source: {
+      provider: suggestion.provider,
+      providerSourceId: suggestion.providerSourceId,
+      handle: suggestion.handle,
+      displayName: suggestion.displayName,
+      description: suggestion.description,
+      thumbnailUrl: suggestion.thumbnailUrl,
+    },
+    ...(suggestion.featuredMedia ? {
+      video: {
+        provider: suggestion.featuredMedia.provider,
+        providerMediaId: suggestion.featuredMedia.providerMediaId,
+        title: suggestion.featuredMedia.title,
+        description: suggestion.featuredMedia.description,
+        thumbnailUrl: suggestion.featuredMedia.thumbnailUrl,
+        publishedAt: suggestion.featuredMedia.publishedAt,
+        durationSeconds: suggestion.featuredMedia.durationSeconds,
+        isLivestream: suggestion.featuredMedia.isLivestream,
+        isUpcomingPremiere: suggestion.featuredMedia.isUpcomingPremiere,
+        madeForKids: null,
+      },
+    } : {}),
+    provenance: "cache",
+  };
+}
+
+/** Shared UTC week key so an open app can request the next published edition. */
+export function weeklyDiscoveryPeriodKey(now: number = Date.now()): string {
+  const date = new Date(now);
+  if (!Number.isFinite(date.getTime())) return "invalid";
+  const dayFromMonday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayFromMonday);
+  return date.toISOString().slice(0, 10);
 }
 
 export const discoveryService: DiscoveryService = createDiscoveryService(weeklyPicksClient);

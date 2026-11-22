@@ -13,8 +13,9 @@ export type ViewingAllowanceRepository = {
 export class ViewingAllowanceService {
   private operation: Promise<unknown> = Promise.resolve();
   private active: { profileId: string; limit: ProfilePlaybackLimitRecord; usage: ProfilePlaybackUsageRecord; startedAt: number } | null = null;
+  private observed: { profileId: string; startedAt: number } | null = null;
 
-  constructor(private readonly repository: ViewingAllowanceRepository) {}
+  constructor(private readonly repository: ViewingAllowanceRepository, private readonly recordViewing?: (profileId: string, from: number, to: number) => Promise<void>) {}
 
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
     const result = this.operation.then(work, work);
@@ -50,6 +51,7 @@ export class ViewingAllowanceService {
     return this.enqueue(async () => {
       await this.stopInternal(now);
       const loaded = await this.load(profile, now);
+      if (loaded.status.canPlay && this.recordViewing) this.observed = { profileId: profile.id, startedAt: now };
       if (!loaded.limit || !loaded.usage || !loaded.status.canPlay || loaded.status.kind === "unlimited") return loaded.status;
       const claimed = claimWarning(loaded.usage, loaded.status);
       if (claimed.warning) await this.repository.writeUsage({ ...claimed.usage, updatedAt: now });
@@ -62,6 +64,12 @@ export class ViewingAllowanceService {
   stopPlaying(now: number = Date.now()): Promise<ViewingAllowanceStatus | null> { return this.enqueue(() => this.stopInternal(now)); }
 
   private async checkpointInternal(now: number, stop: boolean): Promise<ViewingAllowanceStatus> {
+    const observed = this.observed;
+    if (observed) {
+      this.observed = stop ? null : { ...observed, startedAt: Math.max(observed.startedAt, now) };
+      // Awareness must never weaken or block the independent playback boundary.
+      await this.recordViewing?.(observed.profileId, observed.startedAt, now).catch(() => undefined);
+    }
     const active = this.active;
     if (!active) return { kind: "unlimited", canPlay: true };
     const reconciled = reconcileUsage(active.usage, now);
@@ -77,17 +85,18 @@ export class ViewingAllowanceService {
     if (claimed.warning && status.kind === "limited") status = { ...status, warning: claimed.warning };
     await this.repository.writeUsage(usage);
     this.active = stop || !status.canPlay || status.kind === "unlimited" ? null : { ...active, limit, usage, startedAt: now };
+    if (!status.canPlay) this.observed = null;
     return status;
   }
 
   private async stopInternal(now: number): Promise<ViewingAllowanceStatus | null> {
-    if (!this.active) return null;
+    if (!this.active && !this.observed) return null;
     return this.checkpointInternal(now, true);
   }
 
   setAllowance(profile: Profile, allowance: ViewingAllowance, now: number = Date.now()): Promise<ViewingAllowanceStatus> {
     return this.enqueue(async () => {
-      if (this.active?.profileId === profile.id) await this.stopInternal(now);
+      if (this.active?.profileId === profile.id || this.observed?.profileId === profile.id) await this.stopInternal(now);
       const current = await this.repository.readLimit(profile.id);
       const record = requestLimitChange(profile, current, allowance, now);
       await this.repository.writeLimit(record);

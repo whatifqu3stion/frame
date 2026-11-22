@@ -4,29 +4,30 @@ import { FOUNDATION_CAPABILITIES } from "../constants/productConfig";
 
 const source = (path: string): Promise<string> => readFile(new URL(path, import.meta.url).pathname, "utf8");
 
-describe("free beta boundaries", () => {
-  test("keeps billing and unfinished entry points disabled", () => {
+describe("full-access BYOK boundaries", () => {
+  test("keeps billing disabled while launch discovery stays free", () => {
     expect(FOUNDATION_CAPABILITIES.paidAccess).toBeFalse();
     expect(FOUNDATION_CAPABILITIES.googleSelectiveImport).toBeFalse();
-    expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeFalse();
+    expect(FOUNDATION_CAPABILITIES.weeklyDiscovery).toBeTrue();
   });
 
   test("free access is independent of purchase status and does not pretend to be an entitlement", async () => {
     const provider = await source("../providers/AppProvider.tsx");
-    expect(provider).toContain('if (!FEATURE_FLAGS.paidAccess || premiumAccessState === "active") return true;');
-    expect(provider).toContain('canUseLibrary: !FEATURE_FLAGS.paidAccess || premiumAccessState === "active"');
-    expect(provider).toContain('const isPremium = hasPremiumEntitlement(customerInfoQuery.data)');
+    expect(provider).toContain('canUseLibrary: true');
+    expect(provider).not.toContain('customerInfoQuery');
+    expect(provider).not.toContain('services/revenueCat');
     const watch = await source("../app/watch/[id].tsx");
     expect(watch).not.toContain("isPremium");
     expect(watch).toContain("canUseLibrary");
   });
 
-  test("billing cannot initialize, mount, purchase or restore in the free beta", async () => {
-    const billing = await source("./revenueCat.ts");
-    expect(billing).toContain("if (FEATURE_FLAGS.paidAccess && revenueCatApiKey)");
-    expect(billing).toContain('if (!FEATURE_FLAGS.paidAccess || Platform.OS === "web" || !isRevenueCatConfigured)');
-    expect(await source("../app/_layout.tsx")).toContain("{FEATURE_FLAGS.paidAccess ? <PaywallSheet /> : null}");
-    expect(await source("../app/(tabs)/settings.tsx")).toContain('{FEATURE_FLAGS.paidAccess ? <Section label="Premium">');
+  test("billing SDK and both purchase surfaces are absent; keys replace plans in Settings", async () => {
+    expect(FOUNDATION_CAPABILITIES.demoPaywall).toBeFalse();
+    expect(await source("../package.json")).not.toContain("react-native-purchases");
+    expect(await source("../app/_layout.tsx")).not.toContain("PaywallSheet");
+    expect(await source("../components/OnboardingFlow.tsx")).not.toContain("DemoPaywall");
+    expect(await source("../components/SettingsDetails.tsx")).toContain('section === "keys"');
+    expect(await source("../app/(tabs)/settings.tsx")).toContain('testID="settings-keys"');
   });
 
   test("legacy mobile content endpoints are removed, not hidden behind entitlement checks", async () => {

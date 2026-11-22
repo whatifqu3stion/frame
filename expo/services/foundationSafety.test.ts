@@ -2,8 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { FOUNDATION_CAPABILITIES } from "../constants/productConfig";
 import { toggleInterestId } from "../domain/interests";
 import { discoveryService } from "./discovery";
-import { fetchSubscriptions } from "./googleAuth";
-import { getGoogleImportAvailability, isAutomaticGoogleFollowingEnabled } from "./googleImportPolicy";
+import { isAutomaticGoogleFollowingEnabled, isSelectiveGoogleImportEnabled } from "./googleImportPolicy";
 import { isLiveYouTubeSearchEnabled, unavailableSearchResult } from "./searchPolicy";
 
 const originalFetch = globalThis.fetch;
@@ -47,12 +46,11 @@ describe("Round 1 network safety", () => {
     expect(fetchCount).toBe(0);
   });
 
-  test("automatic Google following and subscription reads are disabled", async () => {
+  test("retired Google import and automatic following stay disabled without network work", async () => {
     let fetchCount = 0;
     globalThis.fetch = (async () => { fetchCount += 1; throw new Error("unexpected fetch"); }) as typeof fetch;
     expect(isAutomaticGoogleFollowingEnabled()).toBeFalse();
-    expect(await getGoogleImportAvailability()).toMatchObject({ ok: false });
-    expect(await fetchSubscriptions("not-a-real-token")).toMatchObject({ status: "unavailable" });
+    expect(isSelectiveGoogleImportEnabled()).toBeFalse();
     expect(fetchCount).toBe(0);
   });
 });

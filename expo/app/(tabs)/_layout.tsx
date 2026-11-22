@@ -1,3 +1,9 @@
+import Text from "@/components/FrameText";
+import TabIconSurface from "@/components/motion/TabIconSurface";
+import TabBarGlass from "@/components/TabBarGlass";
+import PaperSurface from "@/components/PaperSurface";
+import { useNavigationLayout } from "@/hooks/useNavigationLayout";
+import { Platform, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -5,37 +11,45 @@ import { fonts } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
 export default function TabLayout() {
-  const { palette } = useFrameTheme();
+  const { palette, isDark } = useFrameTheme();
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, 8);
+  const { sidebar, fontScale, bottomInset, bottomBarHeight } = useNavigationLayout();
 
   return (
     <Tabs
       initialRouteName="index"
+      screenLayout={({ children }) => <PaperSurface>{children}</PaperSurface>}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.active,
-        tabBarInactiveTintColor: palette.inkMuted,
+        sceneStyle: { backgroundColor: "transparent" },
+        tabBarActiveTintColor: sidebar ? palette.active : isDark ? palette.accentSoft : palette.accentDeep,
+        tabBarActiveBackgroundColor: sidebar ? palette.activeSoft : "transparent",
+        tabBarInactiveTintColor: sidebar ? palette.inkMuted : palette.inkSoft,
         tabBarShowLabel: true,
-        tabBarLabelStyle: { fontFamily: fonts.sansSemibold, fontSize: 10, letterSpacing: 1.15, textTransform: "uppercase" },
-        tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: 48 },
+        tabBarPosition: sidebar ? "left" : "bottom",
+        tabBarLabelPosition: sidebar ? "beside-icon" : "below-icon",
+        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: Platform.isTV ? 19 : 12, lineHeight: Platform.isTV ? 25 : 16, color: sidebar ? color : palette.ink, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
+        tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: sidebar ? 64 * fontScale : 48 },
+        tabBarBackground: sidebar ? undefined : () => <TabBarGlass />,
         tabBarStyle: {
-          backgroundColor: palette.surfaceHigh,
-          borderTopWidth: 1,
-          borderTopColor: palette.borderSoft,
+          backgroundColor: sidebar ? palette.surfaceHigh : "transparent",
+          borderTopWidth: 0,
+          borderRightWidth: sidebar ? StyleSheet.hairlineWidth : 0,
+          borderRightColor: palette.border,
+          borderTopColor: palette.border,
           elevation: 0,
-          height: 58 + bottomInset,
-          paddingTop: 8,
-          paddingBottom: bottomInset,
+          ...(sidebar ? { width: 208 * Math.max(1, fontScale), minWidth: 208 * Math.max(1, fontScale), paddingTop: insets.top + 16 } : { position: "absolute", height: bottomBarHeight, paddingTop: 8 }),
+          paddingBottom: sidebar ? insets.bottom : bottomInset,
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color }) => <CalendarDays size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color }) => <Users size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color }) => <Bookmark size={20} color={color} strokeWidth={1.7} /> }} />
-      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color }) => <Settings size={20} color={color} strokeWidth={1.7} /> }} />
+      <Tabs.Screen name="index" options={{ title: "Today", tabBarAccessibilityLabel: "Today tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><CalendarDays size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="sources" options={{ title: "Sources", tabBarAccessibilityLabel: "Sources tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Users size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="saved" options={{ title: "Saved", tabBarAccessibilityLabel: "Saved tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Bookmark size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings", tabBarAccessibilityLabel: "Settings tab", tabBarIcon: ({ color, focused }) => <TabIconSurface focused={focused}><Settings size={22} color={color} strokeWidth={2} /></TabIconSurface> }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="library" options={{ href: null }} />
     </Tabs>
   );
 }
+

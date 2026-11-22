@@ -1,10 +1,11 @@
 export type ViewingAllowance =
   | { mode: "unlimited" }
-  | { mode: "dailyLimit"; minutes: number };
+  | { mode: "dailyLimit"; minutes: number; commitment?: boolean };
 
 export type ProfilePlaybackLimitRecord = {
   profileId: string;
   dailyLimitMinutes: number | null;
+  commitment?: boolean;
   pendingDailyLimitMinutes: number | null;
   pendingActivatesAt: number | null;
   updatedAt: number;
@@ -29,8 +30,9 @@ export type PendingViewingAllowanceChange = {
   activatesAt: number;
 };
 
-export type ViewingAllowanceStatus =
-  | { kind: "unlimited"; canPlay: true; pendingChange?: PendingViewingAllowanceChange }
-  | { kind: "limited"; canPlay: true; remainingSeconds: number; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange; warning?: ViewingAllowanceWarning }
+export type ViewingAllowanceStatus = { commitment?: boolean } & (
+  | { kind: "unlimited"; canPlay: true; pendingChange?: PendingViewingAllowanceChange; sessionRemainingSeconds?: number }
+  | { kind: "limited"; canPlay: true; remainingSeconds: number; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange; warning?: ViewingAllowanceWarning; sessionRemainingSeconds?: number }
   | { kind: "complete"; canPlay: false; remainingSeconds: 0; allowanceMinutes: number; pendingChange?: PendingViewingAllowanceChange }
-  | { kind: "ownerReview"; canPlay: false; remainingSeconds: 0; reason: string };
+  | { kind: "ownerReview"; canPlay: false; remainingSeconds: 0; reason: string }
+  | { kind: "restricted"; canPlay: false; remainingSeconds: 0; restriction: "paused" | "outsideWindow" | "quietHours" | "sessionBreak"; reason: string; availableAt?: number });

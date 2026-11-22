@@ -51,7 +51,11 @@ describe("one canonical Saved library", () => {
       }
       expect(personalState(db)).toEqual(personal);
       const before = db.query("SELECT * FROM saved_videos ORDER BY profileId,id").all();
-      const adapter = { ...executor(db), getFirstAsync: async <T,>(): Promise<T | null> => db.query("PRAGMA user_version").get() as T, getAllAsync: async <T,>(): Promise<T[]> => [] } as MigrationExecutor;
+      const adapter = {
+        ...executor(db),
+        getFirstAsync: async <T,>(sql: string, params?: unknown): Promise<T | null> => db.query(sql).get(...(Array.isArray(params) ? params : [])) as T | null,
+        getAllAsync: async <T,>(sql: string, params?: unknown): Promise<T[]> => db.query(sql).all(...(Array.isArray(params) ? params : [])) as T[],
+      } as MigrationExecutor;
       await migrateDatabase(adapter);
       expect(db.query("SELECT * FROM saved_videos ORDER BY profileId,id").all()).toEqual(before);
     } finally { db.close(); }

@@ -2,14 +2,16 @@ export const PRODUCT_LIMITS = {
   todayMaxItems: 12,
   maxItemsPerSource: 2,
   discoveryCadenceDays: 7,
-  futureSourcesPerProfile: 100,
+  futureSourcesPerProfile: 500,
   futureProfilesPerHousehold: 6,
-  sessionDraftMaxItems: 3,
-  onboardingInterestMax: 5,
+  sessionDraftMaxItems: 500,
+  onboardingInterestMax: Number.POSITIVE_INFINITY,
   weeklyDiscoveryDisplayMax: 3,
+  weeklyDiscoveryEditionMax: 12,
+  weeklyDiscoveryResearchMax: 24,
   todayResetHour: 4,
-  sourceFeedMaxSources: 25,
-  sourceFeedCandidatesPerSource: 20,
+  sourceFeedMaxSources: 100,
+  sourceFeedCandidatesPerSource: 50,
 } as const;
 
 export const TODAY_MAX_ITEMS = PRODUCT_LIMITS.todayMaxItems;
@@ -20,15 +22,19 @@ export const TODAY_RESET_HOUR = PRODUCT_LIMITS.todayResetHour;
 export const SOURCE_FEED_MAX_SOURCES = PRODUCT_LIMITS.sourceFeedMaxSources;
 export const SOURCE_FEED_CANDIDATES_PER_SOURCE = PRODUCT_LIMITS.sourceFeedCandidatesPerSource;
 
-/** Round 1 kill switches for backend-dependent or unfinished behavior. */
+/** Central kill switches for backend-dependent or unfinished behavior. */
 export const FOUNDATION_CAPABILITIES = {
+  bringYourOwnKeys: true,
   paidAccess: false,
+  demoPaywall: false,
   localLibrary: true,
   finiteSessions: true,
   youtubeDiscovery: false,
   youtubeSearch: false,
   sharedTodayFeed: true,
-  weeklyDiscovery: false,
+  weeklyDiscovery: true,
+  // Retired in the BYOK edition. Keep legacy credential cleanup available.
   googleSelectiveImport: false,
   automaticGoogleFollowing: false,
 } as const;
+

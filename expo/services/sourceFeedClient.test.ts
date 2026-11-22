@@ -33,7 +33,7 @@ describe("batched cached source feed client", () => {
     const client = createSourceFeedClient({ supabaseUrl: "https://example.supabase.co", publishableKey: "public", fetchImpl: async (_input, init) => { calls += 1; requestBody = String(init?.body); return Response.json(response); } });
     const result = await client.getCachedFeeds([sourceA, sourceB]);
     expect(calls).toBe(1);
-    expect(JSON.parse(requestBody)).toEqual({ providerSourceIds: [sourceA, sourceB], limitPerSource: 20 });
+    expect(JSON.parse(requestBody)).toEqual({ providerSourceIds: [sourceA, sourceB], limitPerSource: 50 });
     expect(requestBody).not.toContain("profile");
     expect(result.status).toBe("success");
     expect(result.status === "success" ? result.candidates.map((item) => item.id) : []).toEqual(["video000001"]);

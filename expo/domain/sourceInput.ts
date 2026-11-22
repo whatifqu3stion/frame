@@ -1,3 +1,4 @@
+import { isShortsLink } from "./contentPolicy";
 const channelIdPattern = /^UC[A-Za-z0-9_-]{22}$/;
 const videoIdPattern = /^[A-Za-z0-9_-]{11}$/;
 
@@ -10,7 +11,7 @@ export type ParsedSourceInput =
 /** Strictly classifies only stable channel IDs, @handles, and individual YouTube video URLs. */
 export function parseSourceInput(input: string): ParsedSourceInput {
   const text = input.trim();
-  if (!text || text.length > 2048) return { kind: "unknown", value: text };
+  if (!text || text.length > 2048 || isShortsLink(text)) return { kind: "unknown", value: text };
   if (channelIdPattern.test(text)) return { kind: "channelId", value: text };
   const directHandle = /^@([A-Za-z0-9_.-]{3,30})$/.exec(text);
   if (directHandle?.[1]) return { kind: "handle", value: directHandle[1].toLowerCase() };
@@ -36,7 +37,7 @@ export function parseSourceInput(input: string): ParsedSourceInput {
         const videoId = url.searchParams.get("v") ?? "";
         if (videoIdPattern.test(videoId)) return { kind: "video", value: videoId };
       }
-      if (segments.length === 2 && (segments[0] === "shorts" || segments[0] === "embed") && videoIdPattern.test(segments[1] ?? "")) {
+      if (segments.length === 2 && segments[0] === "embed" && videoIdPattern.test(segments[1] ?? "")) {
         return { kind: "video", value: segments[1] as string };
       }
     }

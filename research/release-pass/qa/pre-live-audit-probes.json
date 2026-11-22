@@ -1,0 +1,32 @@
+[
+  {
+    "failAt": "database initialization",
+    "events": [
+      {
+        "warning": "[app] init failed"
+      },
+      {
+        "ready": true
+      }
+    ],
+    "method": "Executed actual initialize/catch source in isolation with mocked failing storage; no device data accessed"
+  },
+  {
+    "failAt": "active profile read",
+    "events": [
+      {
+        "warning": "[app] init failed"
+      },
+      {
+        "ready": true
+      }
+    ],
+    "method": "Executed actual initialize/catch source in isolation with mocked failing storage; no device data accessed"
+  },
+  {
+    "failAt": "preference storage read",
+    "returnedDefaultObject": true,
+    "reportedToCallerAsError": false,
+    "method": "Executed actual loadPrefs source with mocked rejected storage read; no persistent writes"
+  }
+]

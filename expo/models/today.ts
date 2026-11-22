@@ -12,6 +12,7 @@ export type CachedTodayCandidate = Video & {
 };
 
 export type TodaySourceRule = {
+  favorite?: boolean;
   profileId: string;
   sourceId: string;
   minimumDurationSeconds: number;
@@ -46,10 +47,11 @@ export type TodayPeriod = {
   endsAt: number;
 };
 
-export type TodayLoadState = "ready" | "empty" | "no_sources" | "no_cache" | "network_error" | "unavailable";
+export type TodayLoadState = "ready" | "empty" | "no_sources" | "source_limit" | "no_cache" | "network_error" | "unavailable";
 
 export type TodayLoadResult = {
   state: TodayLoadState;
   snapshot: TodaySnapshot | null;
   message?: string;
 };
+

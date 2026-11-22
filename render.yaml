@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: frame
+    runtime: static
+    repo: https://github.com/whatifqu3stion/frame
+    branch: codex/full-app-byok
+    buildCommand: cd expo && bun install --frozen-lockfile && node node_modules/expo/bin/cli export --platform web
+    staticPublishPath: expo/dist
+    envVars:
+      - key: NODE_VERSION
+        value: "24.22.1"
+      - key: BUN_VERSION
+        value: "1.4.4"
+      - key: EXPO_NO_DOTENV
+        value: "1"
+      - key: EXPO_PUBLIC_APP_ENV
+        value: production
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

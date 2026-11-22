@@ -11,12 +11,12 @@ describe("Today playback and network safety", () => {
     expect(source).toContain("await getPlaybackAllowance(activeProfileId)");
     expect(source).toContain("if (!allowance.canPlay)");
     expect(source.indexOf("if (!allowance.canPlay)")).toBeLessThan(source.indexOf("router.push({ pathname: FRAME_PLAYBACK_ROUTE"));
-    expect(source).toContain("Save, Session, Snooze and Dismiss are still available");
+    expect(source).toContain("You can still save videos, plan a session, or organize Today");
   });
 
   test("marks Today watched only after allowance-approved playback actually starts", async () => {
     const source = await readFile(watchScreenPath.pathname, "utf8");
-    const beginIndex = source.indexOf("beginAllowancePlayback().then");
+    const beginIndex = source.indexOf("const status = await beginAllowancePlayback(current)");
     const approvedIndex = source.indexOf("if (!status.canPlay)", beginIndex);
     const dispositionIndex = source.indexOf('setDisposition(activeProfileId, todayPeriodKey, id, "watched"', approvedIndex);
     expect(beginIndex).toBeGreaterThan(-1);

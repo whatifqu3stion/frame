@@ -19,7 +19,7 @@ class MemoryStorage implements KeyValueStorage {
 }
 
 describe("Stage C1 profile-owned local state", () => {
-  test("same IDs remain independent for follows, Today actions/snoozes, Saved, progress, Sessions, rules and daily limits/usage", async () => {
+  test("same IDs remain independent for follows, Today actions/snoozes, Saved, progress, Sessions, rules, playback controls and content approvals", async () => {
     const db = new Database(":memory:");
     try {
       await migrateDatabase(adapter(db));
@@ -35,6 +35,12 @@ describe("Stage C1 profile-owned local state", () => {
         db.query("INSERT INTO source_rules (profileId,sourceId,updatedAt) VALUES (?, 'source',?)").run(profile, index + 1);
         db.query("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,updatedAt) VALUES (?,?,1)").run(profile, index + 20);
         db.query("INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?, 'day',1,1,0,?,0,0,1)").run(profile, index + 30);
+        db.query("INSERT INTO profile_playback_controls (profileId,sessionLimitMinutes,sessionBreakMinutes,pausedUntil,updatedAt) VALUES (?,?,?,?,1)").run(profile, index + 40, 15, index + 50);
+        db.query("INSERT INTO profile_session_usage (profileId,lastPlaybackAt,consumedSeconds,lockedUntil,updatedAt) VALUES (?,1,?,?,1)").run(profile, index + 60, index + 70);
+        db.query("INSERT INTO managed_content_policies (profileId,mode,updatedAt) VALUES (?,'selectedVideos',?)").run(profile, index + 80);
+        db.query("INSERT INTO managed_approved_videos (profileId,videoId,title,sourceId,sourceTitle,thumbnailUrl,publishedAt,durationSeconds,description,approvedAt) VALUES (?,'abcdefghijk',?,'source','Source','','',100,'',?)").run(profile, `Approved ${index}`, index + 90);
+        db.query("INSERT INTO managed_approved_sources (profileId,sourceId,title,description,thumbnailUrl,followedAt,source,approvedAt) VALUES (?,'source',?,'','',1,'manual',?)").run(profile, `Approved source ${index}`, index + 100);
+        db.query("INSERT INTO managed_approval_requests (profileId,kind,targetId,sourceId,title,sourceTitle,thumbnailUrl,publishedAt,durationSeconds,description,requestedAt) VALUES (?,'video','zzzzzzzzzzz','source',?,'Source','','',100,'',?)").run(profile, `Request ${index}`, index + 110);
       }
       const checks: [string, string, readonly number[] | readonly string[]][] = [
         ["followed_channels", "title", ["Source", "Source", "Source"]],
@@ -47,6 +53,12 @@ describe("Stage C1 profile-owned local state", () => {
         ["source_rules", "updatedAt", [1, 2, 3]],
         ["profile_playback_limits", "dailyLimitMinutes", [20, 21, 22]],
         ["profile_playback_usage", "consumedSeconds", [30, 31, 32]],
+        ["profile_playback_controls", "sessionLimitMinutes", [40, 41, 42]],
+        ["profile_session_usage", "consumedSeconds", [60, 61, 62]],
+        ["managed_content_policies", "updatedAt", [80, 81, 82]],
+        ["managed_approved_videos", "title", ["Approved 0", "Approved 1", "Approved 2"]],
+        ["managed_approved_sources", "title", ["Approved source 0", "Approved source 1", "Approved source 2"]],
+        ["managed_approval_requests", "title", ["Request 0", "Request 1", "Request 2"]],
       ];
       for (const [table, column, values] of checks) {
         for (const [index, profile] of ["owner-default", "standard", "managed"].entries()) {

@@ -28,7 +28,6 @@ describe("local Saved library filtering", () => {
 
   test("treats progress over five seconds as in progress and keeps progress attached", () => {
     expect(ids("", "inProgress")).toEqual(["one"]);
-    expect(ids("", "unwatched")).toEqual(["two", "three"]);
     expect(filterSavedLibrary(videos, resume, "", "all").map((item) => item.progressSeconds)).toEqual([120, 5, 0]);
   });
 
@@ -36,7 +35,7 @@ describe("local Saved library filtering", () => {
     const videosBefore = structuredClone(videos);
     const resumeBefore = structuredClone(resume);
     expect(ids("lab", "inProgress")).toEqual(["one"]);
-    expect(ids("lab", "unwatched")).toEqual([]);
+    expect(ids("house", "inProgress")).toEqual([]);
     expect(videos).toEqual(videosBefore);
     expect(resume).toEqual(resumeBefore);
   });
@@ -47,6 +46,11 @@ describe("local Saved library filtering", () => {
     expect(resolveSavedCriteria(ownerCriteria, "standard")).toEqual({ query: "", filter: "all" });
   });
 
+  test("completed videos with cleared resume remain in All, not In progress", () => {
+    expect(filterSavedLibrary(videos, [], "", "all").map((item) => item.video.id)).toEqual(["one", "two", "three"]);
+    expect(filterSavedLibrary(videos, [], "", "inProgress")).toEqual([]);
+  });
+
   test("ignores invalid progress and never introduces resume-only videos", () => {
     const malformed: ResumePosition[] = [
       { videoId: "one", timestampSeconds: Number.NaN, updatedAt: 1 },
@@ -54,6 +58,6 @@ describe("local Saved library filtering", () => {
       { videoId: "not-saved", timestampSeconds: 100, updatedAt: 3 },
     ];
     expect(filterSavedLibrary(videos, malformed, "", "inProgress")).toEqual([]);
-    expect(filterSavedLibrary(videos, malformed, "", "unwatched").map((item) => item.video.id)).toEqual(["one", "two", "three"]);
+    expect(filterSavedLibrary(videos, malformed, "", "all").map((item) => item.video.id)).toEqual(["one", "two", "three"]);
   });
 });

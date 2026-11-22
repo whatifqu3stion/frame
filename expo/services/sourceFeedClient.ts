@@ -41,7 +41,7 @@ export type SourceFeedResponse = {
 
 export type SourceFeedClientResult =
   | { status: "success"; response: SourceFeedResponse; candidates: CachedTodayCandidate[] }
-  | { status: "missing_configuration" | "invalid_request" | "unauthorized" | "http_unavailable" | "network_error" | "invalid_response" };
+  | { status: "missing_configuration" | "invalid_request" | "unauthorized" | "http_unavailable" | "network_error" | "invalid_response"; message?: string };
 
 type SourceFeedClientOptions = { supabaseUrl?: string; publishableKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number };
 
@@ -87,7 +87,7 @@ export function createSourceFeedClient(options: SourceFeedClientOptions) {
   };
 }
 
-function mapCandidates(response: SourceFeedResponse): CachedTodayCandidate[] {
+export function mapCandidates(response: SourceFeedResponse): CachedTodayCandidate[] {
   return response.feeds.flatMap((feed) => feed.items.map((item) => ({
     id: item.providerMediaId,
     title: item.title,
@@ -156,4 +156,5 @@ function isNullableHttps(value: unknown): value is string | null {
 function isRecordWithKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).every((key) => keys.includes(key));
 }
+
 

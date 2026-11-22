@@ -17,3 +17,9 @@ export const INTEREST_LIBRARY: readonly InterestTopic[] = [
   { id: "sports", name: "Sports", emoji: "◎" },
   { id: "life", name: "Life & Relationships", emoji: "❦" },
 ];
+
+export const INTEREST_GROUPS = [
+  { label: "Ideas & discovery", ids: ["tech", "science", "history", "learning", "business"] },
+  { label: "Arts & culture", ids: ["design", "film", "music", "gaming"] },
+  { label: "Everyday & beyond", ids: ["health", "cooking", "travel", "making", "sports", "life"] },
+] as const;

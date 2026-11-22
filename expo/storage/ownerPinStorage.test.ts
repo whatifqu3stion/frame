@@ -65,3 +65,37 @@ describe("Owner PIN protected storage", () => {
     expect(await verifier.read()).toBeNull();
   });
 });
+
+
+describe("persistent Owner PIN retry limits", () => {
+  test("retains failures across recreated services and rejects even the correct PIN during cooldown", async () => {
+    const storage = new MemoryProtectedStorage();
+    let now = 100_000;
+    const service = () => createOwnerPinVerifier(storage, testCrypto, STORAGE_KEY, () => now);
+    await service().set("4826");
+    for (let index = 0; index < 5; index++) expect(await service().verify("0000")).toBeFalse();
+    expect(await service().verify("4826")).toBeFalse();
+    now += 30_000;
+    expect(await service().verify("4826")).toBeTrue();
+    expect((await service().read())?.failedAttempts).toBe(0);
+  });
+
+  test("serializes concurrent incorrect guesses before accepting another attempt", async () => {
+    const storage = new MemoryProtectedStorage();
+    const service = () => createOwnerPinVerifier(storage, testCrypto, STORAGE_KEY, () => 100_000);
+    await service().set("4826");
+    await Promise.all(Array.from({ length: 5 }, () => service().verify("0000")));
+    expect(await service().verify("4826")).toBeFalse();
+  });
+
+  test("accepts legacy verifier records and fails closed when retry state cannot be saved", async () => {
+    const storage = new MemoryProtectedStorage();
+    const service = createOwnerPinVerifier(storage, testCrypto, STORAGE_KEY);
+    await service.set("4826");
+    const legacy = JSON.parse(storage.values.get(STORAGE_KEY)!);
+    expect(legacy.failedAttempts).toBeUndefined();
+    expect(await service.verify("4826")).toBeTrue();
+    storage.setItem = async () => { throw new Error("storage unavailable"); };
+    await expect(service.verify("4826")).rejects.toThrow("storage unavailable");
+  });
+});

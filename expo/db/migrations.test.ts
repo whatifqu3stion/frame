@@ -2,8 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   CREATE_MANAGED_ALLOWANCES_TABLE_SQL,
+  CREATE_MANAGED_CONTENT_POLICIES_TABLE_SQL,
+  CREATE_MANAGED_APPROVED_VIDEOS_TABLE_SQL,
+  CREATE_MANAGED_APPROVED_SOURCES_TABLE_SQL,
+  CREATE_MANAGED_APPROVAL_REQUESTS_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL,
   CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL,
+  CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL,
+  CREATE_PROFILE_SESSION_USAGE_TABLE_SQL,
   CREATE_SOURCE_RULES_TABLE_SQL,
   CREATE_TODAY_SNAPSHOTS_TABLE_SQL,
   CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL,
@@ -13,6 +19,8 @@ import {
   buildVersion2MigrationPlan,
   buildVersion3MigrationPlan,
   buildVersion4MigrationPlan,
+  buildVersion8MigrationPlan,
+  buildVersion9MigrationPlan,
   createProfileOwnedTableSql,
   executeMigrationTransaction,
   migrateDatabase,
@@ -21,6 +29,7 @@ import {
   type SchemaMetadata,
 } from "./migrations";
 import { DEFAULT_OWNER_PROFILE_ID } from "../models/profile";
+import { EXPIRE_LIBRARY_METADATA_SQL } from "../domain/metadataRetention";
 
 function sqliteAdapter(database: Database): MigrationExecutor {
   return {
@@ -60,6 +69,51 @@ const LEGACY_COLUMNS: SchemaMetadata = {
 };
 
 describe("database version 1 migration", () => {
+  test("repairs early native version 12 metadata columns without losing bookmarks or progress", async () => {
+    const database = new Database(":memory:");
+    try {
+      createRepresentativeLegacyDatabase(database);
+      for (const sql of buildVersion1MigrationPlan(LEGACY_COLUMNS)) database.exec(sql);
+      for (const sql of buildVersion2MigrationPlan()) database.exec(sql);
+      for (const sql of buildVersion3MigrationPlan()) database.exec(sql);
+      for (const sql of buildVersion4MigrationPlan()) database.exec(sql);
+      // The early native schema advanced its version without the later v5/v6 additions.
+      database.exec("PRAGMA user_version=12");
+      await migrateDatabase(sqliteAdapter(database));
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: DATABASE_SCHEMA_VERSION });
+      expect(database.query("SELECT id,savedAt,fetchedAt,legacyWatchLaterAddedAt FROM saved_videos ORDER BY id").all()).toEqual([
+        { id: "video-a", savedAt: 10, fetchedAt: null, legacyWatchLaterAddedAt: null },
+        { id: "video-b", savedAt: 13, fetchedAt: null, legacyWatchLaterAddedAt: 13 },
+      ]);
+      expect(database.query("SELECT timestampSeconds,updatedAt FROM resume_positions").get()).toEqual({ timestampSeconds: 20, updatedAt: 11 });
+      expect(database.query("SELECT name,orderedVideoIds FROM queues").get()).toEqual({ name: "Evening", orderedVideoIds: '["video-a"]' });
+      for (const sql of EXPIRE_LIBRARY_METADATA_SQL) database.query(sql).run(0, Date.now());
+      await migrateDatabase(sqliteAdapter(database));
+      expect(database.query("SELECT COUNT(*) AS n FROM saved_videos").get()).toEqual({ n: 2 });
+      expect(database.query("SELECT COUNT(*) AS n FROM watch_later").get()).toEqual({ n: 0 });
+    } finally { database.close(); }
+  });
+  test("reopens legacy empty first selections and keeps established profiles’ daily selections", async () => {
+    const db = new Database(":memory:");
+    try {
+      await migrateDatabase(sqliteAdapter(db));
+      db.exec("PRAGMA foreign_keys=OFF");
+      const header = db.query("INSERT INTO today_snapshots VALUES (?, ?, 1, 1, 'fresh')");
+      header.run("new", "day-two");
+      header.run("returning", "day-one");
+      header.run("returning", "day-two");
+      db.exec(`INSERT INTO today_snapshot_items
+        (profileId,periodKey,mediaId,sourceId,sourceTitle,title,thumbnailUrl,publishedAt,durationSeconds,isLivestream,isUpcomingPremiere,fetchedAt,position,disposition)
+        VALUES ('returning','day-one','video','source','Source','Title','thumb','2026-11-01',300,0,0,1,0,'watched')`);
+      db.exec("PRAGMA user_version=13");
+      await migrateDatabase(sqliteAdapter(db));
+      expect(db.query("SELECT profileId,periodKey FROM today_snapshots ORDER BY periodKey").all()).toEqual([
+        { profileId: "returning", periodKey: "day-one" }, { profileId: "returning", periodKey: "day-two" },
+      ]);
+      expect(db.query("SELECT disposition FROM today_snapshot_items").get()).toEqual({ disposition: "watched" });
+    } finally { db.close(); }
+  });
+
   test("executes fresh schema creation against SQLite", async () => {
     const database = new Database(":memory:");
     try {
@@ -67,7 +121,7 @@ describe("database version 1 migration", () => {
       const version = database.query("PRAGMA user_version").get() as { user_version: number };
       const tables = database.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[];
       expect(version.user_version).toBe(DATABASE_SCHEMA_VERSION);
-      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "today_snapshots", "today_snapshot_items", "source_rules", ...PROFILE_OWNED_TABLES]));
+      expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining(["profiles", "managed_allowances", "profile_playback_limits", "profile_playback_usage", "profile_playback_controls", "profile_session_usage", "managed_content_policies", "managed_approved_videos", "managed_approved_sources", "managed_approval_requests", "today_snapshots", "today_snapshot_items", "source_rules", ...PROFILE_OWNED_TABLES]));
       expect(database.query("SELECT role, sortOrder FROM profiles WHERE id = ?").get(DEFAULT_OWNER_PROFILE_ID)).toEqual({ role: "owner", sortOrder: 0 });
     } finally {
       database.close();
@@ -105,6 +159,8 @@ describe("database version 1 migration", () => {
     expect(buildVersion2MigrationPlan()).toContain(CREATE_MANAGED_ALLOWANCES_TABLE_SQL);
     expect(buildVersion3MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_LIMITS_TABLE_SQL, CREATE_PROFILE_PLAYBACK_USAGE_TABLE_SQL]));
     expect(buildVersion4MigrationPlan()).toEqual(expect.arrayContaining([CREATE_TODAY_SNAPSHOTS_TABLE_SQL, CREATE_TODAY_SNAPSHOT_ITEMS_TABLE_SQL, CREATE_SOURCE_RULES_TABLE_SQL]));
+    expect(buildVersion8MigrationPlan()).toEqual(expect.arrayContaining([CREATE_PROFILE_PLAYBACK_CONTROLS_TABLE_SQL, CREATE_PROFILE_SESSION_USAGE_TABLE_SQL]));
+    expect(buildVersion9MigrationPlan()).toEqual(expect.arrayContaining([CREATE_MANAGED_CONTENT_POLICIES_TABLE_SQL, CREATE_MANAGED_APPROVED_VIDEOS_TABLE_SQL, CREATE_MANAGED_APPROVED_SOURCES_TABLE_SQL, CREATE_MANAGED_APPROVAL_REQUESTS_TABLE_SQL]));
   });
 
   test("assigns representative legacy records to the stable Owner", () => {

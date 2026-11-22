@@ -6,9 +6,10 @@ export type KeyValueStorage = {
   removeItem(key: string): Promise<void>;
 };
 
-export type ProfileStorageNamespace = "preferences" | "interests" | "recentSearches";
+export type LegacyProfileStorageNamespace = "preferences" | "interests" | "recentSearches";
+export type ProfileStorageNamespace = LegacyProfileStorageNamespace | "weeklyPicks" | "onboardingDraft" | "pendingWatch" | "generatedPicks" | "discoveryFocus" | "viewingHistory";
 
-export const LEGACY_PROFILE_STORAGE_KEYS: Record<ProfileStorageNamespace, string> = {
+export const LEGACY_PROFILE_STORAGE_KEYS: Record<LegacyProfileStorageNamespace, string> = {
   preferences: "frame.preferences.v1",
   interests: "frame.interests.v1",
   recentSearches: "frame.recentSearches.v1",
@@ -35,11 +36,12 @@ export async function readProfileStorage(
   const scopedKey = profileStorageKey(namespace, profileId);
   const scoped = await storage.getItem(scopedKey);
   if (scoped !== null || profileId !== DEFAULT_OWNER_PROFILE_ID) return scoped;
+  if (!(namespace in LEGACY_PROFILE_STORAGE_KEYS)) return null;
 
   const migrationKey = profileStorageMigrationKey(namespace, profileId);
   if (await storage.getItem(migrationKey)) return null;
 
-  const legacy = await storage.getItem(LEGACY_PROFILE_STORAGE_KEYS[namespace]);
+  const legacy = await storage.getItem(LEGACY_PROFILE_STORAGE_KEYS[namespace as LegacyProfileStorageNamespace]);
   if (legacy !== null) await storage.setItem(scopedKey, legacy);
   await storage.setItem(migrationKey, "1");
   return legacy;
@@ -58,7 +60,8 @@ export async function clearProfileStorage(
   storage: KeyValueStorage,
   profileId: string,
 ): Promise<void> {
-  await Promise.all((Object.keys(LEGACY_PROFILE_STORAGE_KEYS) as ProfileStorageNamespace[]).map(
+  await Promise.all(([...Object.keys(LEGACY_PROFILE_STORAGE_KEYS), "weeklyPicks", "onboardingDraft", "pendingWatch", "generatedPicks", "discoveryFocus", "viewingHistory"] as ProfileStorageNamespace[]).map(
     (namespace) => storage.removeItem(profileStorageKey(namespace, profileId)),
   ));
 }
+

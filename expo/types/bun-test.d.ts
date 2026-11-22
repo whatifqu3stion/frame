@@ -11,6 +11,8 @@ declare module "bun:test" {
 declare module "bun:sqlite" {
   export class Database {
     constructor(filename?: string);
+    serialize(): Uint8Array;
+    static deserialize(data: Uint8Array): Database;
     exec(sql: string): void;
     close(): void;
     query(sql: string): {

@@ -1,85 +1,68 @@
-import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import PlaybackAction from "@/components/PlaybackAction";
+import Text from "@/components/FrameText";
+import MotionView from "@/components/motion/MotionView";
+import ProgrammeArtwork from "@/components/ProgrammeArtwork";
+import InfoButton from "@/components/InfoButton";
+import { motion } from "@/constants/motion";
+import Heading from "@/components/Heading";
+import { useSessionPlayback } from "@/hooks/useSessionPlayback";
+import { sessionTimeRemaining } from "@/domain/sessionTimer";
+import { boundedCollection } from "@/constants/layout";
+import MediaImage from "@/components/MediaImage";
+import { useFeedback } from "@/hooks/useFeedback";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronDown, ChevronUp, Copy, Pencil, Play, Trash2, X } from "lucide-react-native";
-import { useCallback, useMemo } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Copy, Pencil, Trash2 } from "lucide-react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
+import ProgrammeGrain from "@/components/ProgrammeGrain";
 import EmptyState from "@/components/EmptyState";
-import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
-import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
+import { loadSessionMetadata } from "@/services/sessionMetadata";
 import { todayRepository } from "@/repositories/todayRepository";
-import { expireVideo } from "@/domain/metadataRetention";
-import { sessionPosition, sessionRuntime } from "@/domain/sessionFlow";
+import { expireVideo, isMetadataCurrent } from "@/domain/metadataRetention";
+import { sessionRuntime } from "@/domain/sessionFlow";
 import { formatDuration } from "@/services/youtube";
 import type { Video } from "@/types";
 
 export default function SavedSessionScreen() {
+  const feedback = useFeedback();
   const insets = useSafeAreaInsets();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, updateSessionVideos, updateSessionPosition, requirePurchase } = useApp();
+  const [timingOpen, setTimingOpen] = useState(false);
+  const { id, assembled, addedVideoId } = useLocalSearchParams<{ id: string; assembled?: string; addedVideoId?: string }>();
+  const { activeProfileId, sessions, savedVideos, duplicateSession, removeSession, requirePurchase, libraryError, refreshLibrary } = useApp();
   const session = useMemo(() => sessions.find((candidate) => candidate.id === id), [id, sessions]);
   const todayVideosQuery = useQuery({
-    queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""],
-    queryFn: async () => Promise.all((session?.orderedVideoIds ?? []).map((videoId) => todayRepository.getVideo(activeProfileId, videoId))),
+    queryKey: ["session-today-media", activeProfileId, session?.orderedVideoIds.join(",") ?? ""], networkMode: "always",
+    queryFn: ({ signal }) => loadSessionMetadata(session?.orderedVideoIds ?? [], (videoId) => todayRepository.getVideo(activeProfileId, videoId), signal),
     enabled: Boolean(session),
   });
+  const recovered = useQuery<Record<string, Video>>({ queryKey: ["recovered-library", activeProfileId], queryFn: skipToken, enabled: false });
   const videoMap = useMemo<Map<string, Video>>(() => {
     const map = new Map<string, Video>();
-    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos].forEach((video) => map.set(video.id, expireVideo(video, Date.now())));
+    [...(todayVideosQuery.data ?? []).filter((video): video is Video => Boolean(video)), ...savedVideos, ...Object.values(recovered.data ?? {})].forEach((video) => {
+      if ((video.fetchedAt ?? 0) >= (map.get(video.id)?.fetchedAt ?? 0)) map.set(video.id, expireVideo(video, Date.now()));
+    });
     return map;
-  }, [savedVideos, todayVideosQuery.data]);
-  const position = session ? sessionPosition(session) : 0;
+  }, [savedVideos, todayVideosQuery.data, recovered.data]);
+  const { busy, run, capture, startAt, timerQuery, position, timeComplete, playLabel } = useSessionPlayback(session, videoMap);
   const runtime = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()]);
-  const remaining = sessionRuntime(session?.orderedVideoIds ?? [], [...videoMap.values()], position);
-  const finishTime = remaining.unknown === 0 && remaining.seconds > 0 ? new Date(Date.now() + remaining.seconds * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
-
-  const startAt = useCallback(async (index: number): Promise<void> => {
-    if (!session || !requirePurchase("sessions")) return;
-    const videoId = session.orderedVideoIds[index];
-    if (!videoId) return;
-    try {
-      const moved = await updateSessionPosition(session.id, videoId, index, index);
-      if (!moved) throw new Error("Session changed");
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      const video = videoMap.get(videoId);
-      router.push({
-        pathname: FRAME_PLAYBACK_ROUTE,
-        params: { id: videoId, savedSessionId: session.id, sessionProfileId: activeProfileId, title: video?.title ?? "", channelId: video?.channelId ?? "", channelTitle: video?.channelTitle ?? "", thumbnailUrl: video?.thumbnailUrl ?? "", publishedAt: video?.publishedAt ?? "", durationSeconds: String(video?.durationSeconds ?? 0), cachedMetadata: "1", fetchedAt: String(video?.fetchedAt ?? 0) },
-      });
-    } catch {
-      Alert.alert("Couldn’t start session", "Your place was not saved. Try again.");
-    }
-  }, [activeProfileId, requirePurchase, session, updateSessionPosition, videoMap]);
-
-  const move = useCallback(async (index: number, direction: -1 | 1): Promise<void> => {
-    if (!session || !requirePurchase("sessions")) return;
-    const target = index + direction;
-    if (target < 0 || target >= session.orderedVideoIds.length) return;
-    const next = [...session.orderedVideoIds];
-    [next[index], next[target]] = [next[target], next[index]];
-    try { await updateSessionVideos(session.id, next); void Haptics.selectionAsync().catch(() => {}); }
-    catch { Alert.alert("Couldn’t reorder", "The original order is still here."); }
-  }, [requirePurchase, session, updateSessionVideos]);
-
-  const removeVideo = useCallback(async (videoId: string): Promise<void> => {
-    if (!session || !requirePurchase("sessions")) return;
-    try { await updateSessionVideos(session.id, session.orderedVideoIds.filter((candidate) => candidate !== videoId)); }
-    catch { Alert.alert("Couldn’t remove video", "The session is unchanged."); }
-  }, [requirePurchase, session, updateSessionVideos]);
 
   const duplicate = useCallback(async (): Promise<void> => {
     if (!session || !requirePurchase("sessions")) return;
-    const copy = await duplicateSession(session.id);
-    if (!copy) return;
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
-  }, [duplicateSession, requirePurchase, session]);
+    const done = feedback.capture();
+    await run(() => duplicateSession(session.id), (copy) => {
+      if (!copy) return;
+      done("commit");
+      router.replace({ pathname: "/session/[id]", params: { id: copy.id } });
+    }, () => Alert.alert("Couldn’t duplicate session", "Check your sessions in Saved before trying again."));
+  }, [duplicateSession, feedback, requirePurchase, session, run]);
 
   const openEditor = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
@@ -88,102 +71,122 @@ export default function SavedSessionScreen() {
 
   const confirmDelete = useCallback((): void => {
     if (!session || !requirePurchase("sessions")) return;
-    Alert.alert("Delete named session?", `“${session.name}” will be removed.`, [
+    const isCurrent = capture();
+    Alert.alert("Delete session?", `“${session.name}” will be removed. Your saved videos will remain in Saved.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await removeSession(session.id); router.back(); } },
+      { text: "Delete", style: "destructive", onPress: () => { if (isCurrent()) void run(() => removeSession(session.id), () => router.back(), () => Alert.alert("Couldn’t delete session", "Check your sessions in Saved before trying again.")); } },
     ]);
-  }, [removeSession, requirePurchase, session]);
+  }, [capture, removeSession, requirePurchase, session, run]);
+
+  if (libraryError) return <View style={styles.missing}><EmptyState title="Sessions couldn’t load" body="Try again to open this session." action={{ label: "Try again", onPress: () => { void refreshLibrary().catch(() => Alert.alert("Library unavailable", "Close and reopen Frame to try again.")); } }} /></View>;
 
   if (!session) {
     return (
       <View style={[styles.missing, { paddingBottom: insets.bottom + spacing.xl }]}>
         <EmptyState title="Session unavailable" body="It may have been deleted on this device." />
-        <Pressable onPress={() => router.back()} style={styles.secondaryButton}><Text style={styles.secondaryText}>Go back</Text></Pressable>
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => router.back()} style={styles.secondaryButton} accessibilityRole="button"><Text style={styles.secondaryText}>Go back</Text></Pressable>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.page, paddingBottom: insets.bottom + spacing.xxl }} showsVerticalScrollIndicator={false}>
-      <Text style={styles.eyebrow}>Named session</Text>
-      <Text style={styles.title} accessibilityRole="header">{session.name}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length} of {PRODUCT_LIMITS.sessionDraftMaxItems} videos · {runtime.seconds ? `${formatDuration(runtime.seconds)} known` : "No known runtime"}{runtime.unknown ? ` · ${runtime.unknown} unknown` : ""}</Text>
-      <Text style={styles.subtitle}>{session.orderedVideoIds.length === 0 ? "Add a video when you're ready." : position >= session.orderedVideoIds.length ? "Session complete · Rest here, or begin again when you choose." : `Next: ${position + 1} of ${session.orderedVideoIds.length} · ${remaining.seconds ? `${formatDuration(remaining.seconds)} known remaining` : "Runtime unknown"}${finishTime ? ` · Finish around ${finishTime}` : ""}`}</Text>
-
+    <FlatList<string> key={`${activeProfileId}:${id}`} data={session.orderedVideoIds} keyExtractor={(videoId) => videoId}
+      initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
+      ListHeaderComponent={<>
+      <MotionView enter={assembled === "1"} onPresented={() => { if (assembled === "1") router.setParams({ assembled: undefined }); }} duration={motion.state} style={styles.programme}>
+      <ProgrammeGrain />
+      <ProgrammeArtwork videos={session.orderedVideoIds.map((videoId) => videoMap.get(videoId))} enter={assembled === "1"} editorial />
+      <Heading level={1} style={styles.title}>{session.name}</Heading>
+      <Text style={styles.subtitle}>{session.orderedVideoIds.length} {session.orderedVideoIds.length === 1 ? "video" : "videos"} · {runtime.seconds ? `${runtime.unknown ? "at least " : ""}${Math.ceil(runtime.seconds / 60)} min of video` : "duration unavailable"}{runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}</Text>
+      {position > 0 ? <Text style={styles.subtitle}>{position >= session.orderedVideoIds.length ? "Queue complete" : `Up next · Video ${position + 1} of ${session.orderedVideoIds.length}`}</Text> : null}
+      {session.orderedVideoIds.length > 0 ? (
+        <View style={styles.startRow}>
+          {session.targetMinutes ? <View style={styles.timeCopy}>
+            <View style={styles.timingToggle}>
+              <Text style={styles.timeLabel}>Pause after {session.targetMinutes} min</Text>
+              <InfoButton onProgramme label={`Session duration: ${session.targetMinutes} minutes. How session timing works`} expanded={timingOpen} onPress={() => setTimingOpen(!timingOpen)} testID="session-timing-help" />
+            </View>
+            {timeComplete || timerQuery.data?.consumedSeconds ? <Text style={styles.timeStatus}>{timeComplete ? "Time complete" : `${Math.ceil(sessionTimeRemaining(timerQuery.data!, session.targetMinutes) / 60)} min left`}</Text> : null}
+          </View> : null}
+        <PlaybackAction programme disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={[styles.beginButton, busy && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
+          <Text style={styles.beginText}>{busy ? "Working…" : playLabel}</Text>
+        </PlaybackAction>
+        </View>
+      ) : null}
+      {timingOpen && session.targetMinutes ? <MotionView enter distance={-6}><Text style={styles.timingNote}>Only playback counts toward your {session.targetMinutes} minutes. Frame pauses when your time is up; you can finish the current video. Profile limits still apply.</Text></MotionView> : null}
+      </MotionView>
       <View style={styles.actions}>
-        <Pressable onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={openEditor} style={styles.actionButton} accessibilityRole="button">
           <Pencil size={16} color={palette.accent} /><Text style={styles.actionText}>Edit</Text>
         </Pressable>
-        <Pressable onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void duplicate(); }} style={styles.actionButton} accessibilityRole="button">
           <Copy size={16} color={palette.accent} /><Text style={styles.actionText}>Duplicate</Text>
         </Pressable>
-        <Pressable onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete named session">
+        <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={confirmDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete session">
           <Trash2 size={17} color={palette.danger} />
         </Pressable>
       </View>
 
-      <View style={styles.list}>
-        {session.orderedVideoIds.length === 0 ? (
-          <EmptyState title="This session is empty" body={`Edit it to choose one to ${PRODUCT_LIMITS.sessionDraftMaxItems} videos.`} />
-        ) : session.orderedVideoIds.map((videoId, index) => {
+      <View style={styles.list} />
+
+</>}
+      style={styles.screen} contentContainerStyle={[boundedCollection, { padding: spacing.page, paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: insets.bottom + spacing.xxl }]} showsVerticalScrollIndicator={false}
+      renderItem={({ item: videoId, index }) => {
           const video = videoMap.get(videoId);
           return (
-            <View key={videoId} style={styles.row}>
+            <View key={videoId}><View style={styles.row}>
               <View style={styles.orderMark}><Text style={styles.orderText}>{index + 1}</Text></View>
-              <Pressable onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}`} >
-                <Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "YouTube · local link"}</Text>
-                <Text style={styles.videoTitle} numberOfLines={2}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}</Text>
-                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Runtime unknown · playback needs internet"}</Text>
+              <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={() => { void startAt(index); }} style={styles.videoMain} accessibilityRole="button" accessibilityLabel={`Start with ${video?.title ?? `video ${index + 1}`}${addedVideoId === videoId ? ", just added" : ""}`} >
+                <MediaImage source={video?.thumbnailUrl ? { uri: video.thumbnailUrl } : null} style={styles.thumbnail} contentFit="cover" cachePolicy="none" />
+                <View style={styles.videoCopy}><Text style={styles.channel} numberOfLines={1}>{video?.channelTitle || "Saved source"}</Text>
+                <Text style={styles.videoTitle}>{video?.title || "Video details unavailable"}{index === position ? " · Up next" : ""}{addedVideoId === videoId ? " · Just added" : ""}</Text>
+                <Text style={styles.duration}>{video?.durationSeconds ? formatDuration(video.durationSeconds) : "Duration unavailable · internet required"}</Text></View>
               </Pressable>
-              <View style={styles.rowActions}>
-                <Pressable onPress={() => { void move(index, -1); }} disabled={index === 0} style={[styles.smallButton, index === 0 && styles.disabled]} accessibilityRole="button" accessibilityLabel="Move earlier"><ChevronUp size={16} color={palette.inkMuted} /></Pressable>
-                <Pressable onPress={() => { void move(index, 1); }} disabled={index === session.orderedVideoIds.length - 1} style={[styles.smallButton, index === session.orderedVideoIds.length - 1 && styles.disabled]} accessibilityRole="button" accessibilityLabel="Move later"><ChevronDown size={16} color={palette.inkMuted} /></Pressable>
-                <Pressable onPress={() => { void removeVideo(videoId); }} style={styles.smallButton} accessibilityRole="button" accessibilityLabel="Remove from session"><X size={16} color={palette.danger} /></Pressable>
-              </View>
+
+            </View>
+            <VideoDetailsRecovery key={`${activeProfileId}:${videoId}`} videoId={videoId} expired={!isMetadataCurrent(video?.fetchedAt, Date.now())} />
             </View>
           );
-        })}
-      </View>
-
-      {session.orderedVideoIds.length > 0 ? (
-        <Pressable onPress={() => { void startAt(position < session.orderedVideoIds.length ? position : 0); }} style={({ pressed }) => [styles.beginButton, pressed && styles.pressed]} accessibilityRole="button" testID="begin-saved-session">
-          <Play size={17} color={palette.onDark} fill={palette.onDark} />
-          <Text style={styles.beginText}>{position >= session.orderedVideoIds.length ? "Begin again" : position > 0 ? `Continue with video ${position + 1}` : "Begin session"}</Text>
-        </Pressable>
-      ) : null}
-      <Text style={styles.stopNote}>No autoplay. The next video waits for you; after the last one, Frame stops.</Text>
-    </ScrollView>
+      }}
+      ListEmptyComponent={<EmptyState title="This session is empty" body="Edit it to add videos and choose a duration." />}
+    />
   );
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: palette.wall },
-    missing: { flex: 1, backgroundColor: palette.wall, justifyContent: "center", padding: spacing.page },
-    eyebrow: { ...type.caption, color: palette.accent },
-    title: { ...type.title, marginTop: spacing.xs },
-    subtitle: { ...type.bodySoft, marginTop: spacing.sm, color: palette.inkMuted },
-    actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xl },
-    actionButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
+    screen: { flex: 1, backgroundColor: "transparent" },
+    missing: { flex: 1, backgroundColor: "transparent", justifyContent: "center", padding: spacing.page },
+    programme: { padding: spacing.lg, backgroundColor: palette.programme, borderRadius: radii.card },
+    title: { ...type.title, fontSize: 26, lineHeight: 33, color: palette.onProgramme },
+    subtitle: { ...type.bodySoft, marginTop: spacing.xs, color: palette.onProgrammeSoft },
+    startRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.md, marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.programmeRule },
+    timeCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 120 },
+    timingToggle: { minHeight: 48, flexDirection: "row", alignItems: "center" },
+    timeLabel: { ...type.label, color: palette.onProgramme, flexShrink: 1 },
+    timeStatus: { ...type.caption, color: palette.onProgrammeSoft },
+    timingNote: { ...type.bodySoft, color: palette.onProgrammeSoft, marginTop: spacing.md },
+    actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.xl },
+    actionButton: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: palette.activeSoft },
     actionText: { ...type.label, color: palette.accent },
-    iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
-    list: { marginTop: spacing.xl, gap: spacing.md },
-    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radii.card, borderWidth: 1, borderColor: palette.borderSoft },
-    orderMark: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: palette.accentDeep },
-    orderText: { ...type.label, color: palette.onDark },
-    videoMain: { flex: 1, minHeight: 76, justifyContent: "center" },
+    iconButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: palette.surface },
+    list: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
+    row: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
+    orderMark: { minWidth: 32, alignItems: "flex-start", justifyContent: "center" },
+    orderText: { ...type.heading, color: palette.inkMuted, fontSize: 24, fontVariant: ["tabular-nums"] },
+    videoMain: { flex: 1, minHeight: 76, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm }, thumbnail: { width: 80, aspectRatio: 16 / 9, borderRadius: radii.media }, videoCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 130 },
     channel: { ...type.caption, color: palette.inkMuted },
-    videoTitle: { ...type.heading, fontSize: 15, lineHeight: 20, marginTop: 2 },
+    videoTitle: { ...type.heading, fontSize: 20, lineHeight: 27, marginTop: 2 },
     unavailable: { color: palette.danger },
     duration: { ...type.caption, color: palette.inkMuted, marginTop: spacing.xs },
     rowActions: { gap: spacing.xs },
-    smallButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
+    smallButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.control },
     disabled: { opacity: 0.22 },
-    beginButton: { minHeight: 52, marginTop: spacing.xl, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.accentDeep },
-    beginText: { ...type.label, color: palette.onDark },
+    beginButton: { minHeight: 48, flexGrow: 1, flexBasis: 144, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: palette.onProgramme, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+    beginText: { ...type.label, color: palette.programme, flexShrink: 1, textAlign: "center" },
     stopNote: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
     secondaryButton: { minHeight: 48, marginTop: spacing.lg, alignItems: "center", justifyContent: "center" },
     secondaryText: { ...type.label, color: palette.accent },
-    pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
+    pressed: { opacity: 0.72 },
   });
 }

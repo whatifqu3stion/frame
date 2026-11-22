@@ -115,3 +115,16 @@ describe("per-profile viewing allowance", () => {
     expect((await service.setAllowance(standardA, { mode: "unlimited" }, START + 1_000)).kind).toBe("unlimited");
   });
 });
+
+test("a new flexible Owner limit changes immediately while existing commitments cannot be bypassed", async () => {
+  const repository = memoryRepository();
+  const service = new ViewingAllowanceService(repository);
+  await service.setAllowance(owner, { mode: "dailyLimit", minutes: 30, commitment: false }, START);
+  const changed = await service.setAllowance(owner, { mode: "dailyLimit", minutes: 60, commitment: false }, START + 1000);
+  expect(changed).toMatchObject({ kind: "limited", allowanceMinutes: 60, commitment: false });
+  expect(changed.kind === "limited" && changed.pendingChange).toBeUndefined();
+  expect((await service.setAllowance(owner, { mode: "unlimited" }, START + 2000)).kind).toBe("unlimited");
+  repository.limits.set(owner.id, limit(owner.id, 30)); // Pre-upgrade commitment, no flag.
+  const protectedChange = await service.setAllowance(owner, { mode: "dailyLimit", minutes: 60, commitment: false }, START + 3000);
+  expect(protectedChange).toMatchObject({ kind: "limited", allowanceMinutes: 30, commitment: true, pendingChange: { activatesAt: START + 3000 + OWNER_RELAXATION_DELAY_MS } });
+});

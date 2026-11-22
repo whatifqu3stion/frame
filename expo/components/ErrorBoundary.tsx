@@ -1,6 +1,6 @@
+import RecoveryScreen from "@/components/RecoveryScreen";
 import { Component, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { palette, spacing, type as typography } from "@/constants/theme";
+import { StyleSheet, View } from "react-native";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -21,14 +21,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   override render() {
     if (this.state.error) {
-      return (
-        <View style={styles.root}>
-          <Text style={typography.caption}>Something went wrong</Text>
-          <Text style={[typography.body, { marginTop: spacing.md }]}>
-            {this.state.error.message}
-          </Text>
-        </View>
-      );
+      return <RecoveryScreen title="Frame couldn’t open this screen" message="Try again. If this continues, close and reopen Frame." onRetry={() => this.setState({ error: null })} />;
     }
     return <View style={styles.wrapper}>{this.props.children}</View>;
   }
@@ -38,11 +31,5 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
   },
-  root: {
-    flex: 1,
-    backgroundColor: palette.wall,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing.lg,
-  },
 });
+

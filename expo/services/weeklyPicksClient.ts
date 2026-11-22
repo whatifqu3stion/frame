@@ -2,7 +2,7 @@ import { INTEREST_LIBRARY } from "../constants/interests";
 import type { InterestId, ProviderId } from "../types";
 
 export const WEEKLY_PICKS_REQUEST_TIMEOUT_MS = 10_000;
-export const WEEKLY_PICKS_MAX_PER_INTEREST = 3;
+export const WEEKLY_PICKS_MAX_PER_INTEREST = 12;
 
 export type WeeklyPicksResponseState = "fresh" | "cached" | "empty" | "maintenance" | "unavailable";
 
@@ -29,6 +29,7 @@ export type WeeklyPicksFeaturedMedia = {
 
 export type WeeklyPicksPick = {
   order: number;
+  fetchedAt?: number;
   reason: string | null;
   source: WeeklyPicksSource;
   featuredMedia?: WeeklyPicksFeaturedMedia;
@@ -56,7 +57,11 @@ export type WeeklyPicksClientResult =
   | { status: "invalid_response" };
 
 export type WeeklyPicksClient = {
-  getWeeklyPicks(interestIds: readonly InterestId[]): Promise<WeeklyPicksClientResult>;
+  /** Local preparation only; public responses remain unchanged. */
+  isPreparing?(profileId: string): boolean;
+  policyVersion?: string;
+  compatiblePolicyVersions?: readonly string[];
+  getWeeklyPicks(interestIds: readonly InterestId[], profileId?: string): Promise<WeeklyPicksClientResult>;
 };
 
 type WeeklyPicksClientOptions = {
@@ -125,7 +130,7 @@ export function createWeeklyPicksClient(options: WeeklyPicksClientOptions): Week
 }
 
 /** Validates the complete public function contract without coercing partial data. */
-export function isWeeklyPicksResponse(value: unknown): value is WeeklyPicksResponse {
+export function isWeeklyPicksResponse(value: unknown, allowedInterests: ReadonlySet<string> = canonicalInterestIds): value is WeeklyPicksResponse {
   if (!isRecordWithOnlyKeys(value, ["state", "interests", "message"])) return false;
   if (typeof value.state !== "string" || !responseStates.has(value.state as WeeklyPicksResponseState)) return false;
   if (!Array.isArray(value.interests) || (value.message !== undefined && typeof value.message !== "string")) return false;
@@ -134,7 +139,7 @@ export function isWeeklyPicksResponse(value: unknown): value is WeeklyPicksRespo
 
   const seenInterestIds = new Set<string>();
   for (const interest of value.interests) {
-    if (!isWeeklyPicksInterest(interest) || seenInterestIds.has(interest.interestId)) return false;
+    if (!isWeeklyPicksInterest(interest, allowedInterests) || seenInterestIds.has(interest.interestId)) return false;
     seenInterestIds.add(interest.interestId);
   }
   return true;
@@ -152,9 +157,9 @@ function buildWeeklyPicksEndpoint(value: string | undefined): string | null {
   }
 }
 
-function isWeeklyPicksInterest(value: unknown): value is WeeklyPicksInterest {
+function isWeeklyPicksInterest(value: unknown, allowedInterests: ReadonlySet<string>): value is WeeklyPicksInterest {
   if (!isRecordWithOnlyKeys(value, ["interestId", "publicationPeriod", "picks"])) return false;
-  if (typeof value.interestId !== "string" || !canonicalInterestIds.has(value.interestId)) return false;
+  if (typeof value.interestId !== "string" || !allowedInterests.has(value.interestId)) return false;
   if (!isPublicationPeriod(value.publicationPeriod)) return false;
   if (!Array.isArray(value.picks) || value.picks.length === 0 || value.picks.length > WEEKLY_PICKS_MAX_PER_INTEREST) return false;
   const orders = new Set<number>();
@@ -175,7 +180,8 @@ function isPublicationPeriod(value: unknown): value is { start: string; end: str
 }
 
 function isWeeklyPicksPick(value: unknown): value is WeeklyPicksPick {
-  if (!isRecordWithOnlyKeys(value, ["order", "reason", "source", "featuredMedia"])) return false;
+  if (!isRecordWithOnlyKeys(value, ["order", "reason", "source", "featuredMedia", "fetchedAt"])) return false;
+  if (value.fetchedAt !== undefined && (typeof value.fetchedAt !== "number" || !Number.isFinite(value.fetchedAt) || value.fetchedAt < 0)) return false;
   if (!Number.isInteger(value.order) || (value.order as number) < 1 || (value.order as number) > WEEKLY_PICKS_MAX_PER_INTEREST) return false;
   if (value.reason !== null && typeof value.reason !== "string") return false;
   if (!isWeeklyPicksSource(value.source)) return false;

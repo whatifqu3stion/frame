@@ -55,12 +55,12 @@ export const GOOGLE_CONFIG = {
   }),
 } as const;
 
-/** Stable Owner identity used until profile switching is deliberately introduced. */
+/** Default Owner identity; active profile selection is handled by AppProvider. */
 export const ACTIVE_PROFILE_ID = DEFAULT_OWNER_PROFILE_ID;
 
 export const FEATURE_FLAGS = {
   ...FOUNDATION_CAPABILITIES,
-  knownYouTubeUrlResolution: APP_ENV === "development" && Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && (process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)),
+  knownYouTubeUrlResolution: true,
   googleConnection: FOUNDATION_CAPABILITIES.googleSelectiveImport && Boolean(GOOGLE_CONFIG.iosClientId || GOOGLE_CONFIG.androidClientId || GOOGLE_CONFIG.webClientId),
 } as const;
 
@@ -76,5 +76,5 @@ export function isGooglePlatformConfigured(): boolean {
   return Boolean(GOOGLE_CONFIG.webClientId);
 }
 
-/** Minimal scopes used while selective YouTube subscription import is unavailable. */
-export const GOOGLE_SCOPES = ["openid", "email", "profile"];
+/** Read-only access supports an explicit, user-selected subscription import. */
+export const GOOGLE_SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/youtube.readonly"];

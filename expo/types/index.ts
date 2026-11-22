@@ -39,6 +39,7 @@ export type WeeklyPickFeaturedMediaPreview = {
 
 /** Public source recommendation data exposed by the Weekly Picks boundary. */
 export type WeeklyPickSourceSuggestion = {
+  fetchedAt?: number;
   provider: ProviderId;
   providerSourceId: string;
   handle: string | null;
@@ -125,13 +126,26 @@ export type FollowedChannel = Channel & {
   source: ChannelProvenance;
 };
 
+/** One deliberately requested page of the signed-in user's subscriptions. */
+export type GoogleSubscriptionPage = {
+  items: FollowedChannel[];
+  nextPageToken: string | null;
+  totalResults: number | null;
+};
+
+export type GoogleImportResult = AddChannelResult & {
+  importedCount: number;
+};
+
 export type ResumePosition = {
+  sessionId?: string | null;
   videoId: string;
   timestampSeconds: number;
   updatedAt: number;
 };
 
 export type VideoQueue = {
+  targetMinutes?: number | null;
   id: string;
   name: string;
   orderedVideoIds: string[];
@@ -142,6 +156,7 @@ export type VideoQueue = {
 
 /** One unfinished, profile-local Session composition. */
 export type SessionDraft = {
+  targetMinutes?: number | null;
   name: string;
   orderedVideoIds: string[];
   updatedAt: number;
@@ -157,8 +172,10 @@ export type ThemeMode = "warm" | "ink";
 export type AccentMode = "blue" | "green" | "rose";
 
 export type UserPreferences = {
+  todayVideoCount: number;
   theme: ThemeMode;
   accent: AccentMode;
+  houseLights: boolean;
   hasCompletedOnboarding: boolean;
   googleEmail: string | null;
   googleConnectedAt: number | null;
@@ -189,3 +206,4 @@ export type AddChannelResult = {
   ok: boolean;
   message: string;
 };
+
