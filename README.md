@@ -1,45 +1,43 @@
 # Frame
 
-**Great videos, minus the rabbit holes.**
+Great videos, minus the rabbit holes. Frame gives you a small daily selection from YouTube creators you follow. Save a film for later, put a few videos in order for the evening, or stop when your session ends.
 
-Frame is a React Native app for a quieter YouTube experience: discover worthwhile creators, keep a small daily selection, and watch on your own terms.
+**[Download Android build 7](https://github.com/whatifqu3stion/frame/releases/download/v1.0.0-android.7/Frame-1.0.0-7.apk)** · [Release notes and checksum](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.7) · [Release source](https://github.com/whatifqu3stion/frame/tree/v1.0.0-android.7)
 
-The product question is simple: can a video app make it easier to find something worthwhile, keep it for later, and reach a satisfying stopping point?
+## On your phone and TV
 
-## Earlier prototype
+The same APK supports Android phones and TVs running Google TV or Android TV, including compatible Hisense models. On a phone, Frame uses bottom navigation. On TV, the main sections sit in a left rail. A visible outline follows the remote as you move between controls.
 
-<img src="docs/previews/onboarding.jpg" alt="Frame onboarding with Technology selected and a bounded interest-selection workflow" width="320" />
+| Android phone | Android TV |
+| :--- | :--- |
+| <img src="docs/previews/android-phone-interests.jpg" alt="Phone onboarding with three interests selected and a See my discoveries button." width="232"> | <img src="docs/previews/android-tv-settings.jpg" alt="Widescreen Settings view with remote focus on Settings in the left navigation rail." width="620"> |
+| Choosing interests during setup | Adjusting viewing preferences with the remote |
 
-An October 2 onboarding prototype, rendered from Expo web at a phone-sized viewport. The current onboarding has since been rebuilt with animated research screens, an app demonstration, interest selection and a personalized video reveal. This image documents the earlier design, not the current release.
+## What you can do
 
-[Capture notes](docs/previews/README.md) record the source revision and demo conditions.
+- **Today** brings recent videos from followed creators into a daily selection. Set a limit of 1–12 videos, with at most two per source. The next edition starts at 4 a.m. local time.
+- **Sources** lets you follow a creator by channel link or @handle. Choose which creators appear in Today. Optional Gemini discovery suggests new sources based on your interests.
+- **Saved and Sessions** keep individual videos and ordered playlists. Start a session when you’re ready, choose when to advance, and finish at the end of your list.
+- **The viewing room** offers optional house-light dimming and tracks viewing time. On TV, use the directional pad to reach playback controls, video details and saving actions.
+- **Profiles** keep libraries and viewing preferences separate. An Owner can set viewing limits and review requests for Managed profiles.
 
-## The experience
+## Install and connect
 
-- **Today:** a bounded daily selection from followed sources.
-- **Sources:** creators you choose, with optional weekly suggestions.
-- **Saved:** a personal collection of videos to return to.
-- **Sessions:** an ordered viewing plan with an ending.
-- **Profiles:** separate collections and viewing boundaries, including Owner approval for Managed profiles.
-- **Viewing room:** a focused player with optional house-light transitions, viewing-time tracking and explicit next-video choices.
+1. Download the signed APK above. Install it on an Android 7.0 or later phone, or sideload it onto a compatible TV. To update an existing signed installation, install over it to keep your data.
+2. In setup or **Settings → YouTube & Gemini**, enter your YouTube Data API v3 key to load videos. Add a Gemini key if you want AI-assisted discovery. You can explore setup before adding either key.
+3. On TV, pair the **Google TV** phone app’s remote on the same Wi-Fi. Select a key field on the TV, paste on the phone keyboard, then choose **Verify & save**.
 
-Today is designed to stay stable during the day rather than refill as items are handled. The selection logic uses a 4 a.m. local reset, at most 12 videos, and at most two from each source.
+If your TV is already connected and authorized for Android debugging, install from the APK’s download directory:
 
-## Current status
+```sh
+adb -s TV_SERIAL install -r Frame-1.0.0-7.apk
+```
 
-**Updated November 21, 2026.** Android build 6 fixes the custom-interest onboarding crash, introduces a shorter setup with optional Why Frame screens and updates the launcher icon.
+Keys are stored in secure storage on each device and sent directly to Google for provider requests. Provider quotas and charges may apply. Set up the phone and TV separately. [Key setup and privacy](https://github.com/whatifqu3stion/frame/blob/v1.0.0-android.7/expo/docs/BYOK.md)
 
-[Download the signed build 6 APK](https://github.com/whatifqu3stion/frame/releases/download/v1.0.0-android.6/Frame-1.0.0-6.apk) and install it over build 5 to keep local data. The update was tested on an Android 14 emulator from the stuck onboarding screen through to a cold start on Today with both keys blank.
+## Development
 
-TypeScript and all 506 tests passed. Lint reported zero errors and one existing warning. See the [release handoff](expo/docs/RELEASE_CANDIDATE.md) for the exact source revision, checksum and remaining device checks.
-
-A source-level implementation or passing automated test does not establish that the native experience is ready to ship. Real-device visual, accessibility, motion, and playback checks remain part of the [acceptance plan](expo/docs/SMOKE_TEST.md).
-
-This branch is the full-access BYOK edition: no subscription tiers or paywalls. Owners configure their own YouTube and optional Gemini keys in onboarding or Settings → YouTube & Gemini. Native keys are stored on the device using SecureStore. Gemini discovery uses the owner's provider account and may incur charges. Google account sign-in/subscription import is retired; add creators by channel link or @handle. See [BYOK setup and security](expo/docs/BYOK.md).
-
-## Run locally
-
-Requires Node.js and Bun:
+The app uses React Native, Expo Router, TypeScript and SQLite. From the build 7 source checkout, install dependencies and start the local web preview:
 
 ```sh
 cd expo
@@ -47,25 +45,4 @@ bun install
 bun run start-web
 ```
 
-Use `/welcome-preview` to review onboarding in the local web app, `bun run start` for native development, and `bun run verify` for TypeScript, lint and tests. See the [app development guide](expo/README.md) for native builds and preview limitations.
-
-## Design decisions
-
-Frame uses a restrained visual language, recognizable creator imagery, clear actions, and explicit endings. Its [design specification](DESIGN.md) records the component system, terminology, accessibility considerations, and rationale.
-
-Profiles and viewing policy are separated from presentation. The daily-selection algorithm is also separate from its screen, making rules such as source limits and snoozed returns directly testable.
-
-## Explore the repository
-
-| Area | Start here |
-| --- | --- |
-| Mobile app and local development | [expo/README.md](expo/README.md) |
-| Visual language and product voice | [DESIGN.md](DESIGN.md) |
-| Daily-selection rules | [Today domain logic](expo/domain/today.ts) |
-| Environment separation | [Environment guide](expo/docs/ENVIRONMENTS.md) |
-| Native release checks | [Acceptance plan](expo/docs/SMOKE_TEST.md) |
-| Backend work | [backend/](backend), [functions/](functions), [supabase/](supabase) |
-
-**Stack:** React Native · Expo Router · TypeScript · SQLite · backend services.
-
-Development is assisted by Rork and AI tools. The checked-in rules, tests, design decisions, and remaining acceptance work describe the project more accurately than a claim of production readiness.
+Open `/welcome-preview` to explore onboarding. Use `bun run start` for native development and `bun run verify` for type checking, lint and tests. [Development guide](https://github.com/whatifqu3stion/frame/blob/v1.0.0-android.7/expo/README.md) · [Android build and signing](https://github.com/whatifqu3stion/frame/blob/v1.0.0-android.7/expo/docs/ANDROID_SIDELOAD.md)

@@ -3,7 +3,7 @@ import TabIconSurface from "@/components/motion/TabIconSurface";
 import TabBarGlass from "@/components/TabBarGlass";
 import PaperSurface from "@/components/PaperSurface";
 import { useNavigationLayout } from "@/hooks/useNavigationLayout";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { Bookmark, CalendarDays, Settings, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,7 +28,7 @@ export default function TabLayout() {
         tabBarShowLabel: true,
         tabBarPosition: sidebar ? "left" : "bottom",
         tabBarLabelPosition: sidebar ? "beside-icon" : "below-icon",
-        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, lineHeight: 16, color: sidebar ? color : palette.ink, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
+        tabBarLabel: ({ color, children }) => <Text style={{ fontFamily: fonts.sansSemibold, fontSize: Platform.isTV ? 19 : 12, lineHeight: Platform.isTV ? 25 : 16, color: sidebar ? color : palette.ink, textAlign: sidebar ? "left" : "center", marginStart: sidebar ? 12 : 0, flexShrink: 1 }}>{children}</Text>,
         tabBarItemStyle: { borderRadius: 14, marginHorizontal: 3, minHeight: sidebar ? 64 * fontScale : 48 },
         tabBarBackground: sidebar ? undefined : () => <TabBarGlass />,
         tabBarStyle: {

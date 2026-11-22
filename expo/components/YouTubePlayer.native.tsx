@@ -1,6 +1,6 @@
 import { parsePlayerBridgeMessage } from "@/domain/playerBridge";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from "react-native-webview/lib/WebViewTypes";
 import type {
@@ -249,7 +249,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(functi
       originWhitelist={[PLAYER_ORIGIN, "https://www.youtube.com", "https://www.youtube-nocookie.com", "about:blank"]}
       allowsFullscreenVideo
       allowsInlineMediaPlayback
-      mediaPlaybackRequiresUserAction
+      mediaPlaybackRequiresUserAction={!Platform.isTV}
       javaScriptEnabled
       domStorageEnabled
       scrollEnabled={false}

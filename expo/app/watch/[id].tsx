@@ -21,7 +21,7 @@ import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
-import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, RotateCcw } from "lucide-react-native";
+import { BookOpen, Bookmark, ChevronLeft, ChevronRight, ExternalLink, Pause, Play, RotateCcw } from "lucide-react-native";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, ActivityIndicator, Alert, AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View,  } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -240,6 +240,7 @@ function WatchScreen() {
   const removal = useSavedRemoval(id);
   const [startAt, setStartAt] = useState<number>(0);
   const [resumeReady, setResumeReady] = useState<boolean>(false);
+  const [tvDetailsOpen, setTvDetailsOpen] = useState(false);
   const [playbackState, setPlaybackState] = useState<YouTubePlaybackState>("unstarted");
   const [playerReady, setPlayerReady] = useState<boolean>(false);
   const [playerError, setPlayerError] = useState<YouTubePlayerError | null>(null);
@@ -781,11 +782,12 @@ function WatchScreen() {
         leaveFullscreen();
         return true;
       }
+      if (tvDetailsOpen) { setTvDetailsOpen(false); return true; }
       closePlayer();
       return true;
     });
     return () => subscription.remove();
-  }, [closePlayer, leaveFullscreen]);
+  }, [closePlayer, leaveFullscreen, tvDetailsOpen]);
 
   const isSaved = video ? savedVideos.some((candidate) => candidate.id === video.id) : false;
 
@@ -1039,7 +1041,7 @@ function WatchScreen() {
   }
 
   return (
-    <WatchPlayerLayout width={width} height={height} insets={insets} fullscreen={isFullscreen}
+    <WatchPlayerLayout width={width} height={height} insets={insets} fullscreen={isFullscreen} tvDetailsOpen={tvDetailsOpen}
       landscapeControls={<>
           <Pressable
             onPress={closePlayer}
@@ -1052,6 +1054,19 @@ function WatchScreen() {
           >
             <ChevronLeft color={palette.wall} size={23} />
           </Pressable>
+          {Platform.isTV && lifecycle.mount && playerReady && (
+            <Pressable accessibilityRole="button" accessibilityLabel={playbackState === "playing" ? "Pause video" : "Play video"}
+              style={[styles.landscapeClose, { marginTop: spacing.md }]}
+              onPress={() => playbackState === "playing" ? playerRef.current?.pause() : playerRef.current?.play()}>
+              {playbackState === "playing" ? <Pause size={23} color={palette.wall} /> : <Play size={23} color={palette.wall} />}
+            </Pressable>
+          )}
+          {Platform.isTV && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Video details" accessibilityState={{ expanded: tvDetailsOpen }}
+              style={[styles.landscapeClose, { marginTop: spacing.sm }]} onPress={() => setTvDetailsOpen(open => !open)}>
+              <BookOpen size={23} color={palette.wall} />
+            </Pressable>
+          )}
           {allowanceStatus && playbackRemaining(allowanceStatus) !== null ? <Text style={styles.landscapeAllowance}>{formatAllowanceRemaining(playbackRemaining(allowanceStatus) as number)}</Text> : null}
       </>}
       chrome={

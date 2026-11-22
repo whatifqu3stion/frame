@@ -109,8 +109,8 @@ function ThemedApp() {
   }, [isDark, isWatching, wall]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: wall }}>
-      <StatusBar style={isWatching || isDark ? "light" : "dark"} />
+    <View style={[{ flex: 1, backgroundColor: wall }, Platform.isTV && !isWatching && { paddingHorizontal: 32, paddingVertical: 18 }]}>
+      <StatusBar hidden={Platform.isTV} style={isWatching || isDark ? "light" : "dark"} />
       {pathname !== "/onboarding" && pathname !== "/welcome-preview" && <PreviewLibraryBar />}
       <View key={activeProfileId} style={{ flex: 1 }}><AppContent /></View>
       <ProgressRecoveryNotice profileId={activeProfileId} hidden={isWatching || profileSwitching} />

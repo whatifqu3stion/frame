@@ -1,4 +1,4 @@
-import { useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { expandedNavigationWidth } from "@/constants/layout";
 
@@ -6,7 +6,7 @@ import { expandedNavigationWidth } from "@/constants/layout";
 export function useNavigationLayout() {
   const { width, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const sidebar = width >= expandedNavigationWidth + 208 * Math.max(0, fontScale - 1);
+  const sidebar = Platform.isTV || width >= expandedNavigationWidth + 208 * Math.max(0, fontScale - 1);
   const bottomInset = Math.max(insets.bottom, 8);
   const bottomBarHeight = sidebar ? 0 : 64 + Math.max(0, fontScale - 1) * 48 + bottomInset;
   return { sidebar, fontScale, bottomInset, bottomBarHeight };

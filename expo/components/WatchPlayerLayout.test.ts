@@ -10,6 +10,7 @@ type LayoutProps = {
   width: number;
   height: number;
   fullscreen: boolean;
+  tvDetailsOpen?: boolean;
   insets: { top: number; right: number; bottom: number; left: number };
   children: Node;
   chrome: Node;
@@ -17,14 +18,14 @@ type LayoutProps = {
   details: Node;
 };
 
-function harness(platform = "android") {
+function harness(platform = "android", isTV = false) {
   const options: { navigationBarHidden: boolean }[] = [];
   const cleanups: (() => void)[] = [];
   const navigation = { setOptions: (value: { navigationBarHidden: boolean }) => options.push(value) };
   const modules: Record<string, unknown> = {
     react: { useLayoutEffect: (effect: () => (() => void) | void) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); } },
     "react/jsx-runtime": jsxRuntime,
-    "react-native": { Platform: { OS: platform }, View: "View", StyleSheet: { create: (styles: unknown) => styles } },
+    "react-native": { Platform: { OS: platform, isTV }, View: "View", StyleSheet: { create: (styles: unknown) => styles } },
     "expo-router": { useNavigation: () => navigation },
     "expo-status-bar": { StatusBar: "StatusBar" },
     "@/constants/theme": { spacing: { sm: 8 }, watchPalette: { stage: "#202021" } },
@@ -110,4 +111,23 @@ test("portrait restores chrome and system bars; iOS landscape retains safe contr
   expect(style(area).paddingLeft).toBe(112);
   expect(style(children(area)[1]).left).toBe(48);
   ios.dispose();
+});
+
+test("Android TV keeps remote controls beside a 16:9 picture until fullscreen", () => {
+  const layout = harness("android", true);
+  const size = { width: 960, height: 540, insets: { left: 0, top: 0, right: 0, bottom: 0 } };
+  const root = layout.render(size);
+  const [frame, rail] = children(children(root)[2]);
+  expect(style(rail).display).toBeUndefined();
+  expect(Number(style(rail).left)).toBeGreaterThan(0);
+  expect(Number(style(frame).width) / Number(style(frame).height)).toBeCloseTo(16 / 9);
+  const withDetails = layout.render({ ...size, tvDetailsOpen: true });
+  expect(Number(style(children(withDetails)[3]).width)).toBeGreaterThan(0);
+  const smallerFrame = children(children(withDetails)[2])[0];
+  expect(Number(style(smallerFrame).width)).toBeLessThan(Number(style(frame).width));
+  expect(smallerFrame.props.children).toBe(layout.player);
+  const fullscreen = layout.render({ ...size, fullscreen: true });
+  expect(style(children(children(fullscreen)[2])[1]).display).toBe("none");
+  expect(children(children(fullscreen)[2])[0].props.children).toBe(layout.player);
+  layout.dispose();
 });

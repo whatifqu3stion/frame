@@ -1,4 +1,4 @@
-# Frame mobile app
+# Frame for mobile and TV
 
 This folder contains Frame's React Native application. For the product overview and project status, start with the [root README](../README.md).
 
@@ -32,7 +32,7 @@ bun run verify
 
 This runs the configured typecheck, lint, and test commands. The [native acceptance plan](docs/SMOKE_TEST.md) remains a separate release requirement.
 
-Last verified November 20, 2026: **506 passing tests, 3960 assertions across 97 files**, passing TypeScript and zero lint errors (one existing generated-file warning). [The latest technical review](docs/TECHNICAL_CRITIQUE_2026-11-20.md) records the session-completion and timer-recovery fixes and their regression coverage.
+Last verified November 21, 2026: **507 passing tests, 3973 assertions across 97 files**, passing TypeScript and zero lint errors (one existing generated-file warning). [The latest technical review](docs/TECHNICAL_CRITIQUE_2026-11-20.md) records the session-completion and timer-recovery fixes and their regression coverage.
 
 Open `/welcome-preview` in the local web app to review onboarding. The current source uses four main steps: connections, the phone demonstration, interests (with optional specifics), and the final discovery reveal. “Why Frame?” on the demonstration screen opens the three research animations and the “Great videos” sequence, then returns to setup. Existing saved setup positions migrate into the shorter flow. Provider-backed results require working keys; a browser demonstration is not native acceptance evidence.
 
@@ -51,4 +51,10 @@ The app began with Rork tooling. This guide describes the actual project rather 
 
 Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.
 
-The signed **1.0.0 / build 6 APK** fixes the Android custom-interest crash and updates build 5 in place. Download it from the [GitHub prerelease](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.6). See the [release status](docs/RELEASE_CANDIDATE.md) for verification and device coverage.
+The signed **1.0.0 / build 7 APK** runs on Android phones and compatible TVs and updates build 6 in place. [Download the GitHub prerelease and verification files](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.7).
+
+### Hisense Google TV and Android TV
+
+Build 7 adds a TV launcher banner, a left navigation rail and remote focus indicators. Check **Settings → System → About** (or **Device Preferences → About**) on the TV for the Android TV OS version. The APK requires Android 7.0 or later.
+
+With an authorized TV connected to ADB, run `adb -s TV_SERIAL install -r artifacts/Frame-1.0.0-7.apk` from this directory. Open **Frame** from Apps. Use the arrow pad to move focus, OK to choose, and Back to return. Keys and interests belong to the local TV installation. You can skip key setup to explore the menus. Pair the Google TV phone remote on the same Wi-Fi, select a key field on the TV and paste from the phone keyboard.

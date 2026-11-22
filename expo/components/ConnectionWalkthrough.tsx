@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image, Linking, Pressable, StyleSheet, View } from "react-native";
+import { Image, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { ArrowUpRight, CheckCircle2, Circle, KeyRound } from "lucide-react-native";
 import SectionTabs from "@/components/SectionTabs";
 import { localKeyPreview } from "@/storage/providerKeyStore";
@@ -108,6 +108,12 @@ type Props = GuideProps & {
   onSave(provider: KeyProvider): void;
 };
 
+export function TvKeyEntryTip() {
+  const { type } = useFrameTheme();
+  if (Platform.OS !== "android" || !Platform.isTV) return null;
+  return <Text style={type.caption}>On the same Wi-Fi, pair your phone’s Google TV remote with this TV. Select the key field here, then paste the key on your phone.</Text>;
+}
+
 export default function ConnectionWalkthrough({ provider, saved, draft, busy, editable, feedback, onSave, onChange, ...guideProps }: Props) {
   const { palette, type } = useFrameTheme();
   const guide = guides[provider];
@@ -119,6 +125,7 @@ export default function ConnectionWalkthrough({ provider, saved, draft, busy, ed
       <TextField leading={<KeyRound size={17} color={palette.inkMuted} />} secureTextEntry value={draft} editable={editable && !busy}
         onChangeText={onChange} autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" importantForAutofill="no"
         maxLength={MAX_PROVIDER_KEY_LENGTH} accessibilityLabel={guide.name + " API key"} placeholder={saved ? "Paste a replacement key" : "Paste your API key"} testID={"key-input-" + provider} />
+      {editable && <TvKeyEntryTip />}
       {editable && <Text style={type.caption}>Your keys power this demo. {localKeyPreview ? "This tab holds them until you refresh." : "They’re stored on your device."} We never see them.</Text>}
     </View>
     {feedback?.provider === provider && <Text accessibilityLiveRegion="polite" testID={"key-feedback-" + provider} style={type.bodySoft}>{feedback.text}</Text>}

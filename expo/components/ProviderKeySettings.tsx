@@ -3,7 +3,7 @@ import InfoDisclosure from "@/components/InfoDisclosure";
 import { confirmUser } from "@/services/notifyUser";
 import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
-import ConnectionWalkthrough from "@/components/ConnectionWalkthrough";
+import ConnectionWalkthrough, { TvKeyEntryTip } from "@/components/ConnectionWalkthrough";
 import TextField from "@/components/TextField";
 import InlineHelp from "@/components/InlineHelp";
 import Heading from "@/components/Heading";
@@ -149,6 +149,7 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
           <Heading style={type.heading}>{status.data?.[provider] ? "Replace" : "Add"} {provider === "youtube" ? "YouTube" : "Gemini"} key</Heading>
           <Text style={type.bodySoft}>{status.data?.[provider] ? "Your current key stays in place until the new one verifies." : "Paste your key below. We’ll check it before saving."}</Text>
           <TextField value={draft} onChangeText={(value) => { setDraft(value); setMessage(null); }} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" importantForAutofill="no" maxLength={MAX_PROVIDER_KEY_LENGTH} editable={!busy} accessibilityLabel={`${provider} API key`} placeholder="Paste your API key" placeholderTextColor={palette.inkMuted} testID={`key-input-${provider}`}  />
+          <TvKeyEntryTip />
 
           <PrimaryAction depth={palette.primaryButtonDepth} disabled={busy || !storageReady || !draft.trim()} accessibilityState={{ disabled: busy || !storageReady || !draft.trim(), busy }} accessibilityRole="button" style={[buttonStyle, { alignItems: "center", borderRadius: radii.control, backgroundColor: palette.accentDeep, opacity: busy || !storageReady || !draft.trim() ? 0.5 : 1 }]} onPress={() => { void act(provider, "save"); }} testID={`key-save-${provider}`}><Text style={[type.label, { color: palette.onDark }]}>{busy ? "Checking…" : "Verify & save"}</Text></PrimaryAction>
           <Pressable disabled={busy} accessibilityRole="button" style={buttonStyle} onPress={() => { setDraft(""); setEditing(null); setMessage(null); }}><Text style={type.label}>Cancel</Text></Pressable>
