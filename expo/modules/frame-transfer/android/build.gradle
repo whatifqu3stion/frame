@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'studio.frame.transfer'
+version = '1.0.0'
+
+android {
+  namespace 'studio.frame.transfer'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}

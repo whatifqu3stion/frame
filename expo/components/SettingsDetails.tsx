@@ -3,8 +3,10 @@ import Text from "@/components/FrameText";
 import Heading from "@/components/Heading";
 import SettingsRow from "@/components/SettingsRow";
 import TodaySelectionSetting from "@/components/TodaySelectionSetting";
+import DiscoveryBriefEditor from "@/components/DiscoveryBriefEditor";
 import DiscoveryFocus from "@/components/DiscoveryFocus";
 import { HELP_TOPICS } from "@/constants/helpTopics";
+import ChannelListTransfer from "@/components/ChannelListTransfer";
 import SettingsGroup from "@/components/SettingsGroup";
 import CustomInterestInput from "@/components/CustomInterestInput";
 import ProviderKeySettings from "@/components/ProviderKeySettings";
@@ -25,7 +27,7 @@ import { accentOptions, createPalette, radii, spacing, type FramePalette, type F
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
 
-export default function SettingsDetails({ section }: { section: SettingsSection }) {
+export default function SettingsDetails({ section, onYouTubeConnected }: { section: SettingsSection; onYouTubeConnected?: () => void }) {
   const insets = useSafeAreaInsets();
   const feedback = useFeedback();
   const haptics = useFeedbackPreference();
@@ -80,11 +82,14 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
         <SettingsGroup label="Your topics">
           <SettingsRow grouped last title={interests.length ? "Edit topics" : "Choose topics"} summary={selectedTopics.join(", ") || "Pick from the list or add an interest of your own."} onPress={() => router.push("/settings/topics")} testID="edit-weekly-topics" />
         </SettingsGroup>
-        {interests.length > 0 && <DiscoveryFocus key={activeProfile?.id} overview />}
+        {(interests.length > 0 || activeProfile?.role === "owner") && <DiscoveryFocus key={activeProfile?.id} overview />}
       </View> : null}
       {section === "topics" && weeklyAvailable ? <Section hint="Open a category to select topics. Your changes save as you go.">
         <GroupedInterestChoices customLast customAction={<CustomInterestInput compact selectedIds={interests.map((interest) => interest.id)} onAdd={toggleInterest} />} headingLevel={3} collapsible selectedIds={interests.map((interest) => interest.id)} onToggle={(id) => { const done = feedback.capture(); void toggleInterest(id).then((changed) => done("selection", changed)).catch(() => notifyUser("Couldn’t save interests", "Try again in a moment.")); }} accessibilityLabel="Weekly source interests" testIDPrefix="interest" />
       </Section> : null}
+      {section === "brief" ? <Section>{activeProfile?.role === "owner"
+        ? <DiscoveryBriefEditor key={activeProfile.id} />
+        : <Text style={type.bodySoft}>The Owner can edit the brief for their weekly discovery searches.</Text>}</Section> : null}
       {section === "priorities" && weeklyAvailable ? <Section><DiscoveryFocus key={activeProfile?.id} /></Section> : null}
       {["interests", "topics", "priorities"].includes(section) && !weeklyAvailable ? <Section><Text style={type.bodySoft}>Managed profiles watch videos and sources approved by the Owner.</Text><SettingsRow title="View sources" onPress={() => router.push("/(tabs)/sources")} /></Section> : null}
 
@@ -122,15 +127,16 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
             }} />
         </View>
       </Section>
-      {Platform.OS !== "web" && <Section label="Touch feedback">
+      {Platform.OS !== "web" && !Platform.isTV && <Section label="Touch feedback">
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, minHeight: 48 }}>
           <View style={styles.flex}><Text style={type.body}>Haptic feedback</Text><Text style={styles.supporting}>For all profiles on this device.</Text></View>
           <Switch trackColor={{ false: palette.surfaceDim, true: palette.active }} thumbColor={palette.surfaceHigh} ios_backgroundColor={palette.surfaceDim} value={haptics.enabled} disabled={!haptics.ready || hapticsBusy} accessibilityLabel="Haptic feedback" onValueChange={(value) => { setHapticsBusy(true); void setFeedbackEnabled(value).then(() => { if (value) feedback.selection(); }).catch(() => notifyUser("Couldn’t save touch feedback", "Try again in a moment.")).finally(() => setHapticsBusy(false)); }} />
         </View>
       </Section>}</> : null}
 
-      {section === "keys" ? <Section><ProviderKeySettings /></Section> : null}
+      {section === "keys" ? <Section><ProviderKeySettings onYouTubeConnected={onYouTubeConnected} /></Section> : null}
 
+      {section === "channels" && activeProfile && <Section><ChannelListTransfer key={activeProfile.id} profile={activeProfile} /></Section>}
       {section === "privacy" ? <>
         <Section label="Your library" hint={Platform.OS === "web" ? "This browser preview keeps your library in memory. Refreshing the page resets it." : "Your library, settings and viewing history stay on this device. Frame has no cloud backup."}>
           <Text style={type.bodySoft}>Saved videos are links. Playback requires an internet connection.</Text>
@@ -150,8 +156,8 @@ export default function SettingsDetails({ section }: { section: SettingsSection 
         <SettingsGroup label="Using Frame">{HELP_TOPICS.filter(topic => weeklyAvailable || topic.id !== "interests").map(topic =>
           <SettingsRow key={topic.id} grouped last={topic.id === "requests"} title={topic.title} onPress={() => router.push({ pathname: "/help/[topic]", params: { topic: topic.id } })} />
         )}</SettingsGroup>
-        <SettingsGroup label="Setup & troubleshooting">
-          <SettingsRow grouped title="Revisit setup" onPress={() => router.push("/welcome-preview")} testID="preview-welcome" />
+        <SettingsGroup label={Platform.isTV ? "Troubleshooting" : "Setup & troubleshooting"}>
+          {!Platform.isTV && <SettingsRow grouped title="Revisit setup" onPress={() => router.push("/welcome-preview")} testID="preview-welcome" />}
           <SettingsRow grouped last title="Device diagnostics" onPress={() => router.push("/diagnostics")} testID="open-diagnostics" />
         </SettingsGroup>
       </View>

@@ -9,7 +9,7 @@ import { isPointerActivation } from "@/components/motion/pointerActivation";
 import { Check, ShieldCheck, Trash2, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { confirmUser } from "@/services/notifyUser";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import MediaImage from "@/components/MediaImage";
 import { isMetadataCurrent } from "@/domain/metadataRetention";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
@@ -58,7 +58,7 @@ export default function ManagedContentAccessEditor({ value, busy, expanded, onEx
             <Text style={type.bodySoft}>{request.kind === "video" ? "Approve this video for this profile. Its viewing limits still apply." : "Approve videos from this source for this profile. Its viewing limits still apply."}</Text>
             {isMetadataCurrent(request.fetchedAt, Date.now()) ? <>{request.thumbnailUrl ? <MediaImage source={{ uri: request.thumbnailUrl }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media }} contentFit="cover" cachePolicy="none" /> : null}{request.kind === "source" && request.description ? <Text style={type.bodySoft}>{request.description}</Text> : null}{request.durationSeconds > 0 ? <Text style={type.bodySoft}>{Math.ceil(request.durationSeconds / 60)} minutes</Text> : null}</> : <Text style={type.bodySoft}>These details are out of date. Refresh them here before approving. You can still preview the original or decline the request.</Text>}
             <View style={styles.decisions}>
-              <Pressable accessibilityRole="button" onPress={event => onReview(request, "approve", isPointerActivation(event))} disabled={busy || !isMetadataCurrent(request.fetchedAt, Date.now())} accessibilityState={{ disabled: busy || !isMetadataCurrent(request.fetchedAt, Date.now()), busy }} style={[styles.decision, (busy || !isMetadataCurrent(request.fetchedAt, Date.now())) && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.kind}: ${request.title}`}><Check size={16} color={palette.success} /><Text style={styles.decisionText}>{request.kind === "video" ? "Approve video" : "Approve source"}</Text></Pressable>
+              <Pressable nativeID={Platform.isTV ? "frame-tv-cue-approve" : undefined} accessibilityRole="button" onPress={event => onReview(request, "approve", isPointerActivation(event))} disabled={busy || !isMetadataCurrent(request.fetchedAt, Date.now())} accessibilityState={{ disabled: busy || !isMetadataCurrent(request.fetchedAt, Date.now()), busy }} style={[styles.decision, (busy || !isMetadataCurrent(request.fetchedAt, Date.now())) && { opacity: 0.5 }]} accessibilityLabel={`Approve ${request.kind}: ${request.title}`}><Check size={16} color={palette.success} /><Text style={styles.decisionText}>{request.kind === "video" ? "Approve video" : "Approve source"}</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={event => onReview(request, "deny", isPointerActivation(event))} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.decision, busy && { opacity: 0.5 }]} accessibilityLabel={`Decline request for ${request.title}`}><X size={16} color={palette.danger} /><Text style={styles.decisionText}>Decline request</Text></Pressable>
             </View>
             <Text style={type.caption}>A declined request can be made again.</Text>

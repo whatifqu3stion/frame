@@ -15,7 +15,7 @@ import ChoiceOption from "./ChoiceOption";
 import TextField from "./TextField";
 
 export default function DiscoveryFocus({ overview = false }: { overview?: boolean }) {
-  const { activeProfileId, interests } = useApp();
+  const { activeProfile, activeProfileId, interests } = useApp();
   const { type } = useFrameTheme();
   const client = useQueryClient();
   const feedback = useFeedback();
@@ -41,7 +41,8 @@ export default function DiscoveryFocus({ overview = false }: { overview?: boolea
   };
   const names = interests.filter((topic) => selected.includes(topic.id)).map((topic) => topic.name);
   if (overview) return <SettingsGroup label="Next weekly search">
-    <SettingsRow grouped last title="Priority topics" summary={focus.isPending ? "Loading…" : focus.isError ? "Priorities unavailable" : names.join(", ") || "Rotate through my topics"} onPress={() => router.push("/settings/priorities")} />
+    {interests.length > 0 && <SettingsRow grouped last={activeProfile?.role !== "owner"} title="Priority topics" summary={focus.isPending ? "Loading…" : focus.isError ? "Priorities unavailable" : names.join(", ") || "Rotate through my topics"} onPress={() => router.push("/settings/priorities")} />}
+    {activeProfile?.role === "owner" && <SettingsRow grouped last title="Discovery brief" summary="Describe the kind of videos you want Frame to find." onPress={() => router.push("/settings/brief")} />}
   </SettingsGroup>;
   if (focus.isError) return <SettingsRow title="Try again" summary="Your priority topics couldn’t load." busy={focus.isFetching} onPress={() => { void focus.refetch(); }} navigation={false} />;
   if (!interests.length) return <SettingsRow title="Choose topics" summary="Add an interest before choosing a priority." onPress={() => router.push("/settings/topics")} />;

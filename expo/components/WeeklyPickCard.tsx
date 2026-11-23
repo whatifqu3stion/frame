@@ -7,7 +7,7 @@ import Image from "@/components/MediaImage";
 import { Check, Plus, Play } from "lucide-react-native";
 import PersonalizedPreview from "@/components/motion/PersonalizedPreview";
 import { useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { formatDuration } from "@/services/youtube";
@@ -49,14 +49,14 @@ export default function WeeklyPickCard({ suggestion, interestName, reveal = fals
           </View> : null;
 
   return (
-    <View style={styles.card} testID={`weekly-pick-${suggestion.providerSourceId}`}>
+    <View style={[styles.card, Platform.isTV && styles.tvRow]} testID={`weekly-pick-${suggestion.providerSourceId}`}>
       {media?.thumbnailUrl ? (
-        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={styles.previewAction}>
+        <Pressable onPress={onPreview} accessibilityRole="button" accessibilityLabel={`Preview ${media.title}`} style={Platform.isTV ? styles.tvArtwork : styles.previewAction}>
           {firstArrival ? <PersonalizedPreview animate onPresented={() => onRevealed?.()} image={artwork}>{null}</PersonalizedPreview> : <MediaMount>{artwork}</MediaMount>}
         </Pressable>
       ) : null}
 
-      <View style={styles.content}>
+      <View style={Platform.isTV ? styles.tvCopy : styles.content}>
         <View style={styles.sourceHeader}>
           <View style={styles.avatar}>
             {suggestion.thumbnailUrl ? (
@@ -117,6 +117,9 @@ export default function WeeklyPickCard({ suggestion, interestName, reveal = fals
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
+    tvRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.lg },
+    tvArtwork: { flex: 1.1 },
+    tvCopy: { flex: 1 },
     card: { paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border },
     previewAction: { width: "100%" },
     preview: { aspectRatio: 16 / 9, borderRadius: radii.media, overflow: "hidden", backgroundColor: palette.surfaceDeep },

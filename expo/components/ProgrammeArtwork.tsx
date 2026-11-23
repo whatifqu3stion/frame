@@ -1,4 +1,5 @@
-import { Animated, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { Animated, Platform, StyleSheet, View } from "react-native";
 import MediaImage from "@/components/MediaImage";
 import { usePresentationProgress } from "@/hooks/usePresentationProgress";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -8,8 +9,16 @@ import { radii, spacing } from "@/constants/theme";
 type Artwork = { id: string; thumbnailUrl?: string };
 /** The programme's own artwork, in queue order. Missing metadata never invents a cover. */
 export default function ProgrammeArtwork({ videos, enter = false, editorial = false }: { videos: (Artwork | undefined)[]; enter?: boolean; editorial?: boolean }) {
-  const artwork = videos.filter((video): video is Artwork => Boolean(video?.thumbnailUrl)).slice(0, 3);
+  const [failed, setFailed] = useState<string[]>([]);
+  const artwork = videos.filter((video): video is Artwork => Boolean(video?.thumbnailUrl && !failed.includes(video.thumbnailUrl))).slice(0, 3);
   if (!artwork.length) return null;
+  if (Platform.isTV && editorial) {
+    const lead = artwork[0];
+    return <View style={styles.tvPrint} accessible={false} importantForAccessibility="no-hide-descendants">
+      <ProgrammePrint key={lead.id} video={lead} index={0} enter={enter} editorial
+        onError={() => setFailed(previous => [...previous, lead.thumbnailUrl!])} />
+    </View>;
+  }
   if (editorial) return <View style={styles.collage} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     <View style={artwork.length > 1 ? styles.lead : styles.solo}>
       <ProgrammePrint video={artwork[0]} index={0} enter={enter} editorial />
@@ -22,14 +31,15 @@ export default function ProgrammeArtwork({ videos, enter = false, editorial = fa
     {artwork.map((video, index) => <ProgrammePrint key={video.id} video={video} index={index} enter={enter} />)}
   </View>;
 }
-function ProgrammePrint({ video, index, enter, editorial = false }: { video: Artwork; index: number; enter: boolean; editorial?: boolean }) {
+function ProgrammePrint({ video, index, enter, editorial = false, onError }: { onError?(): void; video: Artwork; index: number; enter: boolean; editorial?: boolean }) {
   const { palette } = useFrameTheme();
   const { progress, reduced } = usePresentationProgress({ enter, duration: motion.artwork + index * 70 });
   return <Animated.View style={[styles.print, editorial && styles.editorialPrint, { backgroundColor: editorial ? palette.onProgramme : palette.mount, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }), transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [reduced || editorial ? 1 : 0.96, 1] }) }, { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [editorial && !reduced ? (index + 1) * 4 : 0, 0] }) }] }]}>
-    <MediaImage source={{ uri: video.thumbnailUrl! }} style={styles.image} contentFit="cover" cachePolicy="none" />
+    <MediaImage onError={onError} source={{ uri: video.thumbnailUrl! }} style={styles.image} contentFit="cover" cachePolicy="none" />
   </Animated.View>;
 }
 const styles = StyleSheet.create({
+  tvPrint: { flex: 1, flexDirection: "row", alignItems: "center" },
   strip: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg, overflow: "hidden" },
   print: { flex: 1, maxWidth: 184, padding: 3, borderRadius: radii.mount },
   image: { width: "100%", aspectRatio: 16 / 9, borderRadius: radii.media },

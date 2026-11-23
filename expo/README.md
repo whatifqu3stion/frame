@@ -51,10 +51,10 @@ The app began with Rork tooling. This guide describes the actual project rather 
 
 Use `npm run android:apk` with your Android SDK configured to produce a standalone release APK. See [Android sideload and signing guide](docs/ANDROID_SIDELOAD.md) for installation, preserving the signing key, and device checks.
 
-The signed **1.0.0 / build 7 APK** runs on Android phones and compatible TVs and updates build 6 in place. [Download the GitHub prerelease and verification files](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.7).
+The signed **1.0.0 / build 8 APK** runs on Android phones and compatible TVs and updates build 7 in place. [Download the GitHub prerelease and verification files](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.8).
 
 ### Hisense Google TV and Android TV
 
 Build 7 adds a TV launcher banner, a left navigation rail and remote focus indicators. Check **Settings → System → About** (or **Device Preferences → About**) on the TV for the Android TV OS version. The APK requires Android 7.0 or later.
 
-With an authorized TV connected to ADB, run `adb -s TV_SERIAL install -r artifacts/Frame-1.0.0-7.apk` from this directory. Open **Frame** from Apps. Use the arrow pad to move focus, OK to choose, and Back to return. Keys and interests belong to the local TV installation. You can skip key setup to explore the menus. Pair the Google TV phone remote on the same Wi-Fi, select a key field on the TV and paste from the phone keyboard.
+With an authorized TV connected to ADB, run `adb -s TV_SERIAL install -r artifacts/Frame-1.0.0-8.apk` from this directory. Open **Frame** from Apps. Use the arrow pad to move focus, OK to choose, and Back to return. Keys stay on each device. Use **Settings → Transfer profile** to merge channels and interests and choose discovery wording from another device. You can skip key setup to explore the menus. Pair the Google TV phone remote on the same Wi-Fi, select a key field on the TV and paste from the phone keyboard.

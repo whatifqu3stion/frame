@@ -1,3 +1,4 @@
+import { tvYouTubeSetup } from "@/constants/navigation";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, ArrowRight, Link2 } from "lucide-react-native";
 import { useState } from "react";
@@ -38,9 +39,9 @@ export default function AddSourceScreen() {
       </Pressable>
       <View style={styles.introduction}>
         <Heading level={1} style={type.title}>Find a source</Heading>
-        <Text style={type.bodySoft}>{webHandoff && !PREVIEW_LIBRARY_ENABLED ? "To find and follow YouTube channels, connect YouTube in Frame on your iPhone or Android device." : needsKey && !PREVIEW_LIBRARY_ENABLED ? "Connect YouTube to find channels by name or link." : "Preview a channel before you follow it."}</Text>
+        <Text style={type.bodySoft}>{webHandoff && !PREVIEW_LIBRARY_ENABLED ? "To find and follow YouTube channels, connect YouTube in Frame on your iPhone or Android device." : needsKey && !PREVIEW_LIBRARY_ENABLED ? (Platform.isTV && activeProfile.role !== "owner" ? "Ask the Owner to connect YouTube on this TV. Then you can find channels here." : "Connect YouTube to find channels by name or link.") : "Preview a channel before you follow it."}</Text>
       </View>
-      {searchAvailable ? <ChannelSearch /> : needsKey && activeProfile.role === "owner" ? <Pressable accessibilityRole="button" style={styles.alternative} onPress={() => router.push({ pathname: "/settings/[section]", params: { section: "keys" } })}><Text style={[type.label, { color: palette.active }]}>Set up YouTube</Text></Pressable> : null}
+      {searchAvailable ? <ChannelSearch /> : needsKey && activeProfile.role === "owner" ? <Pressable accessibilityRole="button" style={[styles.alternative, Platform.isTV && { alignSelf: "flex-start", backgroundColor: palette.accentDeep, borderRadius: 12, paddingHorizontal: spacing.lg }]} onPress={() => router.push(Platform.isTV ? tvYouTubeSetup() : "/settings/keys")}><Text style={[type.label, { color: Platform.isTV ? palette.onDark : palette.active }]}>Connect YouTube</Text></Pressable> : null}
       <View style={[styles.alternatives, { borderColor: palette.borderSoft }]}>
         {!webHandoff && !needsKey && <Pressable onPress={() => setPasteOpen(true)} accessibilityRole="button" style={styles.alternative}>
           <Link2 size={18} color={palette.active} />

@@ -1,3 +1,4 @@
+import { useProviderKeyStatus } from "@/hooks/useProviderKeyStatus";
 import { progressRecovery } from "@/services/progressRecoveryInstance";
 import PrimaryAction from "@/components/PrimaryAction";
 import Text from "@/components/FrameText";
@@ -29,7 +30,7 @@ import VideoChapters from "@/components/VideoChapters";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import WatchPlayerLayout from "@/components/WatchPlayerLayout";
 import type { YouTubePlaybackState, YouTubePlayerError, YouTubePlayerHandle } from "@/components/YouTubePlayer.types";
-import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
+import { FRAME_PLAYBACK_ROUTE, tvYouTubeSetup } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { darkPalette, palette, radii, spacing, type, watchPalette } from "@/constants/theme";
 import { expireVideo } from "@/domain/metadataRetention";
@@ -235,6 +236,9 @@ function WatchScreen() {
   const [runtimeDurationRejected, setRuntimeDurationRejected] = useState(false);
   useEffect(() => { setRuntimeDurationRejected(false); runtimeRejectedRef.current = false; }, [id, activeProfileId]);
   const longFormAllowed = durationPolicy === "allowed" && !runtimeDurationRejected;
+  const checkConnection = Platform.isTV && durationPolicy === "unverified" && !runtimeDurationRejected && metadataQuery.data?.status === "unauthorized";
+  const keyStatus = useProviderKeyStatus(checkConnection);
+  const needsYouTube = checkConnection && keyStatus.data?.available && !keyStatus.data.youtube;
   const durationMessage = runtimeDurationRejected || durationPolicy === "short" ? SHORT_FORM_MESSAGE : metadataQuery.data?.status !== "success" && metadataQuery.data?.message ? metadataQuery.data.message : UNVERIFIED_DURATION_MESSAGE;
 
   const removal = useSavedRemoval(id);
@@ -903,9 +907,10 @@ function WatchScreen() {
       {!longFormAllowed ? (
         <View style={styles.stateSurface} accessibilityLiveRegion="polite">
           <Text style={styles.endEyebrow}>Long-form only</Text>
-          <Text style={styles.endTitle}>{metadataQuery.isFetching ? "Checking video length…" : "Four minutes or longer."}</Text>
-          <Text style={styles.allowanceBody}>{durationMessage}</Text>
-          {durationPolicy === "unverified" && !runtimeDurationRejected ? <Pressable disabled={metadataQuery.isFetching} accessibilityRole="button" style={styles.darkOutlineButton} onPress={() => { void metadataQuery.refetch(); }}><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Checking…" : "Verify video details"}</Text></Pressable> : null}
+          <Text style={styles.endTitle}>{metadataQuery.isFetching ? "Checking video length…" : needsYouTube ? "Connect YouTube to watch." : "Four minutes or longer."}</Text>
+          <Text style={styles.allowanceBody}>{needsYouTube ? (activeProfile?.role === "owner" ? "Add your YouTube key so Frame can check this video’s length." : "Ask the Owner to connect YouTube on this TV so Frame can check this video’s length.") : durationMessage}</Text>
+          {needsYouTube && activeProfile?.role === "owner" ? <Pressable accessibilityRole="button" style={styles.darkOutlineButton} onPress={() => router.push(tvYouTubeSetup())}><Text style={styles.darkButtonText}>Connect YouTube</Text></Pressable> : null}
+          {!needsYouTube && durationPolicy === "unverified" && !runtimeDurationRejected ? <Pressable disabled={metadataQuery.isFetching} accessibilityRole="button" style={styles.darkOutlineButton} onPress={() => { void metadataQuery.refetch(); }}><Text style={styles.darkButtonText}>{metadataQuery.isFetching ? "Checking…" : "Verify video details"}</Text></Pressable> : null}
           <PrimaryAction depth={darkPalette.primaryButtonDepth} onPress={goToSaved} style={styles.skipButton} accessibilityRole="button"><Text style={styles.skipButtonText}>Return to Saved</Text></PrimaryAction>
         </View>
       ) : contentBlocked ? (

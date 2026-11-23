@@ -75,11 +75,13 @@ test("custom interest selections and generated editions are isolated and cleared
   const storage = new MemoryStorage();
   const topic = "custom:Japanese%20joinery";
   await writeProfileStorage(storage, "interests", "owner", JSON.stringify([topic]));
+  await writeProfileStorage(storage, "discoveryBrief", "owner", "Process over gear");
   await writeProfileStorage(storage, "generatedPicks", "owner", "owner-edition");
   await writeProfileStorage(storage, "generatedPicks", "other", "other-edition");
   expect(await readProfileStorage(storage, "interests", "other")).toBeNull();
   expect(await readProfileStorage(storage, "interests", "owner")).toContain(topic);
   await clearProfileStorage(storage, "owner");
+  expect(await readProfileStorage(storage, "discoveryBrief", "owner")).toBeNull();
   expect(await readProfileStorage(storage, "generatedPicks", "owner")).toBeNull();
   expect(await readProfileStorage(storage, "generatedPicks", "other")).toBe("other-edition");
 });

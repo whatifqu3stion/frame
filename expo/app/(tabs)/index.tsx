@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, CloudOff, RotateCcw, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { AccessibilityInfo, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { notifyUser } from "@/services/notifyUser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
@@ -27,7 +27,7 @@ import TodaySessionModal from "@/components/TodaySessionModal";
 import TodayVideoCard from "@/components/TodayVideoCard";
 import VideoCard from "@/components/VideoCard";
 import { VideoFeedSkeleton } from "@/components/VideoSkeleton";
-import { FRAME_PLAYBACK_ROUTE } from "@/constants/navigation";
+import { FRAME_PLAYBACK_ROUTE, tvYouTubeSetup } from "@/constants/navigation";
 import { PRODUCT_LIMITS } from "@/constants/productConfig";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -293,11 +293,13 @@ export default function TodayScreen() {
     showOpenSources = managedOverview.approvedVideos.length > 0;
     content = showOpenSources
       ? managedOverview.approvedVideos.map((video) => <VideoCard key={video.id} video={video} variant="full" />)
-      : <StateBlock title="No selected videos yet" body="Request a video for the Owner to review." action="Request a video" onPress={() => router.push({ pathname: "/(tabs)/sources", params: { requestVideo: "1" } })} styles={styles} success />;
+      : <StateBlock title="No selected videos yet" body="Request a video for the Owner to review." action="Request a video" onPress={() => router.push({ pathname: "/(tabs)/sources", params: { requestVideo: "1" } })} styles={styles} success={!Platform.isTV} />;
   } else if (sourceIds.length === 0) {
-    showOpenSources = !showWeeklyPicks;
+    const connectFirst = Platform.isTV && activeProfile?.role === "owner" && keyStatus.data?.available && !keyStatus.data.youtube;
+    showOpenSources = !showWeeklyPicks && !connectFirst;
     content = showWeeklyPicks ? null : activeProfile?.role === "managed"
       ? <StateBlock title="No approved sources yet" body="Ask the Owner to add or approve a source in Settings → Profiles & viewing limits." styles={styles} />
+      : connectFirst ? <StateBlock title="Connect YouTube" body="Add your key, then choose the first channel for Today." action="Connect YouTube" onPress={() => router.push(tvYouTubeSetup("find-source"))} styles={styles} />
       : <CollectionPrompt caption="Follow a source to see videos here." />;
   } else if (sourceIds.filter((id) => (rules.get(id)?.mutedUntil ?? 0) <= Date.now()).length > PRODUCT_LIMITS.sourceFeedMaxSources) {
     showOpenSources = false;
@@ -309,11 +311,15 @@ export default function TodayScreen() {
   else if (snapshot && snapshot.items.length > 0) content = <StateBlock gallery animateCompletion={handledHere.current} onPresented={() => { handledHere.current = false; }} title="You’re caught up" body="You’ve reached the end of today’s selection." styles={styles} success />;
   else if (todayQuery.data?.state === "empty" && !snapshot) content = <StateBlock title="No matching videos yet" body={todayQuery.data.message ?? "Check again for recent uploads from your sources."} action={isRefreshing ? "Checking…" : "Check again"} onPress={() => { void refresh(); }} busy={isRefreshing} styles={styles} />;
   else if (snapshot) content = <StateBlock gallery title="No new videos today" body="There are no videos from your sources that match your settings today. You can open a source directly below." styles={styles} success />;
-  else if (activeProfile?.role === "owner" && keyStatus.isSuccess && keyStatus.data.available && !keyStatus.data.youtube) content = <StateBlock title="Connect YouTube" body="Use your YouTube key to load videos from the creators you follow." action="Connect YouTube" onPress={() => router.push("/settings/keys")} styles={styles} />;
+  else if (activeProfile?.role === "owner" && keyStatus.isSuccess && keyStatus.data.available && !keyStatus.data.youtube) content = <StateBlock title="Connect YouTube" body="Use your YouTube key to load videos from the creators you follow." action="Connect YouTube" onPress={() => router.push(Platform.isTV ? tvYouTubeSetup() : "/settings/keys")} styles={styles} />;
   else if (todayQuery.data?.state === "network_error") content = <StateBlock title="Today is offline" body="Connect to the internet, then try again." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
   else if (todayQuery.data?.state === "no_cache") content = <StateBlock title="Your videos aren’t ready yet" body="Frame is still preparing videos from your sources. Try again later, or open a source directly below." action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
   else content = <StateBlock title="Today couldn’t load" body={todayQuery.data?.message ?? "Check your connection and try again. Your sources and saved videos are still here."} action="Retry" onPress={() => { void refresh(); }} styles={styles} />;
 
+  const supportingContent = <>
+          {currentSession ? <Pressable onPress={() => router.push({ pathname: "/session/[id]", params: { id: currentSession.id } })} style={styles.boundaryRow} accessibilityRole="button"><View style={{ flex: 1 }}><Text style={styles.secondaryText}>Open {currentSession.name}</Text><Text style={styles.statusText}>Video {sessionPosition(currentSession) + 1} of {currentSession.orderedVideoIds.length}</Text></View><ArrowRight size={18} color={palette.active} /></Pressable> : null}
+          {ready && !profileSwitching ? <ViewingTime key={activeProfileId} profileId={activeProfileId} /> : null}
+  </>;
   return (
     <View style={styles.screen}>
       <ScrollView ref={scroll} contentContainerStyle={{ paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, bottomBarHeight) + Math.max(120, notice ? noticeHeight + spacing.lg : 0) }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => { void refresh(); }} tintColor={palette.accent} />}>
@@ -333,9 +339,9 @@ export default function TodayScreen() {
             }} /></View>}
           {!initialLoading && activeProfile?.role !== "managed" && visible.length > 0 ? <Text style={styles.statusText} accessibilityLiveRegion="polite">{visible.length} {visible.length === 1 ? "video" : "videos"} in today’s selection</Text> : null}
           {status ? <View style={styles.status} accessibilityLiveRegion="polite">{isRefreshing ? <RotateCcw size={14} color={palette.inkMuted} /> : isOffline ? <CloudOff size={14} color={palette.inkMuted} /> : null}<Text style={styles.statusText}>{status}</Text></View> : null}
-          {currentSession ? <Pressable onPress={() => router.push({ pathname: "/session/[id]", params: { id: currentSession.id } })} style={styles.boundaryRow} accessibilityRole="button"><View style={{ flex: 1 }}><Text style={styles.secondaryText}>Open {currentSession.name}</Text><Text style={styles.statusText}>Video {sessionPosition(currentSession) + 1} of {currentSession.orderedVideoIds.length}</Text></View><ArrowRight size={18} color={palette.active} /></Pressable> : null}
-          {ready && !profileSwitching ? <ViewingTime key={activeProfileId} profileId={activeProfileId} /> : null}
+          {!Platform.isTV && supportingContent}
           <View style={[styles.content, compactHeader && { marginTop: spacing.md }]}>{content}</View>
+          {Platform.isTV && supportingContent}
           {showOpenSources ? <CollectionAction label="Open Sources" onPress={() => router.push("/(tabs)/sources")} /> : null}
         </View>
       </ScrollView>

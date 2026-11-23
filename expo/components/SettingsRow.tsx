@@ -2,19 +2,25 @@ import Text from "@/components/FrameText";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { fonts, spacing } from "@/constants/theme";
 import { ChevronRight } from "lucide-react-native";
-import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Platform, ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
 /** A consistent, wrapping row for settings destinations and labelled actions. */
-export default function SettingsRow({ title, summary, value, grouped = false, last = false, onPress, busy = false, disabled = false, destructive = false, navigation = true, leading, testID, accessibilityRole = "button" }: {
+export default function SettingsRow({ title, summary, value, grouped = false, last = false, onPress, busy = false, disabled = false, destructive = false, navigation = true, leading, testID, preferTVFocus, onTVFocus, accessibilityRole = "button" }: {
   title: string; summary?: string; value?: string; grouped?: boolean; last?: boolean; onPress(): void; busy?: boolean; disabled?: boolean;
   destructive?: boolean; navigation?: boolean; leading?: ReactNode; testID?: string;
+  preferTVFocus?: boolean; onTVFocus?(): void;
   accessibilityRole?: "button" | "link";
 }) {
   const { palette, type } = useFrameTheme();
+  const [laidOut, setLaidOut] = useState(false);
   const unavailable = busy || disabled;
   const color = destructive ? palette.danger : palette.ink;
-  return <Pressable onPress={onPress} disabled={unavailable} accessibilityRole={accessibilityRole} accessibilityState={{ busy, disabled: unavailable }} testID={testID} style={({ pressed }) => [styles.row, grouped && styles.groupRow, last && styles.lastRow, { borderBottomColor: palette.borderSoft, backgroundColor: pressed ? palette.activeSoft : "transparent" }, disabled && styles.disabled]}>
+  return <Pressable
+    onLayout={Platform.isTV && preferTVFocus && !laidOut ? () => setLaidOut(true) : undefined}
+    hasTVPreferredFocus={Platform.isTV && preferTVFocus && laidOut && !unavailable}
+    onFocus={Platform.isTV && preferTVFocus ? onTVFocus : undefined}
+    android_disableSound={Platform.isTV} onPress={onPress} disabled={unavailable} accessibilityRole={accessibilityRole} accessibilityState={{ busy, disabled: unavailable }} testID={testID} style={({ pressed }) => [styles.row, grouped && styles.groupRow, last && styles.lastRow, { borderBottomColor: palette.borderSoft, backgroundColor: pressed ? palette.activeSoft : "transparent" }, disabled && styles.disabled]}>
     {leading ? <View accessible={false}>{leading}</View> : null}
     <View style={styles.copy}>
       <Text style={[type.body, styles.title, { color }]}>{title}</Text>

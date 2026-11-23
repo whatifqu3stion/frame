@@ -1,7 +1,7 @@
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import MotionView from "@/components/motion/MotionView";
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { radii, spacing, softShadow } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -17,6 +17,7 @@ type Props = {
   contentKey?: string;
   nestedRoute?: boolean;
   animateContent?: boolean;
+  tvForm?: boolean;
 };
 
 // React Native Web mounts modal portals beside the application root. Keep that
@@ -25,12 +26,24 @@ let openWebSheets = 0;
 let rootWasInert = false;
 
 /** A bounded, scrollable sheet that stays reachable with the keyboard and larger text. */
-export default function Sheet({ visible, label, returnFocusTarget, onClose, onBack, children, contentStyle, contentKey, nestedRoute = false, animateContent = true }: Props) {
+export default function Sheet({ visible, label, returnFocusTarget, onClose, onBack, children, contentStyle, contentKey, nestedRoute = false, animateContent = true, tvForm = false }: Props) {
   const insets = useSafeAreaInsets();
   const { palette } = useFrameTheme();
   const reduceMotion = useReducedMotion();
   const returnFocus = useRef<HTMLElement | null>(null);
   const scroll = useRef<ScrollView>(null);
+  const androidPhone = Platform.OS === "android" && !Platform.isTV;
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // A closed Android IME can report its last screen position in the hide event.
+  // Only reserve that space while the keyboard is actually open.
+  useEffect(() => {
+    if (!visible || !androidPhone) return;
+    setKeyboardOpen(Keyboard.isVisible());
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardOpen(false));
+    return () => { show.remove(); hide.remove(); };
+  }, [androidPhone, visible]);
+  const keyboardBehavior = androidPhone ? (keyboardOpen ? "padding" : undefined) : Platform.OS === "ios" ? "padding" : "height";
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [contentKey, visible]);
 
   useLayoutEffect(() => {
@@ -53,11 +66,11 @@ export default function Sheet({ visible, label, returnFocusTarget, onClose, onBa
 
   return (
     <Modal onDismiss={Platform.OS === "web" ? restoreWebFocus : undefined} {...(Platform.OS === "web" && label ? { "aria-label": label } : {})} visible={visible} transparent statusBarTranslucent animationType={reduceMotion || nestedRoute ? "none" : "fade"} onRequestClose={onBack ?? onClose}>
-      <KeyboardAvoidingView style={[styles.screen, { backgroundColor: palette.overlay }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView style={[styles.screen, { backgroundColor: palette.overlay }]} behavior={keyboardBehavior}>
         <ScrollView
           ref={scroll}
           style={styles.screen}
-          contentContainerStyle={[styles.container, { paddingLeft: Math.max(insets.left, spacing.md), paddingRight: Math.max(insets.right, spacing.md), paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, spacing.md) }]}
+          contentContainerStyle={[styles.container, Platform.isTV && tvForm && styles.tvForm, { paddingLeft: Math.max(insets.left, spacing.md), paddingRight: Math.max(insets.right, spacing.md), paddingTop: insets.top + spacing.md, paddingBottom: Math.max(insets.bottom, spacing.md) }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator
@@ -75,5 +88,6 @@ export default function Sheet({ visible, label, returnFocusTarget, onClose, onBa
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   container: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: spacing.md },
+  tvForm: { justifyContent: "flex-start" },
   card: { ...softShadow, width: "100%", maxWidth: 560, alignSelf: "center", padding: spacing.lg, borderRadius: radii.card },
 });

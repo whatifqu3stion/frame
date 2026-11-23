@@ -1,20 +1,22 @@
-import { notifyUser } from "@/services/notifyUser";
-import PrimaryAction from "@/components/PrimaryAction";
-import Text from "@/components/FrameText";
-import TextField from "@/components/TextField";
 import { LockKeyhole, X } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, type TextInput, View } from "react-native";
 import FullResetModal from "@/components/FullResetModal";
+import Text from "@/components/FrameText";
+import Heading from "@/components/Heading";
+import PrimaryAction from "@/components/PrimaryAction";
 import Sheet from "@/components/Sheet";
-import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
+import TextField from "@/components/TextField";
+import { fonts, radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { useApp } from "@/providers/AppProvider";
+import { notifyUser } from "@/services/notifyUser";
 
 /** Reusable Owner authorization prompt shared by profile switching and protected controls. */
 export default function OwnerPinModal() {
   const {
     ownerPinPromptOpen,
+    ownerPinInstruction,
     ownerPinPromptError,
     ownerPinCooldownUntil,
     submitOwnerAuthorization,
@@ -22,24 +24,48 @@ export default function OwnerPinModal() {
   } = useApp();
   const { palette, type } = useFrameTheme();
   const styles = useMemo(() => createStyles(palette, type), [palette, type]);
-  const [pin, setPin] = useState<string>("");
-  const [busy, setBusy] = useState<boolean>(false);
-  const [now, setNow] = useState<number>(Date.now());
-  const [fullResetOpen, setFullResetOpen] = useState<boolean>(false);
-
-
+  const input = useRef<TextInput>(null);
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(Date.now);
+  const [fullResetOpen, setFullResetOpen] = useState(false);
   const remainingSeconds = Math.max(0, Math.ceil((ownerPinCooldownUntil - now) / 1000));
+  const heading = ownerPinInstruction ? "Verify your new PIN" : "Owner access";
+  const lockedOut = remainingSeconds > 0;
+  const submitDisabled = pin.length < 4 || busy || lockedOut;
 
   useEffect(() => {
     if (!ownerPinPromptOpen) {
       setPin("");
       setBusy(false);
-      return;
     }
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
   }, [ownerPinPromptOpen]);
+
+  useEffect(() => {
+    if (!ownerPinPromptOpen) return;
+    setNow(Date.now());
+    if (ownerPinCooldownUntil <= Date.now()) return;
+    const timer = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= ownerPinCooldownUntil) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [ownerPinPromptOpen, ownerPinCooldownUntil]);
+
+  // The provider supplies the attempt count. The countdown below owns the
+  // changing time so an expired "wait 30 seconds" instruction cannot linger.
+  const cooldownEnded = !lockedOut && ownerPinPromptError?.startsWith("Too many attempts.");
+  let error = ownerPinPromptError;
+  if (lockedOut) error = "Too many attempts.";
+  if (cooldownEnded) error = "You can try again now.";
+  useEffect(() => {
+    if (Platform.OS === "ios" && ownerPinPromptOpen && error) AccessibilityInfo.announceForAccessibility(error);
+  }, [error, ownerPinPromptOpen]);
+
+  useEffect(() => {
+    if (ownerPinPromptOpen && ownerPinPromptError && !lockedOut && !cooldownEnded && !busy) input.current?.focus();
+  }, [busy, cooldownEnded, lockedOut, ownerPinPromptError, ownerPinPromptOpen]);
 
   const close = (): void => {
     if (busy) return;
@@ -48,81 +74,106 @@ export default function OwnerPinModal() {
   };
 
   const submit = async (): Promise<void> => {
-    if (pin.length < 4 || busy || remainingSeconds > 0) return;
+    if (submitDisabled) return;
     setBusy(true);
-    try { await submitOwnerAuthorization(pin); setPin(""); }
-    catch { notifyUser("Couldn’t verify PIN", "Try again. Protected controls remain locked."); }
-    finally { setBusy(false); }
+    try {
+      await submitOwnerAuthorization(pin);
+      setPin("");
+    } catch {
+      notifyUser("Couldn’t verify PIN", "Try again. Protected controls remain locked.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <>
-    <Sheet label="Owner access" visible={ownerPinPromptOpen} onClose={close}>
-          <View style={styles.headerRow}>
-            <View style={styles.icon}><LockKeyhole size={20} color={palette.active} /></View>
-            <Pressable disabled={busy} onPress={close} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cancel PIN entry">
-              <X size={18} color={palette.inkMuted} />
-            </Pressable>
-          </View>
-          <Text accessibilityRole="header" style={styles.heading}>Owner access</Text>
-          <Text style={styles.body}>Enter the Owner PIN to continue. It protects settings in Frame only.</Text>
-          <TextField
-            value={pin}
-            onChangeText={(value) => setPin(value.replace(/\D/g, "").slice(0, 6))}
-            containerStyle={{ marginTop: spacing.lg }} style={[styles.input, pin.length > 0 && { letterSpacing: 4 }]}
-            placeholder="4–6 digit PIN"
-            placeholderTextColor={palette.inkMuted}
-            keyboardType="number-pad"
-            editable={!busy}
-            secureTextEntry
-            autoFocus
-            maxLength={6}
-            textContentType="password"
-            accessibilityLabel="Owner PIN"
-            testID="owner-pin-input"
-            onSubmitEditing={() => { void submit(); }}
-          />
-          {ownerPinPromptError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{ownerPinPromptError}</Text> : null}
-          {remainingSeconds > 0 ? <Text style={styles.cooldown}>Try again in {remainingSeconds} seconds.</Text> : null}
-          <PrimaryAction depth={palette.primaryButtonDepth}
-            onPress={() => { void submit(); }}
-            disabled={pin.length < 4 || busy || remainingSeconds > 0}
-            style={({ pressed }) => [styles.button, (pin.length < 4 || remainingSeconds > 0) && styles.disabled, pressed && styles.pressed]}
+      <Sheet label={heading} visible={ownerPinPromptOpen} onClose={close} tvForm>
+        <View style={styles.headerRow}>
+          <LockKeyhole size={21} color={palette.active} />
+          <Heading style={styles.heading}>{heading}</Heading>
+          <Pressable
+            disabled={busy}
+            onPress={close}
+            style={styles.closeButton}
             accessibilityRole="button"
-            accessibilityState={{ busy, disabled: pin.length < 4 || busy || remainingSeconds > 0 }}
-            testID="owner-pin-submit"
+            accessibilityLabel="Cancel PIN entry"
           >
-            {busy ? <ActivityIndicator color={palette.onDark} /> : <Text style={styles.buttonText}>Continue</Text>}
-          </PrimaryAction>
-          <Pressable disabled={busy} onPress={() => { setPin(""); cancelOwnerAuthorization(); setFullResetOpen(true); }} style={styles.forgot} accessibilityRole="button">
-            <Text style={styles.forgotText}>Forgot PIN?</Text>
+            <X size={19} color={palette.inkMuted} />
           </Pressable>
-          <Text style={styles.recovery}>Forgotten PINs can only be reset by erasing Frame’s data on this device.</Text>
-    </Sheet>
-    <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} forgottenPinRecovery />
+        </View>
+        <Text style={styles.body}>{ownerPinInstruction ?? "Enter your 4–6 digit Owner PIN to continue."}</Text>
+        <TextField
+          ref={input}
+          value={pin}
+          onChangeText={(value) => setPin(value.replace(/\D/g, "").slice(0, 6))}
+          containerStyle={styles.field}
+          style={[styles.input, pin.length > 0 && styles.masked]}
+          placeholder="Owner PIN"
+          keyboardType="number-pad"
+          disableFullscreenUI
+          returnKeyType="done"
+          submitBehavior="submit"
+          editable={!busy && !lockedOut}
+          secureTextEntry
+          autoFocus
+          maxLength={6}
+          autoComplete="off"
+          textContentType="none"
+          importantForAutofill="no"
+          autoCorrect={false}
+          accessibilityLabel="Owner PIN, 4 to 6 digits"
+          testID="owner-pin-input"
+          onSubmitEditing={() => { void submit(); }}
+        />
+        {error && <Text accessibilityLiveRegion="polite" style={cooldownEnded ? styles.cooldown : styles.error}>{error}</Text>}
+        {lockedOut && <Text style={styles.cooldown}>Try again in {remainingSeconds} {remainingSeconds === 1 ? "second" : "seconds"}.</Text>}
+        <PrimaryAction
+          depth={palette.primaryButtonDepth}
+          onPress={() => { void submit(); }}
+          disabled={submitDisabled}
+          style={({ pressed }) => [styles.button, submitDisabled && styles.disabled, pressed && styles.pressed]}
+          accessibilityLabel="Verify PIN"
+          accessibilityState={{ busy, disabled: submitDisabled }}
+          testID="owner-pin-submit"
+        >
+          {busy ? <ActivityIndicator color={palette.onAccent} /> : <Text style={styles.buttonText}>Verify PIN</Text>}
+        </PrimaryAction>
+        <Pressable
+          disabled={busy}
+          onPress={() => { close(); setFullResetOpen(true); }}
+          style={styles.forgot}
+          accessibilityRole="button"
+        >
+          {Platform.isTV ? <View nativeID="frame-tv-focus-surface" style={styles.recoveryPill}>
+            <Text style={styles.forgotText}>Forgot PIN?</Text>
+          </View> : <Text style={styles.forgotText}>Forgot PIN?</Text>}
+        </Pressable>
+        <Text style={styles.recovery}>Recovering a forgotten PIN requires erasing Frame’s data on this device.</Text>
+      </Sheet>
+      <FullResetModal visible={fullResetOpen} onClose={() => setFullResetOpen(false)} forgottenPinRecovery />
     </>
   );
 }
 
 function createStyles(palette: FramePalette, type: FrameType) {
   return StyleSheet.create({
-    backdrop: { flex: 1, justifyContent: "flex-end", padding: spacing.md, backgroundColor: palette.overlay },
-    card: { ...softShadow, padding: spacing.lg, paddingTop: spacing.md, borderRadius: radii.large, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceHigh },
-    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: palette.activeSoft },
-    closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-    heading: { ...type.heading, fontSize: 25, marginTop: spacing.md },
-    body: { ...type.bodySoft, marginTop: spacing.sm },
+    headerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+    closeButton: { width: 48, height: 48, borderRadius: radii.control, alignItems: "center", justifyContent: "center" },
+    heading: { ...type.heading, flex: 1, fontSize: Platform.isTV ? 28 : 25 },
+    body: { ...type.bodySoft, marginTop: spacing.xs },
+    field: { marginTop: spacing.md },
     input: { textAlign: "center" },
-    error: { ...type.label, marginTop: spacing.md, color: palette.danger },
+    masked: { letterSpacing: 4 },
+    error: { ...type.label, marginTop: spacing.sm, color: palette.danger },
     cooldown: { ...type.bodySoft, marginTop: spacing.xs, color: palette.inkMuted },
-    button: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accentDeep },
-    buttonText: { color: palette.onDark, fontFamily: fonts.sansSemibold, fontSize: 15 },
+    button: { minHeight: 52, alignItems: "center", justifyContent: "center", marginTop: spacing.md, borderRadius: radii.control, backgroundColor: palette.accent },
+    buttonText: { color: palette.onAccent, fontFamily: fonts.sansSemibold, fontSize: Platform.isTV ? 18 : 15 },
     disabled: { opacity: 0.45 },
     pressed: { opacity: 0.78 },
-    forgot: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: spacing.xs },
+    forgot: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: spacing.xs, borderRadius: radii.control },
+    recoveryPill: { minHeight: 38, paddingHorizontal: 18, justifyContent: "center", borderRadius: 19 },
     forgotText: { ...type.label, color: palette.accent },
-    recovery: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", fontSize: 12 },
+    recovery: { ...type.bodySoft, color: palette.inkMuted, textAlign: "center", fontSize: Platform.isTV ? 16 : 13 },
   });
 }
-

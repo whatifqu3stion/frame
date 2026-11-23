@@ -20,7 +20,7 @@ import Image from "@/components/MediaImage";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import InterestChoices from "@/components/InterestChoices";
 import { resolutionVideoToVideo } from "@/services/youtube";
@@ -246,10 +246,12 @@ export default function SourcesScreen() {
           ) : (
             <View style={styles.section}>
               {lastFollow ? <MotionView enter changeKey={lastFollow.id} style={{ marginBottom: spacing.lg }}><Text style={type.bodySoft} accessibilityLiveRegion="polite">{lastFollow.message}</Text><Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: "center" }} onPress={() => router.push({ pathname: "/channel/[id]", params: { id: lastFollow.id } })}><Text style={[type.label, { color: palette.active }]}>Browse source now</Text></Pressable></MotionView> : null}
+              <View style={Platform.isTV && styles.weeklyHeader}>
               {activeProfile?.role === "owner" && !showInterestEditor && interests.length > 0
                 ? <WeeklyPicksInfo anchor={<Text style={type.caption}>Weekly picks</Text>} />
                 : <View style={styles.weeklyHeader}><Text style={type.caption}>Weekly picks</Text></View>}
-              {!showInterestEditor ? <Pressable style={styles.settingsButton} accessibilityRole="button" onPress={() => setEditingInterests(true)}><Text style={styles.settingsButtonText}>Edit interests</Text><ArrowRight size={17} color={palette.active} /></Pressable> : null}
+              {!showInterestEditor ? <Pressable style={Platform.isTV ? styles.tvEdit : styles.settingsButton} accessibilityRole="button" onPress={() => setEditingInterests(true)}><Text style={styles.settingsButtonText}>Edit interests</Text><ArrowRight size={17} color={palette.active} /></Pressable> : null}
+              </View>
               {!showInterestEditor && interests.length > 0 ? <GenerateWeeklyPicks onPresentationStage={setSearchStage} onPrepared={(hasPicks) => { arrivingEdition.current = hasPicks; }} hasEdition={Boolean(discoverQuery.data && ["success", "cached_success"].includes(discoverQuery.data.status) && (!discoverQuery.data.reason || discoverQuery.data.reason === "empty"))} /> : null}
               {showInterestEditor ? (
                 <View>
@@ -343,6 +345,7 @@ function createStyles(palette: FramePalette, type: FrameType) {
     avatar: { width: 52, height: 52, overflow: "hidden", borderRadius: radii.control, backgroundColor: palette.surfaceDeep },
     avatarImage: { width: "100%", height: "100%" },
     sourceName: { ...type.heading, fontSize: 17, lineHeight: 22 },
+    tvEdit: { flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: spacing.md, gap: spacing.sm },
     weeklyHeader: { minHeight: 44, flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, alignItems: "center", justifyContent: "space-between" },
     limitLabel: { ...type.caption, color: palette.active, fontSize: 12 },
     weeklyList: { gap: spacing.xl },

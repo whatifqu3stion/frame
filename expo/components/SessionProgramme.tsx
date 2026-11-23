@@ -6,7 +6,7 @@ import ProgrammeGrain from "@/components/ProgrammeGrain";
 import { useQuery } from "@tanstack/react-query";
 import { Timer } from "lucide-react-native";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { radii, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 import { expireVideo } from "@/domain/metadataRetention";
@@ -39,20 +39,7 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
   const artwork = session.orderedVideoIds
     .map((id) => videos.get(id)).filter((video): video is Video => Boolean(video?.thumbnailUrl)).slice(0, 3);
   const upcoming = session.orderedVideoIds[position];
-  return <View style={styles.root}>
-    <ProgrammeGrain />
-    <Pressable {...cover.events} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Open ${session.name}. ${next}.`}
-      accessibilityHint="View the full session lineup" style={[styles.cover, cover.ring]}>
-      {({ pressed }) => <>
-      {artwork.length > 0 && <View style={[styles.mount, !cover.reduced && controlTransition, (cover.highlighted || pressed) && { opacity: 0.9 }]}>
-        <ProgrammeArtwork videos={artwork} editorial />
-      </View>}
-      <View style={styles.caption}>
-        <Text style={[styles.title, (cover.highlighted || pressed) && { textDecorationLine: "underline" }]}>{session.name}</Text>
-        <Text style={styles.summary}>{count} {count === 1 ? "video" : "videos"} · {length}</Text>
-      </View>
-      </>}
-    </Pressable>
+  const playback = (
     <View style={styles.body}>
       <View style={styles.upNext}>
         <Text style={styles.status}>{next}</Text>
@@ -69,6 +56,26 @@ export default function SessionProgramme({ profileId, session, savedVideos, onOp
         </View> : null}
       </View>}
     </View>
+  );
+  return <View style={[styles.root, Platform.isTV && { flexDirection: "row", gap: spacing.md, alignItems: "center" }]}>
+    <ProgrammeGrain />
+    {Platform.isTV && <ProgrammeArtwork videos={artwork} editorial />}
+    <View style={Platform.isTV && { flex: 1 }}>
+    <Pressable {...cover.events} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Open ${session.name}. ${next}.`}
+      accessibilityHint="View the full session lineup" style={[styles.cover, cover.ring]}>
+      {({ pressed }) => <>
+      {!Platform.isTV && artwork.length > 0 && <View style={[styles.mount, !cover.reduced && controlTransition, (cover.highlighted || pressed) && { opacity: 0.9 }]}>
+        <ProgrammeArtwork videos={artwork} editorial />
+      </View>}
+      <View style={styles.caption}>
+        <Text style={[styles.title, (cover.highlighted || pressed) && { textDecorationLine: "underline" }]}>{session.name}</Text>
+        <Text style={styles.summary}>{count} {count === 1 ? "video" : "videos"} · {length}</Text>
+      </View>
+      </>}
+    </Pressable>
+    {playback}
+    </View>
+
   </View>;
 }
 

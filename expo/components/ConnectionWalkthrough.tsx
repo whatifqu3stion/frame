@@ -111,7 +111,7 @@ type Props = GuideProps & {
 export function TvKeyEntryTip() {
   const { type } = useFrameTheme();
   if (Platform.OS !== "android" || !Platform.isTV) return null;
-  return <Text style={type.caption}>On the same Wi-Fi, pair your phone’s Google TV remote with this TV. Select the key field here, then paste the key on your phone.</Text>;
+  return <Text style={type.bodySoft}>On the same Wi-Fi, pair your phone’s Google TV remote with this TV. Select the key field here, then paste the key on your phone.</Text>;
 }
 
 export default function ConnectionWalkthrough({ provider, saved, draft, busy, editable, feedback, onSave, onChange, ...guideProps }: Props) {

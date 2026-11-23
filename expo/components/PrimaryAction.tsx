@@ -1,4 +1,4 @@
-import { Pressable, type PressableProps, type ViewStyle } from "react-native";
+import { Platform, Pressable, type PressableProps, type ViewStyle } from "react-native";
 
 import ProgrammeGrain from "@/components/ProgrammeGrain";
 
@@ -7,9 +7,10 @@ type Props = PressableProps & { textured?: boolean; keepAppearance?: boolean; de
 /** The edge belongs to an available primary action and settles during the press. */
 export default function PrimaryAction({ depth, textured, keepAppearance, children, style, disabled, accessibilityState, ...props }: Props) {
   const showFinish = keepAppearance || (!disabled && !accessibilityState?.disabled && !accessibilityState?.busy);
-  return <Pressable
+  return <Pressable android_disableSound={Platform.isTV}
     accessibilityRole="button"
     {...props}
+    focusable={Platform.isTV && disabled ? false : props.focusable}
     disabled={disabled}
     accessibilityState={accessibilityState}
     style={(state) => [

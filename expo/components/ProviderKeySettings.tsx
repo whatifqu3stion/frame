@@ -13,7 +13,7 @@ import { useProviderKeyStatus } from "@/hooks/useProviderKeyStatus";
 import { providerKeyState, unavailableKeyStorageMessage } from "@/domain/providerKeyStatus";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, AppState, Linking, Platform, Pressable, View } from "react-native";
 import { radii, spacing } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -33,8 +33,8 @@ const setupGuideLinks = {
   gemini: "https://ai.google.dev/gemini-api/docs/api-key",
 };
 
-type Props = { onBusyChange?(busy: boolean): void; onboarding?: boolean; selectedProvider?: KeyProvider; youtubeGuide?: "credentials"; onYouTubeGuideChange?(step: "credentials" | undefined): void };
-export default function ProviderKeySettings({ onBusyChange, onboarding = false, selectedProvider = "youtube", youtubeGuide, onYouTubeGuideChange }: Props = {}) {
+type Props = { onYouTubeConnected?: () => void; onBusyChange?(busy: boolean): void; onboarding?: boolean; selectedProvider?: KeyProvider; youtubeGuide?: "credentials"; onYouTubeGuideChange?(step: "credentials" | undefined): void };
+export default function ProviderKeySettings({ onYouTubeConnected, onBusyChange, onboarding = false, selectedProvider = "youtube", youtubeGuide, onYouTubeGuideChange }: Props = {}) {
   const { palette, type } = useFrameTheme();
   const { activeProfile, activeProfileId, authorizeProtectedAction } = useApp();
   const focused = useIsFocused();
@@ -68,7 +68,7 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
     return () => { alive.current = false; operation.current?.abort(); listener.remove(); };
   }, [focused, activeProfileId]);
 
-  const act = async (provider: KeyProvider, action: "edit" | "save" | "remove") => {
+  const act = useCallback(async (provider: KeyProvider, action: "edit" | "save" | "remove") => {
     if (operation.current || activeProfile?.role !== "owner" || !storageReady) return;
     const key = action === "save" ? (onboarding ? inputKeys[provider] : draft).trim() : "";
     if (action === "save" && !isProviderKey(provider, key)) {
@@ -99,7 +99,8 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
         : provider === "gemini" ? saved + " Generation is checked when you request picks." : saved });
       if (action === "save") acknowledge("commit");
       // Retry failed metadata reads with the new credential. No AI generation occurs on a read.
-      await queryClient.invalidateQueries({ predicate: (query) => ["provider-key-status", "today", "cached-channel", "weekly-picks", "onboarding-picks"].includes(String(query.queryKey[0])) });
+      await queryClient.invalidateQueries({ predicate: (query) => ["provider-key-status", "today", "cached-channel", "video", "weekly-picks", "onboarding-picks"].includes(String(query.queryKey[0])) });
+      if (provider === "youtube" && action === "save" && current()) onYouTubeConnected?.();
     } catch (error) {
       if (current()) setMessage({ provider, text:
         onboarding && action === "save" && provider === "youtube" && error instanceof ProviderError && error.kind === "access"
@@ -109,7 +110,13 @@ export default function ProviderKeySettings({ onBusyChange, onboarding = false, 
       if (operation.current === controller) operation.current = null;
       if (current()) setBusy(false);
     }
-  };
+  }, [activeProfile?.role, activeProfileId, authorizeProtectedAction, draft, feedback, inputKeys, onboarding, onYouTubeConnected, queryClient, storageReady]);
+  const openedForProfile = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onYouTubeConnected || !focused || !storageReady || activeProfile?.role !== "owner" || openedForProfile.current === activeProfileId) return;
+    openedForProfile.current = activeProfileId;
+    void act("youtube", "edit");
+  }, [act, activeProfile?.role, activeProfileId, focused, onYouTubeConnected, storageReady]);
   const buttonStyle = { minHeight: 48, justifyContent: "center" as const, paddingVertical: spacing.sm };
   const storageNotice = <View style={{ gap: spacing.sm }}>
     {!onboarding && <Text style={type.bodySoft}>{Platform.OS === "web" ? "On your phone, the Owner’s keys are shared across profiles and sent to Google. Provider limits and charges apply." : "Keys are shared on this device and sent to Google. Provider limits and charges apply."}</Text>}

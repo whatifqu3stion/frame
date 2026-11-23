@@ -58,6 +58,7 @@ export default function SettingsScreen() {
           return <SettingsRow grouped leading={icon(Inbox)} key={profile.id} title={`Requests for ${profile.name}`} value={`${count} pending`} onPress={() => openProfiles(profile.id)} busy={busy} />;
         })}
         <SettingsRow grouped leading={icon(UsersRound)} title="Profiles & viewing limits" onPress={() => openProfiles()} busy={busy} testID="open-profile-controls" />
+        <SettingsRow grouped leading={icon(ListVideo)} title={SETTINGS_TITLES.channels} onPress={() => open("channels")} testID="settings-transfer-channels" />
         <SettingsRow grouped last={!hasLegacyGoogleConnection} leading={icon(KeyRound)} title={SETTINGS_TITLES.keys} value={connectionValue} onPress={() => open("keys")} testID="settings-keys" />
         {hasLegacyGoogleConnection ? <SettingsRow grouped last leading={icon(ListVideo)} title={SETTINGS_TITLES.google} onPress={() => open("google")} testID="settings-google" /> : null}
       </SettingsGroup>
