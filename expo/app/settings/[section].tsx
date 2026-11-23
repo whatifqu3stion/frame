@@ -19,7 +19,6 @@ export default function SettingsDetailScreen() {
   return <>
     <Stack.Screen options={{
       title: SETTINGS_TITLES[key],
-      ...(key === "channels" && Platform.OS === "android" && !Platform.isTV ? { headerBackground: undefined, headerTransparent: false } : {}),
       headerLeft: navigation.canGoBack() ? undefined : () => <Pressable onPress={() => router.replace(topicEditor ? "/settings/interests" : "/(tabs)/settings")} accessibilityRole="button" accessibilityLabel={topicEditor ? "Back to Weekly interests" : "Back to Settings"} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, marginRight: spacing.md }}><ArrowLeft size={20} color={palette.ink} /><Text style={[type.label, { color: palette.ink }]}>{topicEditor ? "Weekly interests" : "Settings"}</Text></Pressable>,
     }} />
     <SettingsDetails key={key} section={key} onYouTubeConnected={key === "keys" && Platform.isTV && setup === "youtube" ? () => {

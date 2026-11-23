@@ -63,7 +63,9 @@ function AppContent() {
         headerBackTitle: "Back",
         contentStyle: { backgroundColor: Platform.isTV ? "transparent" : palette.wall },
         headerStyle: { backgroundColor: Platform.isTV ? "transparent" : palette.wall },
-        headerBackground: Platform.isTV ? undefined : () => <PaperSurface />,
+        // Native-stack treats a custom Android header background as translucent.
+        // Keep the native header opaque so the first content row receives taps.
+        headerBackground: Platform.OS === "android" || Platform.isTV ? undefined : () => <PaperSurface />,
         headerTintColor: palette.ink,
         headerShadowVisible: false,
         headerTitleStyle: { fontFamily: fonts.serif, fontSize: 17 },
