@@ -14,7 +14,7 @@ import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Copy, Pencil, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, View } from "react-native";
+import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import VideoDetailsRecovery from "@/components/VideoDetailsRecovery";
 import ProgrammeGrain from "@/components/ProgrammeGrain";
@@ -93,9 +93,10 @@ export default function SavedSessionScreen() {
     <FlatList<string> key={`${activeProfileId}:${id}`} data={session.orderedVideoIds} keyExtractor={(videoId) => videoId}
       initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
       ListHeaderComponent={<>
-      <MotionView enter={assembled === "1"} onPresented={() => { if (assembled === "1") router.setParams({ assembled: undefined }); }} duration={motion.state} style={styles.programme}>
+      <MotionView enter={assembled === "1"} onPresented={() => { if (assembled === "1") router.setParams({ assembled: undefined }); }} duration={motion.state} style={[styles.programme, Platform.isTV && { flexDirection: "row", alignItems: "center", gap: spacing.lg }]}>
       <ProgrammeGrain />
       <ProgrammeArtwork videos={session.orderedVideoIds.map((videoId) => videoMap.get(videoId))} enter={assembled === "1"} editorial />
+      <View style={Platform.isTV && { flex: 1 }}>
       <Heading level={1} style={styles.title}>{session.name}</Heading>
       <Text style={styles.subtitle}>{session.orderedVideoIds.length} {session.orderedVideoIds.length === 1 ? "video" : "videos"} · {runtime.seconds ? `${runtime.unknown ? "at least " : ""}${Math.ceil(runtime.seconds / 60)} min of video` : "duration unavailable"}{runtime.seconds > 0 && runtime.unknown ? " · some durations unavailable" : ""}</Text>
       {position > 0 ? <Text style={styles.subtitle}>{position >= session.orderedVideoIds.length ? "Queue complete" : `Up next · Video ${position + 1} of ${session.orderedVideoIds.length}`}</Text> : null}
@@ -114,6 +115,7 @@ export default function SavedSessionScreen() {
         </View>
       ) : null}
       {timingOpen && session.targetMinutes ? <MotionView enter distance={-6}><Text style={styles.timingNote}>Only playback counts toward your {session.targetMinutes} minutes. Frame pauses when your time is up; you can finish the current video. Profile limits still apply.</Text></MotionView> : null}
+      </View>
       </MotionView>
       <View style={styles.actions}>
         <Pressable disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={openEditor} style={styles.actionButton} accessibilityRole="button">

@@ -1,7 +1,7 @@
 import Text from "@/components/FrameText";
 import SelectionArtwork from "@/components/motion/SelectionArtwork";
 import type { KeyboardEvent, ReactNode } from "react";
-import { Check } from "lucide-react-native";
+import { Check, Square } from "lucide-react-native";
 import { Platform, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Pressable from "@/components/motion/ChoicePressable";
 import { radii, spacing } from "@/constants/theme";
@@ -48,7 +48,7 @@ function onChoiceKeyDown(event: KeyboardEvent<HTMLElement>) {
 export default function ChoiceOption({ label, detail, selected, role = "radio", variant = "outlined", leading, unselectedMark, style, disabled = false, dimWhenDisabled = true, ...props }: Props) {
   const { palette, type } = useFrameTheme();
   const filter = variant === "filter";
-  const mark = <View style={styles.mark} accessible={false}>{selected ? <Check size={16} color={palette.active} /> : unselectedMark}</View>;
+  const mark = <View style={styles.mark} accessible={false}>{selected ? <Check size={16} color={palette.active} /> : unselectedMark ?? (Platform.isTV && role === "checkbox" ? <Square size={15} color={palette.inkMuted} /> : null)}</View>;
   return <Pressable {...props} {...(Platform.OS === "web" ? { onKeyDown: onChoiceKeyDown } : {})} disabled={disabled} accessibilityRole={role} aria-checked={selected} accessibilityState={{ checked: selected, disabled: Boolean(disabled) }} style={({ pressed }) => [
     styles.option,
     variant === "ruled" ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.border } : { borderWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },

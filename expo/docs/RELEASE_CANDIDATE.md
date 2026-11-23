@@ -1,20 +1,12 @@
-# Frame Android build 7
+# Frame Android build 8
 
-[Download the signed APK and verification files](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.7).
+[Download the signed APK, checksum and verification report](https://github.com/whatifqu3stion/frame/releases/tag/v1.0.0-android.8). The same APK supports Android phones and Android TV / Google TV. Install over build 7 to retain local data.
 
-Build 7 brings Frame to Android TV and Google TV. The same signed APK installs on Android phones and compatible TVs. TV mode adds a launcher banner, left navigation rail, visible remote focus, and viewing-room controls for the directional pad.
+## What to try
 
-On your TV, select a YouTube or Gemini key field and paste from the paired Google TV phone remote. The TV-only tip appears in onboarding and when editing a key in Settings. You can skip keys to explore the app.
+- In Settings, open **Transfer profile**. Export a Markdown file and review it on a second device. Check overlapping channels, custom interests and conflicting discovery wording. Device keys and the Owner PIN stay local.
+- Set up a Managed profile and its Owner PIN. Verify the PIN and return to the new profile’s viewing settings.
+- On TV, use the directional pad to navigate the slimmer rail, Settings and PIN controls. Try both light and dark appearances.
+- Open Today without keys, then connect keys in Settings. Check a real discovery search and playback on the target hardware.
 
-Install the APK over an earlier signed version to preserve local data. With an authorized TV connected, run `adb -s TV_SERIAL install -r Frame-1.0.0-7.apk`.
-
-Verified the signed APK on an Android TV 12 emulator and checked its phone and TV launcher entries. TypeScript and 507 automated tests passed. Lint reported zero errors and one existing warning. Physical Hisense remote pairing, phone clipboard transfer and live playback remain hardware checks.
-
-## Build identity
-
-- Application source `e6232ecbf92c417b8befbea750871b6e636e4ac0`.
-- APK SHA-256 `5f3a7fbebcbdbf3b4e99753abb9c8b8ddee64970698031dd52238fd8300a6f03`.
-- Signing certificate SHA-256 `be84d00d99d64dba0190af6b0b4b4596c51dd53962ab99af15bb029d13b300fc`, matching build 6.
-- Android API 24 minimum, target API 36. All 46 packaged 64-bit native libraries passed the 16 KB alignment check.
-
-[Machine-readable verification](../../research/release-pass/build-7/verification.json) · [Device acceptance plan](SMOKE_TEST.md)
+The GitHub prerelease includes the APK’s SHA-256 and signing certificate fingerprint. The [device acceptance guide](SMOKE_TEST.md) covers the longer playback and household checks.

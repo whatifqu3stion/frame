@@ -3,6 +3,7 @@ import CollectionArrivalProvider from "@/providers/CollectionArrivalProvider";
 import ThemeTransitionProvider from "@/providers/ThemeTransitionProvider";
 import RoomLightingProvider from "@/providers/RoomLightingProvider";
 import Text, { FontScaleProvider } from "@/components/FrameText";
+import ProgrammeGrain from "@/components/ProgrammeGrain";
 import PaperSurface from "@/components/PaperSurface";
 import PreviewLibraryBar from "@/preview/PreviewLibraryBar";
 import ProgressRecoveryNotice from "@/components/ProgressRecoveryNotice";
@@ -45,7 +46,7 @@ function AppContent() {
   const mounted = React.useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    if (!ready || hasNavigated.current) return;
+    if (Platform.isTV || !ready || hasNavigated.current) return;
     hasNavigated.current = true;
     const first = segments[0];
     if (!prefs.hasCompletedOnboarding && first !== "onboarding") {
@@ -57,20 +58,22 @@ function AppContent() {
 
   return (
     <Stack
-      screenLayout={({ children, route }) => route.name === "watch/[id]" || route.name === "(tabs)" ? <>{children}</> : <PaperSurface>{children}</PaperSurface>}
+      screenLayout={({ children, route }) => Platform.isTV || route.name === "watch/[id]" || route.name === "(tabs)" ? <>{children}</> : <PaperSurface>{children}</PaperSurface>}
       screenOptions={{
         headerBackTitle: "Back",
-        contentStyle: { backgroundColor: palette.wall },
-        headerStyle: { backgroundColor: palette.wall },
-        headerBackground: () => <PaperSurface />,
+        contentStyle: { backgroundColor: Platform.isTV ? "transparent" : palette.wall },
+        headerStyle: { backgroundColor: Platform.isTV ? "transparent" : palette.wall },
+        headerBackground: Platform.isTV ? undefined : () => <PaperSurface />,
         headerTintColor: palette.ink,
         headerShadowVisible: false,
         headerTitleStyle: { fontFamily: fonts.serif, fontSize: 17 },
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-      <Stack.Screen name="welcome-preview" options={{ headerShown: false }} />
+      <Stack.Protected guard={!Platform.isTV}>
+        <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="welcome-preview" options={{ headerShown: false }} />
+      </Stack.Protected>
       <Stack.Screen name="watch/[id]" options={{ headerShown: false, presentation: "card", animation: "none", contentStyle: { backgroundColor: watchPalette.wall } }} />
       <Stack.Screen name="channel/[id]" options={{ title: "" }} />
       <Stack.Screen name="privacy" options={{ title: "Privacy" }} />
@@ -109,10 +112,11 @@ function ThemedApp() {
   }, [isDark, isWatching, wall]);
 
   return (
-    <View style={[{ flex: 1, backgroundColor: wall }, Platform.isTV && !isWatching && { paddingHorizontal: 32, paddingVertical: 18 }]}>
+    <View nativeID={Platform.isTV ? `frame-tv-palette:${palette.active}:${palette.onAccent}` : undefined} style={{ flex: 1, backgroundColor: wall }}>
+      {Platform.isTV && !isWatching && <ProgrammeGrain finish="sheet" />}
       <StatusBar hidden={Platform.isTV} style={isWatching || isDark ? "light" : "dark"} />
       {pathname !== "/onboarding" && pathname !== "/welcome-preview" && <PreviewLibraryBar />}
-      <View key={activeProfileId} style={{ flex: 1 }}><AppContent /></View>
+      <View key={activeProfileId} style={[{ flex: 1 }, Platform.isTV && !isWatching && { paddingHorizontal: 32, paddingVertical: 18 }]}><AppContent /></View>
       <ProgressRecoveryNotice profileId={activeProfileId} hidden={isWatching || profileSwitching} />
       {profileSwitching ? <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", backgroundColor: palette.wall }} accessible accessibilityLabel="Switching profile"><ActivityIndicator color={palette.active} /><Text style={{ color: palette.ink, marginTop: 16 }}>Switching profile…</Text></View> : null}
       <OwnerPinModal />

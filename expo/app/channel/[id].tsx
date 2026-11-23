@@ -1,3 +1,4 @@
+import { tvYouTubeSetup } from "@/constants/navigation";
 import { confirmUser } from "@/services/notifyUser";
 import { sourceParticipationLabel } from "@/domain/sourceParticipation";
 import PrimaryAction from "@/components/PrimaryAction";
@@ -20,7 +21,8 @@ import { useFeedback } from "@/hooks/useFeedback";
 import Pressable from "@/components/motion/ChoicePressable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "@/components/MediaImage";
-import { useLocalSearchParams, useFocusEffect } from "expo-router";
+import { ProviderError } from "@/services/providerRequest";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Check, Plus, RotateCcw, Search } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AppState, FlatList, Platform, StyleSheet, Switch, View } from "react-native";
@@ -221,13 +223,15 @@ export default function ChannelScreen() {
         </View> : null}
         {browse.query ? <Text style={type.bodySoft}>For “{browse.query}”{browse.duration === "long" ? " · 20+ min" : browse.duration === "medium" ? " · 4–20 min" : ""}{browse.recent ? " · Past year" : ""}</Text> : null}
         {browse.query || browse.pageToken ? <Pressable accessibilityRole="button" onPress={() => { setBrowse({}); setPreviousPages([]); setSearchText(""); setDuration("any"); setRecent(false); }} style={styles.inlineAction}><Text style={styles.retryText}>Back to recent uploads</Text></Pressable> : null}
-        {videosMessage ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{videosMessage}</Text> : null}
+        {videosMessage && (!Platform.isTV || videos.length > 0) ? <Text style={type.bodySoft} accessibilityLiveRegion="polite">{videosMessage}</Text> : null}
       </View>
     </>
   );
 
   const empty = videosQuery.isLoading ? (
     <VideoFeedSkeleton count={5} style={styles.loadingFeed} accessibilityLabel="Loading recent videos" />
+  ) : Platform.isTV && videosQuery.error instanceof ProviderError && videosQuery.error.kind === "missing_key" ? (
+    <EmptyState title="Connect YouTube to see uploads" body={activeProfile?.role === "owner" ? "Add your YouTube key to load videos from this channel." : "Ask the Owner to connect YouTube on this TV."} action={activeProfile?.role === "owner" ? { label: "Connect YouTube", onPress: () => router.push(tvYouTubeSetup()) } : undefined} />
   ) : videosQuery.data && videos.length === 0 ? (
     <EmptyState title={browse.query ? "No matching videos" : "No videos to show"} body={browse.query ? "Try another topic or adjust your filters, or check the next page if available." : "Frame shows videos of four minutes or longer. Check for new uploads later, or browse older uploads if available."} />
   ) : (

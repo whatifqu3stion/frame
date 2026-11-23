@@ -1,3 +1,4 @@
+import { ChannelListError } from "@/domain/channelList";
 import { PREVIEW_LIBRARY_ENABLED } from "../preview/mode";
 import { makePreviewLibrary } from "../preview/library";
 import { LIBRARY_OVERFLOW_RULE_SQL, SAVE_SOURCE_RULE_SQL } from "./sourceRuleSql";
@@ -194,7 +195,7 @@ export async function insertLocalProfile(profile: Profile, allowance?: ManagedAl
     );
     if (allowance) {
       await writeManagedAllowanceRecord(allowance, db);
-      await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,pendingDailyLimitMinutes,pendingActivatesAt,updatedAt,commitment) VALUES (?,?,?,?,?,?)", [profile.id, allowance.mode === "dailyLimit" ? allowance.dailyLimitMinutes : null, null, null, allowance.updatedAt]);
+      await db.runAsync("INSERT INTO profile_playback_limits (profileId,dailyLimitMinutes,updatedAt) VALUES (?,?,?)", [profile.id, allowance.dailyLimitMinutes, allowance.updatedAt]);
       await db.runAsync("INSERT INTO profile_playback_usage (profileId,dayKey,dayStartedAt,lastSeenAt,timezoneOffsetMinutes,consumedSeconds,warnedFive,warnedOne,updatedAt) VALUES (?,?,?,?,?,?,?,?,?)", [profile.id, allowance.dayKey, allowance.dayStartedAt, allowance.lastSeenAt, allowance.timezoneOffsetMinutes, allowance.consumedSeconds, allowance.warnedFive, allowance.warnedOne, allowance.updatedAt]);
       await db.runAsync("INSERT INTO managed_content_policies (profileId,mode,updatedAt) VALUES (?,?,?)", [profile.id, "selectedVideos", profile.updatedAt]);
     }
@@ -708,6 +709,38 @@ export async function followChannels(profileId: string, channels: FollowedChanne
       if (!existing) await keepOverflowSourceInLibrary(db, profileId, channel.id);
     }
   });
+}
+
+/** Additive transfer. Preserve existing metadata and Today rules, including on retry. */
+export async function importNewChannels(profileId: string, candidates: FollowedChannel[]): Promise<number> {
+  const channels = candidates.map(channel => expireChannel(channel, Date.now()));
+  const newEntries = (existing: { id: string }[]) => {
+    const ids = new Set(existing.map(row => row.id));
+    const incoming = channels.filter(channel => !ids.has(channel.id));
+    if (existing.length + incoming.length > PRODUCT_LIMITS.futureSourcesPerProfile) {
+      throw new ChannelListError(`This profile can follow up to ${PRODUCT_LIMITS.futureSourcesPerProfile} channels. Make room in Sources and try again.`);
+    }
+    return incoming;
+  };
+  if (Platform.OS === "web") {
+    const incoming = newEntries(profileValues(webStore.channels, profileId));
+    // The web follow branch updates its maps synchronously.
+    await Promise.all(incoming.map(channel => followChannel(profileId, channel)));
+    return incoming.length;
+  }
+  const db = await getDb();
+  let count = 0;
+  await db.withExclusiveTransactionAsync(async txn => {
+    const existing = await txn.getAllAsync<{ id: string }>("SELECT id FROM followed_channels WHERE profileId=?", [profileId]);
+    const incoming = newEntries(existing);
+    for (const channel of incoming) {
+      await txn.runAsync("INSERT INTO followed_channels (profileId,id,title,thumbnailUrl,source,followedAt,fetchedAt) VALUES (?,?,?,?,?,?,?)",
+        [profileId, channel.id, channel.title, "", channel.source, channel.followedAt, channel.fetchedAt ?? null]);
+      await keepOverflowSourceInLibrary(txn, profileId, channel.id);
+    }
+    count = incoming.length;
+  });
+  return count;
 }
 
 export async function unfollowChannel(profileId: string, id: string): Promise<void> {

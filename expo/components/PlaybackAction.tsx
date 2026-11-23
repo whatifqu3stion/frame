@@ -1,5 +1,5 @@
 import { Play } from "lucide-react-native";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import type { ComponentProps, ReactNode } from "react";
 import PrimaryAction from "@/components/PrimaryAction";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -17,7 +17,7 @@ export default function PlaybackAction({ programme, style, children, disabled, a
   const face = programme ? palette.onProgramme : palette.accentDeep;
   const icon = programme ? palette.programme : palette.onDark;
   const hot = (pressed: boolean) => available && (feedback.highlighted || pressed);
-  return <PrimaryAction textured {...props} {...feedback.events} disabled={disabled} accessibilityState={accessibilityState}
+  return <PrimaryAction textured nativeID={Platform.isTV ? "frame-tv-cue-playback" : undefined} android_disableSound={false} {...props} {...feedback.events} disabled={disabled} accessibilityState={accessibilityState}
     depth={programme ? primaryActionDepth(true, accent) : palette.primaryButtonDepth}
     style={(state) => [
       typeof style === "function" ? style(state) : style,

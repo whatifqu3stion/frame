@@ -1,5 +1,5 @@
 import { useFeedback } from "@/hooks/useFeedback";
-import { StyleSheet, View } from "react-native";
+import { Platform, Pressable as NativePressable, StyleSheet, View } from "react-native";
 import Pressable from "@/components/motion/ChoicePressable";
 import Text from "@/components/FrameText";
 import { radii } from "@/constants/theme";
@@ -18,15 +18,16 @@ export default function SectionTabs<T extends string>({ label, tabs, value, onCh
 }) {
   const { palette, type } = useFrameTheme();
   const feedback = useFeedback(!disabled);
+  const TabButton = Platform.isTV ? NativePressable : Pressable;
   return <View accessibilityRole="tablist" accessibilityLabel={label} style={[styles.track, { backgroundColor: palette.surfaceDeep }]}>
     {tabs.map((tab) => {
       const selected = value === tab.value;
-      return <Pressable key={tab.value} disabled={disabled} onPress={() => { if (!disabled && !selected) { onChange(tab.value); feedback.selection(); } }}
+      return <TabButton android_disableSound={Platform.isTV} key={tab.value} disabled={disabled} onPress={() => { if (!disabled && !selected) { onChange(tab.value); feedback.selection(); } }}
         accessibilityRole="tab" accessibilityLabel={tab.accessibilityLabel ?? tab.label} accessibilityState={{ selected, disabled }}
-        style={[styles.tab, selected && { backgroundColor: palette.surfaceHigh, borderColor: palette.borderSoft, borderWidth: 1 }]}>
+        style={[styles.tab, selected && { backgroundColor: palette.surfaceHigh, borderColor: palette.borderSoft, borderWidth: 1 }, Platform.isTV && selected && { backgroundColor: palette.accentDeep } ]}>
         {tab.indicator}
-        <Text style={[type.label, { color: selected ? palette.active : palette.inkMuted }]}>{tab.label}</Text>
-      </Pressable>;
+        <Text style={[type.label, { color: selected ? (Platform.isTV ? palette.onDark : palette.active) : palette.inkMuted }]}>{tab.label}</Text>
+      </TabButton>;
     })}
   </View>;
 }

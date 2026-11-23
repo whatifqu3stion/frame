@@ -1,4 +1,4 @@
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Platform, StyleSheet, View } from "react-native";
 import { radii } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
 
@@ -9,12 +9,13 @@ const buttonInk = require("../assets/textures/button-ink.png");
 
 export default function ProgrammeGrain({ finish = "paper" }: { finish?: Finish }) {
   const { palette, isDark } = useFrameTheme();
+  const backgroundStrength = Platform.isTV ? 0.575 : 1;
   const opacity = {
-    sheet: isDark ? 0.085 : 0.14,
+    sheet: (isDark ? 0.085 : 0.14) * backgroundStrength,
     // The sheet's peak alpha is 80. Match the original card grain's cap of 32.
     paper: palette.programmeGrainOpacity * (32 / 80),
     panel: 0.65,
-    wall: 0.14,
+    wall: 0.14 * backgroundStrength,
     button: 0.28,
   }[finish];
   return <View pointerEvents="none" accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.clip, { borderRadius: finish === "paper" ? radii.card : finish === "button" ? radii.control : 0 }]}>

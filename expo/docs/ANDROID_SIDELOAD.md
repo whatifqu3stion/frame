@@ -1,6 +1,6 @@
 # Personal Android build
 
-Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). Build 5 packages the November 20 app updates. Historical build-1/build-2 verification below does not certify this candidate.
+Current release-candidate status and device acceptance: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). Build 8 adds profile transfer on phone and TV. Historical build-1/build-2 verification below does not certify this candidate.
 
 Frame's sideload build is a standalone, release-mode APK. It bundles the app and fonts, uses the existing `app.rork.vabp4o345ww8b0akdpr7p` application ID, and needs neither Expo Go nor Metro. Internet remains necessary for YouTube playback and provider requests. Your YouTube and Gemini keys are entered during onboarding or in Settings → YouTube & Gemini and stored by native SecureStore.
 

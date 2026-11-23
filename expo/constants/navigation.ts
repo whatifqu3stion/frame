@@ -21,6 +21,11 @@ export const LEGACY_COMPATIBILITY_ROUTES = {
   library: "/(tabs)/saved",
 } as const;
 
+/** Resume a TV task after the Owner verifies the shared YouTube connection. */
+export function tvYouTubeSetup(after: "back" | "find-source" = "back") {
+  return { pathname: "/settings/[section]", params: { section: "keys", setup: "youtube", after } } as const;
+}
+
 export const FRAME_PLAYBACK_ROUTE = "/watch/[id]" as const;
 
 export const FRAME_PLAYBACK_ENTRY_PATHS = ["pastedLink", "sources", "saved", "continueWatching", "today", "session", "deepLink", "resumedPlayback"] as const;

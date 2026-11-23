@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import { AlertTriangle, X } from "lucide-react-native";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createExitConfirmation } from "@/domain/exitConfirmation";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
 import Sheet from "@/components/Sheet";
 import { fonts, radii, softShadow, spacing, type FramePalette, type FrameType } from "@/constants/theme";
 import { useFrameTheme } from "@/constants/useFrameTheme";
@@ -45,7 +45,7 @@ export default function FullResetModal({ visible, onClose, forgottenPinRecovery 
       await eraseAllFrameData(forgottenPinRecovery);
       locked.current = false;
       onClose();
-      router.replace("/onboarding");
+      router.replace(Platform.isTV ? "/(tabs)" : "/onboarding");
     } catch {
       locked.current = false;
       setBusy(false);
@@ -57,7 +57,7 @@ export default function FullResetModal({ visible, onClose, forgottenPinRecovery 
     decision.request((decide) => confirmUser("Erase all Frame data?", "This permanently erases this device’s Frame data and restarts with one new Owner profile.", "Erase everything", decide, true), () => { void finish(); });
   };
 
-  return <Sheet label="Erase all Frame data" visible={visible} onClose={close} contentKey={step} animateContent={false}>
+  return <Sheet tvForm={step === "type"} label="Erase all Frame data" visible={visible} onClose={close} contentKey={step} animateContent={false}>
       <View style={styles.header}><View style={styles.icon}><AlertTriangle size={20} color={palette.danger} /></View><Pressable onPress={close} disabled={busy} style={styles.close} accessibilityRole="button" accessibilityLabel="Close reset"><X size={18} color={palette.inkMuted} /></Pressable></View>
       <Text accessibilityRole="header" style={styles.title}>Erase all Frame data</Text>
       {step === "review" ? <>

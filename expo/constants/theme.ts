@@ -84,7 +84,7 @@ export const accentOptions: readonly { id: AccentMode; label: string }[] = [
 
 export function primaryActionDepth(isDark: boolean, accent: AccentMode): ViewStyle {
   const colors = accentTokens[accent][isDark ? "dark" : "light"];
-  const cast = isDark ? `${colors.accentSoft}99` : "rgba(90, 74, 58, 0.36)";
+  const cast = isDark ? `${colors.accentSoft}80` : "rgba(90, 74, 58, 0.36)";
   const offset = isDark ? -2 : 2;
   let primaryButtonDepth: ViewStyle = { boxShadow: `0px ${offset}px 0px 0px ${cast}` };
   // Outset shadows require Android 9. Use a crisp edge on earlier devices.

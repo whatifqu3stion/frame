@@ -1,5 +1,5 @@
 import { forwardRef, useRef } from "react";
-import { Animated, Pressable, StyleSheet, type PressableProps, type View } from "react-native";
+import { Platform, Animated, Pressable, StyleSheet, type PressableProps, type View } from "react-native";
 import { useMotionTarget } from "@/hooks/useMotionTarget";
 import { motion } from "@/constants/motion";
 
@@ -19,9 +19,9 @@ export default forwardRef<View, PressableProps>(function ChoicePressable({ style
   colors.current[selected ? "on" : "off"] = { background, border };
   const fill = progress.interpolate({ inputRange: [0, 1], outputRange: [colors.current.off.background, colors.current.on.background] });
   const outline = progress.interpolate({ inputRange: [0, 1], outputRange: [colors.current.off.border, colors.current.on.border] });
-  return <Pressable aria-selected={accessibilityState?.selected} aria-expanded={accessibilityState?.expanded} aria-checked={accessibilityState?.checked} aria-busy={accessibilityState?.busy} {...props} ref={ref} accessibilityState={accessibilityState} style={(state) => [typeof style === "function" ? style(state) : style, !state.pressed && selected !== undefined && { backgroundColor: "transparent", borderColor: "transparent" }]}>
+  return <Pressable android_disableSound={Platform.isTV} aria-selected={accessibilityState?.selected} aria-expanded={accessibilityState?.expanded} aria-checked={accessibilityState?.checked} aria-busy={accessibilityState?.busy} {...props} ref={ref} accessibilityState={accessibilityState} style={(state) => [typeof style === "function" ? style(state) : style, !Platform.isTV && !state.pressed && selected !== undefined && { backgroundColor: "transparent", borderColor: "transparent" }]}>
     {(state) => <>
-      {selected !== undefined && !state.pressed ? <Animated.View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFillObject, { borderRadius: resolved.borderRadius, borderWidth: resolved.borderWidth, backgroundColor: fill, borderColor: outline }]} /> : null}
+      {!Platform.isTV && selected !== undefined && !state.pressed ? <Animated.View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFillObject, { borderRadius: resolved.borderRadius, borderWidth: resolved.borderWidth, backgroundColor: fill, borderColor: outline }]} /> : null}
       {typeof children === "function" ? children(state) : children}
     </>}
   </Pressable>;

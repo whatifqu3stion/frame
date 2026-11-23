@@ -1,4 +1,7 @@
-import { getLatestTodayVideos } from "@/db/database";
+import { DEFAULT_DISCOVERY_BRIEF, readDiscoveryBrief } from "@/domain/discoveryBrief";
+import { CUSTOM_INTEREST_LIMIT, isCustomInterest } from "@/domain/interests";
+import { ChannelListError } from "@/domain/channelList";
+import { getLatestTodayVideos, importNewChannels } from "@/db/database";
 import { createPlaybackOperations } from "@/domain/playbackOperations";
 import { sourceParticipationLabel } from "@/domain/sourceParticipation";
 import { notifyUser } from "@/services/notifyUser";
@@ -37,7 +40,7 @@ import { progressRecovery } from "@/services/progressRecoveryInstance";
 import { fetchGoogleEmail, fetchSubscriptions, revokeGoogleAccess } from "@/services/googleAuth";
 import { planSelectiveGoogleImport } from "@/services/googleImportPolicy";
 import { clearProfileGoogleCredential, LEGACY_GOOGLE_TOKEN_KEY, readProfileGoogleCredential, writeProfileGoogleCredential } from "@/storage/googleCredentialStorage";
-import { clearProfileStorage, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
+import { clearProfileStorage, profileStorageKey, readProfileStorage, writeProfileStorage } from "@/storage/profileStorage";
 import { readActiveProfileId, writeActiveProfileId } from "@/storage/activeProfileStorage";
 import {
   getOwnerPinAvailability,
@@ -50,7 +53,7 @@ import {
 import { sourceLeaseTokenStore } from "@/storage/sourceLeaseTokenStorage";
 import { installationIdentityStore } from "@/storage/installationIdentityStorage";
 import { followedSourceRepository } from "@/repositories/followedSourceRepository";
-import { profileRepository } from "@/repositories/profileRepository";
+import { profileRepository, ProfileValidationError } from "@/repositories/profileRepository";
 import { viewingAllowanceService } from "@/services/viewingAllowanceService";
 import { playbackControlsService } from "@/services/playbackControlsService";
 import { managedReviewUrl, refreshedManagedRequest } from "@/domain/managedReview";
@@ -252,6 +255,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [ownerPinAvailability, setOwnerPinAvailability] = useState<OwnerPinAvailability>("unavailable");
   const [hasOwnerPin, setHasOwnerPin] = useState<boolean>(false);
   const [ownerPinProtectionError, setOwnerPinProtectionError] = useState<boolean>(false);
+  const [ownerPinInstruction, setOwnerPinInstruction] = useState<string | undefined>();
   const [ownerPinPromptOpen, setOwnerPinPromptOpen] = useState<boolean>(false);
   const [ownerPinPromptError, setOwnerPinPromptError] = useState<string | null>(null);
   const [ownerPinCooldownUntil, setOwnerPinCooldownUntil] = useState<number>(0);
@@ -366,7 +370,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     authorizationResolverRef.current = null;
   }, []);
 
-  const requestOwnerAuthorization = useCallback(async (fresh: boolean = false): Promise<boolean> => {
+  const requestOwnerAuthorization = useCallback(async (fresh: boolean = false, instruction?: string): Promise<boolean> => {
     if (!readyRef.current) return false;
     if (ownerPinProtectionError) {
       notifyUser("Protected controls unavailable", "Frame can’t safely read protected PIN storage right now. Restart the app and try again.");
@@ -381,6 +385,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     if (authorizationResolverRef.current) return false;
     setOwnerPinPromptError(null);
     setOwnerPinCooldownUntil(authorizationSessionRef.current.getCooldownUntil());
+    setOwnerPinInstruction(instruction);
     setOwnerPinPromptOpen(true);
     return new Promise<boolean>((resolve) => {
       authorizationResolverRef.current = resolve;
@@ -522,21 +527,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return { ok: true, message: `${createdProfile.name} is ready.` };
     } catch (error) {
       if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
-      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that profile." };
+      return { ok: false, message: error instanceof ProfileValidationError ? error.message : "Couldn’t create the profile. Try again." };
     }
   }, [authorizeProtectedAction]);
 
-  const createManagedProfile = useCallback(async (name: string, allowance: ManagedAllowance): Promise<AddChannelResult> => {
+  const createManagedProfile = useCallback(async (name: string, allowance: ManagedAllowance): Promise<{ ok: true; message: string; profileId: string } | { ok: false; message: string }> => {
     if (!await authorizeProtectedAction()) return { ok: false, message: "Owner authorization is required to create a Managed profile." };
     let createdProfile: Profile | null = null;
     try {
       createdProfile = await profileRepository.createManaged(name, allowance);
       await writeProfileStorage(AsyncStorage, "preferences", createdProfile.id, JSON.stringify({ ...defaultPrefs, hasCompletedOnboarding: true }));
       setProfiles(await profileRepository.list());
-      return { ok: true, message: allowance.mode === "dailyLimit" ? `${createdProfile.name} has a daily viewing limit of ${allowance.minutes} minutes.` : `${createdProfile.name} has unlimited viewing time.` };
+      return { ok: true, profileId: createdProfile.id, message: `${createdProfile.name} is ready.` };
     } catch (error) {
       if (createdProfile) await profileRepository.deleteLocal(createdProfile.id).catch(() => {});
-      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t create that Managed profile." };
+      return { ok: false, message: error instanceof ProfileValidationError ? error.message : "Couldn’t create the profile. Try again." };
     }
   }, [authorizeProtectedAction]);
 
@@ -547,7 +552,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setProfiles((current) => current.map((profile) => profile.id === updated.id ? updated : profile));
       return { ok: true, message: "Profile renamed." };
     } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t rename that profile." };
+      return { ok: false, message: error instanceof ProfileValidationError ? error.message : "Frame couldn’t rename that profile." };
     }
   }, [authorizeProtectedAction]);
 
@@ -557,7 +562,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setProfiles(await profileRepository.reorderLocal(profileId, direction));
       return { ok: true, message: "Profile order updated." };
     } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t reorder that profile." };
+      return { ok: false, message: error instanceof ProfileValidationError ? error.message : "Frame couldn’t reorder that profile." };
     }
   }, [authorizeProtectedAction]);
 
@@ -583,7 +588,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       ]).then(() => true).catch(() => false);
       return { ok: true, message: cleanupSucceeded ? `${target.name} was removed.` : `${target.name} was removed. Some inactive auxiliary storage will be retried on cleanup.` };
     } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "Frame couldn’t delete that profile." };
+      return { ok: false, message: error instanceof ProfileValidationError ? error.message : "Frame couldn’t delete that profile." };
     }
   }, [profiles, queryClient, switchProfile, authorizeProtectedAction]);
 
@@ -1284,6 +1289,45 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return result;
   }, [activeProfileId, googleCredential, updatePrefs]);
 
+  const importProfile = useCallback(async (profileId: string, channels: FollowedChannel[], topics: InterestTopic[], prompt?: { previous: string; next: string }) => {
+    if (profiles.some(profile => profile.id === profileId && profile.role === "managed") && !hasOwnerPin) {
+      throw new ChannelListError("Add an Owner PIN before importing into a Managed profile.");
+    }
+    if (!await authorizeProtectedAction(profileId, Boolean(prompt))) throw new ChannelListError("Import cancelled.");
+    const assertCurrent = () => {
+      if (profileId !== activeProfileIdRef.current || switchingRef.current) throw new ChannelListError("Profile changed. Open the transfer again.");
+    };
+    if (prompt && await readDiscoveryBrief(AsyncStorage, profileId) !== prompt.previous) {
+      await queryClient.invalidateQueries({ queryKey: ["discovery-brief", profileId] });
+      throw new ChannelListError("Your discovery wording changed. Review it again before importing.");
+    }
+    const mergeTopics = () => {
+      const existing = interestsRef.current;
+      const merged = interestTopics([...existing, ...topics]);
+      if (merged.filter(topic => isCustomInterest(topic.id)).length > Math.max(CUSTOM_INTEREST_LIMIT, existing.filter(topic => isCustomInterest(topic.id)).length)) {
+        throw new ChannelListError("Choose fewer custom interests to fit this profile.");
+      }
+      return merged;
+    };
+    assertCurrent();
+    mergeTopics();
+    const count = channels.length ? await importNewChannels(profileId, channels) : 0;
+    if (count) {
+      queueSourceLeaseReconciliation("local_change");
+      await Promise.all(["library", "today-rules", "today"].map(key => queryClient.invalidateQueries({ queryKey: [key, profileId] })));
+    }
+    assertCurrent();
+    const merged = mergeTopics();
+    if (merged.length > interestsRef.current.length) await persistInterests(merged);
+    assertCurrent();
+    if (prompt) {
+      const key = profileStorageKey("discoveryBrief", profileId);
+      if (prompt.next === DEFAULT_DISCOVERY_BRIEF) await AsyncStorage.removeItem(key);
+      else await AsyncStorage.setItem(key, prompt.next);
+      queryClient.setQueryData(["discovery-brief", profileId], prompt.next);
+    }
+  }, [authorizeProtectedAction, hasOwnerPin, persistInterests, profiles, queryClient]);
+
   const importGoogleSubscriptions = useCallback(async (selected: FollowedChannel[]): Promise<GoogleImportResult> => {
     if (!FEATURE_FLAGS.googleSelectiveImport) return { ok: false, importedCount: 0, message: "Google account import is no longer available. Add a source by channel link or @handle." };
     if (selected.length === 0) return { ok: false, importedCount: 0, message: "Choose at least one subscription." };
@@ -1486,6 +1530,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       ownerPinAvailability,
       hasOwnerPin,
       isOwnerAuthorized,
+      ownerPinInstruction,
       ownerPinPromptOpen,
       ownerPinPromptError,
       ownerPinCooldownUntil,
@@ -1526,6 +1571,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       signOutGoogle,
       loadGoogleSubscriptions,
       importGoogleSubscriptions,
+      importProfile,
       resolveSourceInput,
       confirmSource,
       savedVideos: savedQuery.data ?? [],
@@ -1598,6 +1644,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       ownerPinAvailability,
       hasOwnerPin,
       isOwnerAuthorized,
+      ownerPinInstruction,
       ownerPinPromptOpen,
       ownerPinPromptError,
       ownerPinCooldownUntil,
@@ -1634,6 +1681,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       signOutGoogle,
       loadGoogleSubscriptions,
       importGoogleSubscriptions,
+      importProfile,
       resolveSourceInput,
       confirmSource,
       savedQuery.data,

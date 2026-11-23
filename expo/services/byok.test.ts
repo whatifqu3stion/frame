@@ -1,3 +1,5 @@
+import { DEFAULT_DISCOVERY_BRIEF } from "../domain/discoveryBrief";
+import { profileStorageKey } from "../storage/profileStorage";
 import { createCustomInterest } from "../domain/interests";
 import { describe, expect, test } from "bun:test";
 import { createProviderKeyStore, providerKeyName } from "../storage/providerKeys";
@@ -263,7 +265,13 @@ describe("explicit Gemini generation", () => {
       return json(draftResponse(calls % 2 === 1 ? [{ ...drafts[0], interestId: JSON.parse(body.contents[0].parts[0].text).interests[0].id }] : review));
     }) as typeof fetch);
     const client = createByokWeeklyPicks(transport, keys, { async getItem(key) { return stored.get(key) ?? null; }, async setItem(key, value) { stored.set(key, value); } }, async () => ({ status: "success", data: { source, provenance: "provider" } }), async () => ({ ...await inspect(), fetchedAt: clock }), () => clock);
+    const briefKey = profileStorageKey("discoveryBrief", "profile-a");
+    const brief = "Prefer demonstrations filmed in a working studio.";
+    stored.set(briefKey, brief);
     await client.generate([precise.id], undefined, "profile-a");
+    expect(JSON.parse(requests[0].contents[0].parts[0].text).discoveryBrief).toBe(brief);
+    expect(JSON.stringify(requests[1])).not.toContain(brief);
+    stored.delete(briefKey);
     expect(JSON.parse(requests[0].contents[0].parts[0].text).interests).toEqual([{ id: precise.id, name: precise.name }]);
     expect(await client.getWeeklyPicks([precise.id], "profile-a")).toMatchObject({ status: "success", response: { interests: [{ interestId: precise.id }] } });
     expect(await client.getWeeklyPicks([precise.id], "profile-b")).toEqual({ status: "missing_configuration" });
@@ -273,6 +281,7 @@ describe("explicit Gemini generation", () => {
     clock += 7 * 86_400_000;
     await client.generate(many, undefined, "profile-a");
     expect(calls).toBe(4);
+    expect(JSON.parse(requests[2].contents[0].parts[0].text).discoveryBrief).toBe(DEFAULT_DISCOVERY_BRIEF);
     expect(JSON.parse(requests[2].contents[0].parts[0].text).interests).toHaveLength(12);
     expect(JSON.stringify(requests)).not.toContain("profile-a");
   });

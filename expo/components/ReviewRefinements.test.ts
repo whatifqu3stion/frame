@@ -41,7 +41,7 @@ function harness(file: string, width = 390, overrides: Record<string, unknown> =
       },
     },
     "react/jsx-runtime": jsxRuntime,
-    "react-native": { Animated: { View: "Animated.View" }, View: "View", Pressable: "Pressable", ActivityIndicator: "ActivityIndicator", StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 }, useWindowDimensions: () => ({ width, fontScale: 1 }) },
+    "react-native": { Platform: { OS: "ios", isTV: false }, Animated: { View: "Animated.View" }, View: "View", Pressable: "Pressable", ActivityIndicator: "ActivityIndicator", StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 }, useWindowDimensions: () => ({ width, fontScale: 1 }) },
     "@/constants/onboardingPosters": { posterForTopic: () => 1 },
     "@/preview/mode": { PREVIEW_LIBRARY_ENABLED: false },
     "@/preview/library": { isPreviewVideo: () => false },

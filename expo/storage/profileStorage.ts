@@ -7,7 +7,7 @@ export type KeyValueStorage = {
 };
 
 export type LegacyProfileStorageNamespace = "preferences" | "interests" | "recentSearches";
-export type ProfileStorageNamespace = LegacyProfileStorageNamespace | "weeklyPicks" | "onboardingDraft" | "pendingWatch" | "generatedPicks" | "discoveryFocus" | "viewingHistory";
+export type ProfileStorageNamespace = LegacyProfileStorageNamespace | "weeklyPicks" | "onboardingDraft" | "pendingWatch" | "generatedPicks" | "discoveryFocus" | "discoveryBrief" | "viewingHistory";
 
 export const LEGACY_PROFILE_STORAGE_KEYS: Record<LegacyProfileStorageNamespace, string> = {
   preferences: "frame.preferences.v1",
@@ -60,7 +60,7 @@ export async function clearProfileStorage(
   storage: KeyValueStorage,
   profileId: string,
 ): Promise<void> {
-  await Promise.all(([...Object.keys(LEGACY_PROFILE_STORAGE_KEYS), "weeklyPicks", "onboardingDraft", "pendingWatch", "generatedPicks", "discoveryFocus", "viewingHistory"] as ProfileStorageNamespace[]).map(
+  await Promise.all(([...Object.keys(LEGACY_PROFILE_STORAGE_KEYS), "weeklyPicks", "onboardingDraft", "pendingWatch", "generatedPicks", "discoveryFocus", "discoveryBrief", "viewingHistory"] as ProfileStorageNamespace[]).map(
     (namespace) => storage.removeItem(profileStorageKey(namespace, profileId)),
   ));
 }

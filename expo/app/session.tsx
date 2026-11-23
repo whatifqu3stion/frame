@@ -63,7 +63,7 @@ export default function SessionBuilder() {
   const [destination, setDestination] = useState<Href | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const canLeaveScope = hydratedProfile === activeProfileId && !profileSwitching && prefs.hasCompletedOnboarding;
+  const canLeaveScope = hydratedProfile === activeProfileId && !profileSwitching && (Platform.isTV || prefs.hasCompletedOnboarding);
   const scope = useRef({ profile: activeProfileId, active: canLeaveScope });
   scope.current = { profile: activeProfileId, active: canLeaveScope };
   const dirty = Boolean(existingSession ? (name.trim() !== existingSession.name || selected.join(",") !== existingSession.orderedVideoIds.join(",") || budgetMinutes !== normalizeSessionTarget(existingSession.targetMinutes)) : !id && (name || selected.length || budgetMinutes) && savedRevision !== draftRevision);
